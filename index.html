@@ -280,7 +280,13 @@ function hm(min){ min=Math.max(0,Math.round(min)); const h=Math.floor(min/60), m
 function hms(min){ min=Math.max(0,Math.round(min)); const h=Math.floor(min/60), m=min%60; return h+':'+(m<10?'0':'')+m; }
 function im(key,cls,extra){ const src=IMG[key]||IMG['item-no-0']; return `<img src="${src}" class="${cls||''}" ${extra||''} alt="">`; }
 function ii(no){ return im('item-no-'+no,'i16'); }
-function iname(no){ const it=ITEMS[no]; return it? ii(no)+esc(it.name):'?'; }
+function iname(no){ const it=ITEMS[no]; return it? `<span class="lk" onclick="event.stopPropagation();itemInfo(${no})">${ii(no)}${esc(it.name)}</span>`:'?'; }
+// 維持費：元の商人物語と同じく，指定がなければ標準価格の1/10を基準にする（1日あたりはその1/10）
+function itemCost(it){ return it.cost!=null? it.cost : Math.floor((it.price||0)/10); }
+function upkeep(it){ return itemCost(it)/10; }
+function upkeepStr(it){ const u=upkeep(it); return u<=0?'なし':'¥'+(u%1?u.toFixed(1):u.toLocaleString())+'/日'; }
+const STATNAME={life:'HP',attack:'攻撃',defence:'防御',tech:'技量'};
+function statStr(it){ return ['life','attack','defence','tech'].filter(k=>it[k]).map(k=>`${STATNAME[k]}${it[k]>0?'+':''}${it[k]}`).join(' '); }
 function kao(k){ return im(typeof k==='number'?'kao'+k:k,'kao','width=48 height=48'); }
 function poisson(l){
   if(l<=0) return 0;
@@ -351,10 +357,12 @@ function migrate(s){
   return s;
 }
 let saveBusy=false, saveDirty=false;
-function save(){ if(!S) return; try{ S.realLast=Date.now(); localStorage.setItem(SAVE,JSON.stringify(S)); }catch(e){} saveDirty=true; }
+let saveTimer=null;
+function save(){ if(!S||NET.kicked) return; try{ S.realLast=Date.now(); localStorage.setItem(SAVE,JSON.stringify(S)); }catch(e){} saveDirty=true;
+  if(NET.online&&!NET.readonly){ clearTimeout(saveTimer); saveTimer=setTimeout(()=>saveRemote(),4000); } }
 function load(){ try{ const r=localStorage.getItem(SAVE); return r?migrate(JSON.parse(r)):null; }catch(e){ return null; } }
 async function saveRemote(force){
-  if(!NET.online||!S||saveBusy||(!saveDirty&&!force)||NET.readonly) return false;
+  if(!NET.online||!S||saveBusy||(!saveDirty&&!force)||NET.readonly||NET.kicked||NET.paused) return false;
   saveBusy=true; saveDirty=false;
   try{ S.realLast=Date.now(); await NET.db.doc('data/users/'+NET.uid+'/save').set({json:JSON.stringify(S),t:Date.now()}); NET.lastSave=Date.now(); saveBusy=false; return true; }
   catch(e){ saveDirty=true; saveBusy=false; netErr(e); return false; }
@@ -442,7 +450,7 @@ function shopSummary(){
 }
 let lastPub='', pubBusy=false;
 async function publishShop(force){
-  if(!NET.online||!S||pubBusy||NET.readonly) return;
+  if(!NET.online||!S||pubBusy||NET.readonly||NET.kicked||NET.paused) return;
   const d=shopSummary(); const k=JSON.stringify({...d,t:0,day:0});
   if(!force && k===lastPub) return;
   pubBusy=true;
@@ -476,7 +484,7 @@ function queueMail(snap){
   processMail();
 }
 function processMail(){
-  if(!S) return;
+  if(!S||NET.kicked||NET.paused) return;
   let changed=false;
   for(const id of Object.keys(NET.mailQ)){
     const m=NET.mailQ[id]; delete NET.mailQ[id];
@@ -628,7 +636,7 @@ async function initNet(){
     if(S && !S.uid) S.uid=uid;
     try{
       const snap=NET.guest? {exists:false} : await db.doc('data/users/'+uid+'/save').get();
-      if(snap.exists){ const r=migrate(JSON.parse(snap.data().json)); if(!S || (r.realLast||0)>(S.realLast||0)){ S=r; S.uid=uid; if(route!=='admin') route='rank'; } }
+      if(snap.exists){ const r=migrate(JSON.parse(snap.data().json)); if(!S || (r.realLast||0)>=(S.realLast||0)-5000){ S=r; S.uid=uid; if(route!=='admin') route='rank'; } }
     }catch(e){ console.warn(e); }
     db.collection('shops').onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]=d.data()); NET.shops=o; softRender(); },netErr);
     db.doc('town/state').onSnapshot(s=>{ NET.town=s.exists?JSON.parse(JSON.stringify(s.data())):null; if(NET.town&&!NET.town.riot) NET.town.riot={}; softRender(); },netErr);
@@ -640,8 +648,46 @@ async function initNet(){
     db.collection('jobs').onSnapshot(s=>{ NET.jobs=s.docs.map(d=>({id:d.id,...d.data()})); softRender(); },netErr);
   }catch(e){ if(e) console.warn(e); NET.online=false; }
   NET.ready=true;
-  if(S){ catchUp(); processMail(); publishShop(true); }
+  if(S){ await claimSession(); catchUp(); processMail(); publishShop(true); }
   render();
+}
+/* ---------- 同じお店を複数の端末で開いたときの整理（同時に遊べるのは1台だけ） ---------- */
+NET.sid=Math.random().toString(36).slice(2)+Date.now().toString(36);
+function devName(){ const u=navigator.userAgent; return /iPad/.test(u)||(/Macintosh/.test(u)&&'ontouchend' in document)?'iPad':/iPhone/.test(u)?'iPhone':/Android/.test(u)?'スマホ':'パソコン'; }
+let sessUnsub=null;
+async function claimSession(){
+  if(!NET.online||!S||NET.guest) return;
+  try{ await NET.db.doc('sessions/'+NET.uid).set({sid:NET.sid,dev:devName(),t:Date.now()}); }catch(e){ netErr(e); }
+  if(!sessUnsub) sessUnsub=NET.db.doc('sessions/'+NET.uid).onSnapshot(s=>{
+    if(!S||!s.exists) return;
+    const d=s.data();
+    if(d.sid!==NET.sid && !NET.kicked){ NET.kicked=true; NET.kickedBy=d.dev||'別の端末'; clearTimeout(saveTimer); closeModal(); render(); }
+  },netErr);
+}
+async function checkSession(){
+  // 画面に戻ってきたとき：ほかの端末に移っていないか確かめてから再開する
+  if(!NET.online||!S||NET.guest||NET.kicked) return;
+  NET.paused=true;
+  try{ const s=await NET.db.doc('sessions/'+NET.uid).get(); if(s.exists&&s.data().sid!==NET.sid){ NET.kicked=true; NET.kickedBy=s.data().dev||'別の端末'; } }catch(e){ netErr(e); }
+  NET.paused=false; render();
+}
+async function resumeHere(){
+  $('#app').innerHTML='<p class="c" style="margin-top:40px">最新のデータを読み込んでいます…</p>';
+  try{
+    const snap=await NET.db.doc('data/users/'+NET.uid+'/save').get();
+    if(snap.exists){ S=migrate(JSON.parse(snap.data().json)); S.uid=NET.uid; try{ localStorage.setItem(SAVE,JSON.stringify(S)); }catch(e){} }
+  }catch(e){ netErr(e); }
+  NET.kicked=false;
+  await claimSession();
+  catchUp(); processMail(); publishShop(true);
+  setFlash('この端末で続きを遊べるようになりました（最新のデータを読み込みました）');
+  go('rank');
+}
+function kickedScreen(){
+  return `${im('logo','logo','width=350 height=70')}
+  ${talk('kaoguide','案内人',`このお店は今，<b>${esc(NET.kickedBy||'別の端末')}</b>で開かれています。<br>データが食い違わないように，この画面はいったん止めています。`)}
+  <div class="c" style="margin:14px 0"><button onclick="resumeHere()" style="padding:10px 24px">この端末で続きを遊ぶ</button></div>
+  <div class="c note">押すと，最新のデータを読み込んでこの端末で再開します（もう一方の端末が止まります）。</div>`;
 }
 function softRender(){
   if(document.querySelector('.modal')) return;
@@ -808,8 +854,8 @@ function closeAuction(a){
 function settle(){
   const d=day()-1;
   let cost=CASECOST[S.ncase]||0;
-  let hold=0; for(const no in S.stock){ const it=ITEMS[no]; if(it&&it.cost) hold+=it.cost*S.stock[no]; }
-  hold=Math.round(hold/10);
+  let hold=0; for(const no in S.stock){ const it=ITEMS[no]; if(it) hold+=upkeep(it)*S.stock[no]; }
+  hold=Math.round(hold);
   let gfee=0;
   const gi=guildInfo(S.guild);
   if(gi){ gfee=Math.round(S.today.sales*gi.fee/100); if(gi.g && gfee>0) guildTx(S.guild,g=>{ g.fund=(g.fund||0)+gfee; g.exp=(g.exp||0)+gfee; }); }
@@ -918,7 +964,7 @@ function refreshAuction(){
    画面：共通
    ============================================================ */
 const MENU=[
-  ['自店',[['店内','main'],['倉庫','stock'],['お掃除','sweep'],['収支','balance'],['修練','expe'],['手続','other']]],
+  ['自店',[['店内','main'],['ステータス','status'],['倉庫','stock'],['お掃除','sweep'],['収支','balance'],['修練','expe'],['手続','other']]],
   ['取引',[['市場','market'],['商店通り','street'],['求人','work'],['依頼所','req'],['競売所','auc'],['交換市','exch'],['質屋','pawn'],['宮殿','palace']]],
   ['情報',[['ランキング','rank'],['風景','town'],['新聞','log'],['図書館','library']]],
   ['施設',[['領主邸','lord'],['傭兵所','army'],['荘園','manor'],['ギルド','guild'],['競技場','slime'],['住宅地','hometown'],['銀行','bank'],['しりとり広場','shiritori']]],
@@ -957,6 +1003,7 @@ function render(){
   REFS=[];
   if(!S && route==='admin'){ let bd=''; try{ bd=SCREENS.admin(); }catch(e){ bd='<p class="red">'+esc(e.message)+'</p>'; } const f=flash?`<div class="flash ${flash.err?'err':''}">${flash.m}</div>`:''; flash=null; app.innerHTML=im('logo','logo','width=350 height=70')+`<div class="c">${netBadge()}</div>`+f+bd; return; }
   if(!S){ const f=flash?`<div class="flash ${flash.err?'err':''}">${flash.m}</div>`:''; flash=null; app.innerHTML=f+titleScreen(); return; }
+  if(NET.kicked){ app.innerHTML=kickedScreen(); return; }
   let body='';
   try{ body=(SCREENS[route]||SCREENS.rank)(); }catch(e){ console.error(e); body='<p class="red">表示エラー: '+esc(e.message)+'</p>'; }
   const f = flash? `<div class="flash ${flash.err?'err':''}">${flash.m}</div>`:'';
@@ -1045,7 +1092,7 @@ async function startNew(){
     }catch(e){ netErr(e); setFlash('開店に失敗しました。通信状態を確認してください',1); render(); }
     return;
   }
-  newState(o||'名無しの店主',s,k); if(NET.online) S.uid=NET.uid; save(); processMail(); saveRemote(true); publishShop(true); go('rank');
+  newState(o||'名無しの店主',s,k); if(NET.online) S.uid=NET.uid; save(); processMail(); saveRemote(true); publishShop(true); claimSession(); go('rank');
 }
 
 /* ============================================================
@@ -1127,7 +1174,7 @@ SCREENS.main=function(){
   S.cases.forEach((c,i)=>{
     const it=c?ITEMS[c.no]:null;
     rows+=`<tr><td class="c">${i+1}</td>
-      <td class="nw">${it?ii(c.no)+esc(it.name):'<span class="note">（空き）</span>'}</td>
+      <td class="nw">${it?iname(c.no):'<span class="note">（空き）</span>'}</td>
       <td class="r">${it?(S.stock[c.no]||0)+it.scale:'-'}</td>
       <td class="r nw">${it?yen(c.price)+'<br><small>標準'+yen(it.price)+'</small>':'-'}</td>
       <td class="r">${it?(S.today.items[c.no]||0):'-'}</td>
@@ -1204,6 +1251,91 @@ function spawnCustomer(box,idx,buy){
 }
 
 /* ============================================================
+   アイテムの詳しい説明
+   ============================================================ */
+function itemInfo(no){
+  const it=ITEMS[no]; if(!it) return;
+  const have=S?S.stock[no]||0:0;
+  let eqh='';
+  if(it.soubi){
+    const cur=S&&S.eq[it.soubi]?ITEMS[S.eq[it.soubi]]:null;
+    const rows=['life','attack','defence','tech'].map(k=>{
+      const v=it[k]||0, c=cur&&cur[k]||0, d=v-c;
+      return `<tr><th>${im('ability-no-'+({life:4,attack:1,defence:2,tech:3}[k]),'i16')}${STATNAME[k]}</th><td class="r">${v>0?'+':''}${v}</td><td class="r"><small class="${d>0?'blue':d<0?'red':'note'}">${cur&&cur!==it?(d>0?'+':'')+d:'－'}</small></td></tr>`;
+    }).join('');
+    eqh=`<div class="c" style="margin-top:8px"><big>装備したときの能力（${SOUBI[it.soubi]}）</big></div>
+      <table class="t" style="width:100%"><tr><th></th><th>この品</th><th>いまの${SOUBI[it.soubi]}との差</th></tr>${rows}</table>
+      <div class="c note">いまの${SOUBI[it.soubi]}：${cur?esc(cur.name):'なし'}</div>`;
+  }
+  const makers=[]; ITEMLIST.forEach(x=>x.uses.forEach(u=>{ if(u.get.some(g=>g[1]===no)) makers.push(`${esc(x.name)}「${esc(u.name)}」`); }));
+  const uses=it.uses.map(u=>`・${esc(u.name)}${u.get.length?'　→ '+u.get.map(([n,x])=>esc(ITEMS[x].name)+'×'+n).join('，'):''}`).join('<br>');
+  const sell=it.pop>0&&!it.noshow? (it.pop<60?`約${Math.round(it.pop)}分に1個`:`約${(it.pop/60).toFixed(it.pop<600?1:0)}時間に1個`)+'（標準価格・人気50%のとき）':'陳列して売ることはできません';
+  modal(`<div class="c">${im('item-no-'+no,'','width=48 height=48')}<br><big>${esc(it.name)}</big> ${im('item-typesign'+Math.max(1,typeIdx(it.type)),'i32')}</div>
+  <p class="c"><small>${esc(it.info)}</small></p>
+  <table class="t" style="width:100%">
+    <tr><th>標準価格</th><td class="r">${yen(it.price)}</td></tr>
+    <tr><th>維持費</th><td class="r">1${it.scale}につき ${upkeepStr(it)}${have?`<br><small>所持${have}${it.scale}で ${yen(Math.round(upkeep(it)*have))}/日</small>`:''}</td></tr>
+    <tr><th>所持</th><td class="r">${have}${it.scale}</td></tr>
+    <tr><th>売れ行き</th><td class="r"><small>${sell}</small></td></tr>
+    <tr><th>市場</th><td class="r"><small>${it.plus>0&&it.price>0?'入荷する':'入荷しない（製作や探索で手に入れる）'}</small></td></tr>
+  </table>
+  ${eqh}
+  ${uses?`<div style="margin-top:8px"><big>使い道</big><br><small>${uses}</small></div>`:''}
+  ${makers.length?`<div style="margin-top:6px"><big>手に入れ方</big><br><small>${makers.slice(0,8).join('<br>')}</small></div>`:''}
+  <div class="c toolbar">${S&&have&&it.soubi&&S.eq[it.soubi]!==no?`<button onclick="closeModal();equip(${no})">装備する</button>`:''}${S&&have&&it.uses.length?`<button onclick="closeModal();go('use',{no:${no}})">使う</button>`:''}<button onclick="closeModal()">閉じる</button></div>`);
+}
+
+/* ============================================================
+   自店：ステータス
+   ============================================================ */
+SCREENS.status=function(){
+  const base=S.st, tot=myStat(), gi=guildInfo(S.guild);
+  const rk=ranking(); const myRank=rk.findIndex(r=>r.me)+1;
+  const eqBonus=k=>[1,2,3,4].reduce((a,s)=>a+((ITEMS[S.eq[s]]&&ITEMS[S.eq[s]][k])||0),0);
+  const statRow=(k,ic)=>`<tr><th>${im('ability-no-'+ic,'i16')}${STATNAME[k]}</th><td class="r">${base[k]}</td><td class="r ${eqBonus(k)>0?'blue':eqBonus(k)<0?'red':''}">${eqBonus(k)>0?'+':''}${eqBonus(k)}</td><td class="r"><b>${tot[k]}</b></td></tr>`;
+  const slotRow=s=>{
+    const cands=Object.keys(S.stock).map(Number).filter(n=>ITEMS[n]&&ITEMS[n].soubi===s);
+    const cur=S.eq[s];
+    return `<tr><th>${SOUBI[s]}</th><td>${cur?iname(cur)+`<br><small class="blue">${statStr(ITEMS[cur])}</small>`:'<span class="note">なし</span>'}</td>
+      <td>${cands.length?`<select onchange="equipSlot(${s},+this.value)"><option value="-1">変更…</option>${cur?'<option value="0">外す</option>':''}${cands.filter(n=>n!==cur).map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${statStr(ITEMS[n])}）</option>`).join('')}</select>`:'<small class="note">装備できる品なし</small>'}</td></tr>`;
+  };
+  const ex=Object.keys(S.exp).filter(n=>ITEMS[n]&&S.exp[n]>0).sort((a,b)=>S.exp[b]-S.exp[a]).slice(0,5);
+  return `<div class="c"><big>ステータス</big></div>
+  <div class="tbl"><table class="t" style="width:100%">
+    <tr><td class="c" style="width:64px">${kao(S.kao)}<br>${im((JOBS[S.job]||JOBS['']).img,'','width=30 height=45')}</td>
+      <td><b>${esc(S.shop)}</b> ${guildIcon(S.guild)}<br>店主 ${esc(S.owner)}${S.loginName?`<small class="note">（ログイン名 ${esc(S.loginName)}）</small>`:''}<br>
+      <small>${(JOBS[S.job]||JOBS['']).name}・${DIGNITY[digLevel(S.dig)]}（${S.dig}pt）${gi?'・'+esc(gi.name)+' Lv'+gi.lv:''}・${HOUSES[S.house].name}</small><br>
+      <small>「${esc(S.comment)}」</small></td></tr>
+  </table></div>
+  <div class="c"><big>経営</big></div>
+  <div class="tbl"><table class="t" style="width:100%">
+    <tr><th>資金</th><td class="r">${yen(S.money)}</td><th>預金</th><td class="r">${yen(S.bank)}</td></tr>
+    <tr><th>借金</th><td class="r">${yen(S.debt)}</td><th>持ち時間</th><td class="r">${hm(S.time)}</td></tr>
+    <tr><th>人気</th><td class="r"><small>${popStars(S.pop)}</small></td><th>ごみ</th><td class="r"><small>${trashMsg(S.trash)}</small></td></tr>
+    <tr><th>点数</th><td class="r">${myPoint().toLocaleString()}点</td><th>順位</th><td class="r">${myRank?myRank+'位':'-'}</td></tr>
+    <tr><th>本日売上</th><td class="r">${yen(S.today.sales)}</td><th>優勝</th><td class="r">${S.wins}回</td></tr>
+    <tr><th>陳列棚</th><td class="r">${S.ncase}つ</td><th>兵士</th><td class="r">${S.soldiers||0}人</td></tr>
+    <tr><th>維持費</th><td class="r" colspan="3"><small>陳列棚 ${yen(CASECOST[S.ncase])}＋倉庫 ${yen(Math.round(Object.keys(S.stock).reduce((a,no)=>a+(ITEMS[no]?upkeep(ITEMS[no]):0)*S.stock[no],0)))}＋兵士 ${yen((S.soldiers||0)*20)}／日</small></td></tr>
+  </table></div>
+  <div class="c"><big>戦闘の能力</big></div>
+  <div class="tbl"><table class="t" style="width:100%"><tr><th></th><th>素の力</th><th>装備</th><th>合計</th></tr>
+    ${statRow('life',4)}${statRow('attack',1)}${statRow('defence',2)}${statRow('tech',3)}
+    <tr><th>戦法</th><td colspan="3">${BTYPES[S.btype]} <small><a onclick="go('army')">変更（傭兵所）</a></small></td></tr>
+    <tr><th>戦績</th><td colspan="3">${S.bwin}勝 ${S.blose}敗</td></tr>
+  </table></div>
+  <div class="c"><big>装備</big></div>
+  <div class="tbl"><table class="t" style="width:100%">${[1,2,3,4].map(slotRow).join('')}</table></div>
+  <div class="c note">アイテム名を押すと，くわしい能力が見られます。</div>
+  ${ex.length?`<div class="c"><big>熟練度（上位）</big></div><div class="tbl"><table class="t" style="width:100%">${ex.map(n=>`<tr><td>${iname(+n)}</td><td class="r">${S.exp[n].toFixed(1)}%</td></tr>`).join('')}</table></div><div class="c"><a onclick="go('expe')">熟練度をすべて見る</a></div>`:''}`;
+};
+function equipSlot(s,no){
+  if(no<0) return;
+  if(no===0){ const cur=S.eq[s]; S.eq[s]=0; setFlash(`${ITEMS[cur]?ITEMS[cur].name:''}を外しました`); save(); render(); return; }
+  if(!has(no)) return;
+  S.eq[s]=no; setFlash(`${ITEMS[no].name}を${SOUBI[s]}として装備しました`); save(); render();
+}
+
+/* ============================================================
    自店：倉庫・使用
    ============================================================ */
 SCREENS.stock=function(){
@@ -1213,12 +1345,12 @@ SCREENS.stock=function(){
   let rows=nos.map(n=>{
     const it=ITEMS[n];
     const eq=it.soubi? (S.eq[it.soubi]===n?'<small class="blue">装備中</small>':`<button onclick="equip(${n})">装備</button>`):'';
-    return `<tr><td>${im('item-typesign'+Math.max(1,typeIdx(it.type)),'i32')}</td><td class="nw">${ii(n)}${esc(it.name)}</td><td class="r nw">${S.stock[n]}${it.scale}</td>
+    return `<tr><td>${im('item-typesign'+Math.max(1,typeIdx(it.type)),'i32')}<br>${iname(n)}${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}<br><small class="note">維持費 ${upkeepStr(it)}</small></td><td class="r nw">${S.stock[n]}${it.scale}</td>
       <td class="nw">${it.uses.length?`<button onclick="go('use',{no:${n}})">使う</button>`:''} ${eq} <button onclick="discard(${n})">捨てる</button></td></tr>`;
   }).join('');
   return `<div class="c"><big>倉庫</big></div>${tabs}
-  <div class="tbl"><table class="t"><tr><th>種類</th><th>商品</th><th>数量</th><th>操作</th></tr>${rows||'<tr><td colspan=4 class="c">何もありません</td></tr>'}</table></div>
-  <div class="c note">「使う」でアイテムの製作・探索・戦闘などができます（持ち時間を消費）。</div>`;
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>商品</th><th>数量</th><th>操作</th></tr>${rows||'<tr><td colspan=3 class="c">何もありません</td></tr>'}</table></div>
+  <div class="c note">アイテム名を押すと，くわしい説明（維持費・装備したときの能力など）が見られます。<br>倉庫の品には，毎日の決算で維持費がかかります（いま合計 ${yen(Math.round(Object.keys(S.stock).reduce((a,no)=>a+(ITEMS[no]?upkeep(ITEMS[no]):0)*S.stock[no],0)))}/日）。</div>`;
 };
 function discard(n){
   const it=ITEMS[n];
@@ -1470,7 +1602,7 @@ function sweep(m){
   S.trash=0; setFlash('お店がピカピカになりました！'); save(); render();
 }
 SCREENS.balance=function(){
-  const hold=Object.keys(S.stock).reduce((a,no)=>a+((ITEMS[no]&&ITEMS[no].cost)||0)*S.stock[no],0)/10;
+  const hold=Object.keys(S.stock).reduce((a,no)=>a+(ITEMS[no]?upkeep(ITEMS[no]):0)*S.stock[no],0);
   const gi=guildInfo(S.guild); const gf=gi?Math.round(S.today.sales*gi.fee/100):0;
   return `<div class="c"><big>収支</big></div>
   <div class="tbl"><table class="t">
@@ -1549,7 +1681,7 @@ SCREENS.market=function(){
   ${talk('kaoguide','市場の案内係','市場では標準価格で商品を仕入れられます。入荷は時間とともに少しずつ。仕入れには <b>持ち時間 20分＋1個につき20秒</b> かかります。')}
   ${tabs}
   <div class="tbl"><table class="t"><tr><th>商品</th><th>価格</th><th>在庫</th><th>所持</th><th>仕入</th></tr>
-  ${nos.map(n=>{ const it=ITEMS[n], st=S.market[n]||0; return `<tr><td class="nm">${ii(n)}${esc(it.name)}<br><small>${esc(it.info)}</small></td><td class="r nw">${yen(it.price)}</td><td class="r">${st}</td><td class="r">${S.stock[n]||0}</td>
+  ${nos.map(n=>{ const it=ITEMS[n], st=S.market[n]||0; return `<tr><td class="nm">${iname(n)}<br><small>${esc(it.info)}</small>${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}<br><small class="note">維持費 ${upkeepStr(it)}</small></td><td class="r nw">${yen(it.price)}</td><td class="r">${st}</td><td class="r">${S.stock[n]||0}</td>
      <td class="c">${st?`<input type="number" id="mq${n}" value="1" min="1" max="${st}" style="width:52px"><button onclick="buyMarket(${n})">買う</button>`:'<small>品切れ</small>'}</td></tr>`; }).join('')||'<tr><td colspan=5 class="c">この種類は市場に入荷しません</td></tr>'}
   </table></div>
   <div class="c note">原料や上級の装備は市場に入荷しません。地図や本を使って自分で調達・製作しましょう。</div>`;
@@ -2507,7 +2639,7 @@ const _render=render;
 render=function(){ _render(); if(route==='battle') battlePlay(); };
 let saveTick=0;
 function tick(){
-  if(!S||!NET.ready||NET.switching) return;
+  if(!S||!NET.ready||NET.switching||NET.kicked||NET.paused) return;
   const before=day();
   const gap=nowClock()-S.clock;
   if(gap>0){ AWAY=gap>=60; advance(Math.min(gap,3*1440)); AWAY=false; if(nowClock()>S.clock) S.clock=nowClock(); }
@@ -2528,7 +2660,8 @@ function tick(){
   initNet();
   setInterval(tick,1000);
   window.addEventListener('beforeunload',()=>{ if(S) save(); });
-  document.addEventListener('visibilitychange',()=>{ if(S&&document.visibilityState==='hidden'){ save(); saveRemote(); publishShop(); } });
+  document.addEventListener('visibilitychange',()=>{ if(!S) return; if(document.visibilityState==='hidden'){ if(!NET.kicked){ save(); saveRemote(true); publishShop(); } } else checkSession(); });
+  window.addEventListener('pagehide',()=>{ if(S&&!NET.kicked){ save(); saveRemote(true); } });
 })();
 </script>
 </body>
