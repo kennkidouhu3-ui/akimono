@@ -244,6 +244,18 @@ const GUILDS = [
   {id:'a',name:'黄金の天秤',img:'guild-a',fee:3,bonus:1.0,desc:'古くからの商人たちの互助組合。会費は安め。'},
   {id:'b',name:'銀の月商会',img:'guild-b',fee:6,bonus:2.0,desc:'宣伝に力を入れる新興ギルド。人気が上がりやすい。'},
 ];
+const GUILD_ICONS=['guildprize','guild-a','guild-b','item-no-68','item-no-44','item-no-61','item-no-56','item-no-27','item-no-11','item-no-8','item-no-33','item-no-70'];
+const GUILD_LV=[0,50000,200000,600000,1500000];
+const GUILD_COST=300000, GUILD_DIG=4;
+function guildLv(exp){ let l=1; GUILD_LV.forEach((v,i)=>{ if((exp||0)>=v) l=i+1; }); return l; }
+function guildInfo(id){
+  if(!id) return null;
+  if(NET.online && NET.guilds && NET.guilds[id]){ const g=NET.guilds[id]; const lv=guildLv(g.exp); return {id,name:g.name,fee:g.fee||0,icon:g.icon||'guildprize',lv,bonus:0.5+lv*0.5,g}; }
+  const n=GUILDS.find(x=>x.id===id); if(n) return {id,name:n.name,fee:n.fee,icon:n.img,lv:1,bonus:n.bonus};
+  if(id==='my'&&S&&S.myguild) return {id:'my',name:S.myguild.name,fee:S.myguild.fee,icon:'guildprize',lv:1,bonus:1};
+  return null;
+}
+function guildIcon(id){ const g=guildInfo(id); return g? im(g.icon,'i16','title="'+esc(g.name)+'"'):''; }
 const CHARA = ['aa','ab','ac','ad','ae','ba','bb','bc','bd'];
 const TALK = [
   ['うちのスライムまた負けちゃった・・・','食事の材料買いに行かなくっちゃ。'],
@@ -292,7 +304,7 @@ let route='rank';
 let sub={};
 let REFS=[];
 function R(v){ REFS.push(v); return REFS.length-1; }
-const NET={jobs:[],kind:'',ready:false,online:false,db:null,uid:null,shops:{},town:null,bbs:[],news:[],auc:[],mailQ:{},readonly:false,lastSave:0};
+const NET={guilds:{},jobs:[],kind:'',ready:false,online:false,db:null,uid:null,shops:{},town:null,bbs:[],news:[],auc:[],mailQ:{},readonly:false,lastSave:0};
 function defaultTown(){ return {day:0,lord:null,tax:3,msg:'',safety:80,guard:0,bal:null,riot:{}}; }
 let _dt=defaultTown();
 function T(){ if(NET.online) return NET.town||_dt; return S?S.townLocal:_dt; }
@@ -471,6 +483,7 @@ function processMail(){
       else if(m.kind==='letter'){ letter(who,face,m.body||''); }
       else if(m.kind==='duel'){ if(m.win){ S.pop=clamp(S.pop-3,0,100); letter(who,face,`${who}に決闘を挑まれ，敗れてしまった…（人気が下がった）`); } else { S.pop=clamp(S.pop+3,0,100); letter(who,face,`${who}に決闘を挑まれたが，見事返り討ちにした！（人気が上がった）`); } }
       else if(m.kind==='admin'){ applyAdmin(m); }
+      else if(m.kind==='gpop'){ S.pop=clamp(S.pop+(m.amount||0),0,100); letter(who,face,`ギルド「${m.gname||''}」の広告が出されました。人気が${m.amount}上がりました！`); }
       else if(m.kind==='time'){ S.time=Math.min(maxTime(),S.time+(m.minutes||0)); letter(who,face,`求人「${m.title||'手伝い'}」を引き受けて，${hm(m.minutes||0)}働いてくれました。持ち時間が増えました。`); }
       else if(m.kind==='wipe'){ NET.db.doc('mail/'+id).delete().catch(()=>{}); try{ localStorage.removeItem(SAVE); }catch(e){} S=null; lastPub=''; try{ localStorage.removeItem(UIDKEY); localStorage.setItem(LOGOUTKEY,'1'); }catch(e){} setFlash('管理人によってお店のデータがリセットされました。新しくお店を開いてください。',1); render(); return; }
       else if(m.kind==='tax'){ S.money+=m.amount; letter('大臣','kaominister',`${m.fromShop||who}から税 ${yen(m.amount)} が納められました。`); }
@@ -616,6 +629,7 @@ async function initNet(){
     db.collection('bbs').orderBy('t','desc').limit(40).onSnapshot(s=>{ NET.bbs=s.docs.map(d=>d.data()); softRender(); },netErr);
     db.collection('news').orderBy('t','desc').limit(60).onSnapshot(s=>{ NET.news=s.docs.map(d=>d.data()); softRender(); },netErr);
     db.collection('auc').onSnapshot(s=>{ NET.auc=s.docs.map(d=>({id:d.id,...d.data()})); softRender(); },netErr);
+    db.collection('guilds').onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]=d.data()); NET.guilds=o; syncGuild(); softRender(); },netErr);
     db.collection('jobs').onSnapshot(s=>{ NET.jobs=s.docs.map(d=>({id:d.id,...d.data()})); softRender(); },netErr);
   }catch(e){ if(e) console.warn(e); NET.online=false; }
   NET.ready=true;
@@ -625,7 +639,7 @@ async function initNet(){
 function softRender(){
   if(document.querySelector('.modal')) return;
   const a=document.activeElement; if(a&&['INPUT','SELECT','TEXTAREA'].includes(a.tagName)) return;
-  if(!S || ['rank','street','bbs','log','auc','lord','army','letter','work'].includes(route)) render();
+  if(!S || ['rank','street','bbs','log','auc','lord','army','letter','work','guild'].includes(route)) render();
 }
 function catchUp(){
   if(!S) return 0;
@@ -716,7 +730,7 @@ function simulate(dt){
   S.clock+=dt;
   S.time=Math.min(maxTime(),S.time+dt);
   // 自店の売上
-  const gb = S.guild? 1+ (GUILDS.find(g=>g.id===S.guild)||{bonus:0}).bonus*0.03 : 1;
+  const gi0=guildInfo(S.guild); const gb = gi0? 1+gi0.bonus*0.03 : 1;
   const trashF = S.trash>100?0.6:S.trash>50?0.85:1;
   S.cases.forEach((c,idx)=>{
     if(!c || !has(c.no)) return;
@@ -788,7 +802,8 @@ function settle(){
   let hold=0; for(const no in S.stock){ const it=ITEMS[no]; if(it&&it.cost) hold+=it.cost*S.stock[no]; }
   hold=Math.round(hold/10);
   let gfee=0;
-  if(S.guild){ const g=GUILDS.find(x=>x.id===S.guild); if(g) gfee=Math.round(S.today.sales*g.fee/100); }
+  const gi=guildInfo(S.guild);
+  if(gi){ gfee=Math.round(S.today.sales*gi.fee/100); if(gi.g && gfee>0) guildTx(S.guild,g=>{ g.fund=(g.fund||0)+gfee; g.exp=(g.exp||0)+gfee; }); }
   if(S.myguild){ S.money+= S.npcs.filter(n=>n.guild==='my').reduce((a,n)=>a+n.today*S.myguild.fee/100,0); }
   const upk=(S.soldiers||0)*20;
   S.money-=cost+hold+gfee+upk;
@@ -798,7 +813,7 @@ function settle(){
   if(filled<S.ncase) dp-= (S.ncase-filled)*1.5;
   if(S.trash>50) dp-=3; if(S.trash>150) dp-=5;
   S.cases.forEach(c=>{ if(c&&ITEMS[c.no] && c.price>ITEMS[c.no].price*1.4) dp-=1.5; });
-  if(S.guild) dp+=GUILDS.find(g=>g.id===S.guild).bonus;
+  if(gi) dp+=gi.bonus;
   S.pop=clamp(S.pop+dp,0,100);
   S.trash+=5;
   // 銀行
@@ -915,7 +930,7 @@ function header(){
   <div class="head">
     ${im(job.img,'','width=30 height=45')}
     <div>
-      <div class="menu">${MENU.map((m,i)=>`<a onclick="menuOpen=${i};render()">【${m[0]}】</a>`).join(' ')} <a onclick="saveNow()" style="color:#d0402a">【セーブ】</a>${useLogin()?` <a onclick="headerLogout()" style="color:#d0402a">【ログアウト】</a>`:''}</div>
+      <div class="menu"><a onclick="go('rank')" style="color:#3a7a3a">【トップ】</a> ${MENU.map((m,i)=>`<a onclick="menuOpen=${i};render()">【${m[0]}】</a>`).join(' ')} <a onclick="saveNow()" style="color:#d0402a">【セーブ】</a>${useLogin()?` <a onclick="headerLogout()" style="color:#d0402a">【ログアウト】</a>`:''}</div>
       <div class="submenu"><big>${g[0]}</big> &gt; ${g[1].map(x=>`<a onclick="go('${x[1]}')" ${route===x[1]?'style="color:#d0402a"':''}>[${x[0]}${x[1]==='letter'&&unread?'<span class=red>●'+unread+'</span>':''}]</a>`).join('')}</div>
     </div>
   </div>
@@ -954,7 +969,7 @@ function rankTable(limit){
     return `<tr ${r.me?'style="font-weight:bold"':''}>
     <td class="r nw"><b>No.${i+1}</b>${i<6?im('rank'+(i+1),'i16'):''}<br>${updown(r,i)}<br><b class="red">${(r.point||0).toLocaleString()}</b>点</td>
     <td class="c">${kao(r.kao)}<br>${im((JOBS[r.job]||JOBS['']).img,'','width=20 height=30')}</td>
-    <td>${r.guild?im(r.guild==='my'?'guildprize':'guild-'+r.guild,'i16'):''}${r.me?'<span class="span">'+esc(r.shop)+'</span>':(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${L&&L.key===r.key?' <small class="red">[領主]</small>':''} ${winIcons(r.wins)}
+    <td>${guildIcon(r.guild)}${r.me?'<span class="span">'+esc(r.shop)+'</span>':(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${L&&L.key===r.key?' <small class="red">[領主]</small>':''} ${winIcons(r.wins)}
       <br><small>${esc(r.name)}・${(JOBS[r.job]||JOBS['']).name}・${DIGNITY[digLevel(r.dig)]}${r.soldiers?'・兵'+r.soldiers:''}</small>
       <br><small>人気 ${popStars(r.pop)}</small>
       ${cs.length?`<br><small>${cs.map(c=>ii(c.no)).join('')} ${esc(ITEMS[first.no].name)} ${yen(first.price)}</small>`:''}
@@ -1292,7 +1307,7 @@ function special(no,i,target,msgs){
   else if(no===62){
     if(i===0){ S.pop=clamp(S.pop+20,0,100); msgs.push('街中に広告を出した！人気が大きく上がった'); }
     if(i===1){ const n=S.npcs[target]; n.pop=clamp(n.pop+20,0,100); n.friend+=5; msgs.push(`${esc(n.shop)}の広告を出してあげた`); letter(n.owner,'kao'+n.kao,'広告を出してくださったそうで，ありがとうございます！'); }
-    if(i===2){ if(S.guild){ S.pop=clamp(S.pop+8,0,100); S.npcs.filter(n=>n.guild===S.guild).forEach(n=>n.pop=clamp(n.pop+8,0,100)); msgs.push('ギルドの広告を出した！'); } else msgs.push('ギルドに所属していないので効果がなかった…'); }
+    if(i===2){ const gi=guildInfo(S.guild); if(gi&&gi.g){ Object.keys(gi.g.members||{}).forEach(u=>{ if(u===NET.uid) S.pop=clamp(S.pop+8,0,100); else sendMail(u,{kind:'gpop',amount:8,gname:gi.name}); }); msgs.push(`ギルド「${esc(gi.name)}」の広告を出した！ 加盟店みんなの人気が上がった`); } else if(gi){ S.pop=clamp(S.pop+8,0,100); S.npcs.filter(n=>n.guild===S.guild).forEach(n=>n.pop=clamp(n.pop+8,0,100)); msgs.push('ギルドの広告を出した！'); } else msgs.push('ギルドに所属していないので効果がなかった…'); }
   }
   else if(no===65){
     const n=target!=null?S.npcs[target]:null;
@@ -1446,7 +1461,7 @@ function sweep(m){
 }
 SCREENS.balance=function(){
   const hold=Object.keys(S.stock).reduce((a,no)=>a+((ITEMS[no]&&ITEMS[no].cost)||0)*S.stock[no],0)/10;
-  const gf=S.guild?Math.round(S.today.sales*GUILDS.find(g=>g.id===S.guild).fee/100):0;
+  const gi=guildInfo(S.guild); const gf=gi?Math.round(S.today.sales*gi.fee/100):0;
   return `<div class="c"><big>収支</big></div>
   <div class="tbl"><table class="t">
     <tr><th>ランキング点数</th><td class="r"><b>${myPoint().toLocaleString()}</b>点</td></tr>
@@ -1554,7 +1569,7 @@ SCREENS.street=function(){
   return `<div class="c"><big>商店通り</big></div>
   ${NET.online?`<div class="c"><big>プレイヤーのお店</big></div><div class="tbl"><table class="t"><tr><th></th><th>店名</th><th>職業</th><th>人気</th><th>商品</th></tr>${pl||'<tr><td colspan=5 class="c">まだほかのプレイヤーはいません</td></tr>'}</table></div><div class="c"><big>街の商人</big></div>`:''}
   <div class="tbl"><table class="t"><tr><th></th><th>店名</th><th>職業</th><th>人気</th><th>主な商品</th></tr>
-  ${S.npcs.map(n=>`<tr><td>${kao(n.kao)}</td><td><a onclick="go('street',{id:${n.id}})">${esc(n.shop)}</a><br><small>${esc(n.owner)}${n.guild?' '+im(n.guild==='my'?'guildprize':'guild-'+n.guild,'i16'):''}</small></td><td>${im(JOBS[n.job].img,'','width=20 height=30')}</td><td class="nw"><small>${Math.round(n.pop)}%</small></td><td>${n.cases.filter(c=>c&&c.stock>0).map(c=>ii(c.no)).join('')}</td></tr>`).join('')}
+  ${S.npcs.map(n=>`<tr><td>${kao(n.kao)}</td><td><a onclick="go('street',{id:${n.id}})">${esc(n.shop)}</a><br><small>${esc(n.owner)}${n.guild?' '+guildIcon(n.guild):''}</small></td><td>${im(JOBS[n.job].img,'','width=20 height=30')}</td><td class="nw"><small>${Math.round(n.pop)}%</small></td><td>${n.cases.filter(c=>c&&c.stock>0).map(c=>ii(c.no)).join('')}</td></tr>`).join('')}
   </table></div>`;
 };
 function buyPlayer(k,i){
@@ -1890,21 +1905,180 @@ SCREENS.manor=function(){
   </table></div>`;
 };
 function buyManor(i){ const m=MANOR[i]; if(S.money<m.price){ setFlash('資金が足りません',1); render(); return; } S.money-=m.price; S.manor[m.id]=(S.manor[m.id]||0)+1; setFlash(`${m.name}を購入しました`); save(); render(); }
-SCREENS.guild=function(){
-  const g=S.guild?GUILDS.find(x=>x.id===S.guild):null;
+SCREENS.guild=function(){ return NET.online? guildOnline() : guildOffline(); };
+function guildOffline(){
+  const g=guildInfo(S.guild);
   let h=`<div class="c"><big>ギルド</big></div>`;
   h+=talk('kaoguild','ギルド受付', g?`あなたは「${esc(g.name)}」の一員です。売上の${g.fee}%を会費としていただき，その代わり毎日人気が上がりやすくなります。`:'ギルドに入ると会費がかかりますが，人気が上がりやすくなります。');
   h+=`<div class="tbl"><table class="t"><tr><th></th><th>ギルド</th><th>会費</th><th>加盟店</th><th></th></tr>
   ${GUILDS.map(x=>`<tr><td>${im('guild-'+x.id,'i16')}</td><td>${esc(x.name)}<br><small>${esc(x.desc)}</small></td><td class="r">${x.fee}%</td><td><small>${S.npcs.filter(n=>n.guild===x.id).map(n=>esc(n.shop)).join('<br>')||'-'}</small></td><td>${S.guild===x.id?`<button onclick="S.guild=null;save();setFlash('ギルドを脱退しました');render()">脱退</button>`:`<button onclick="joinGuild('${x.id}')">加盟</button>`}</td></tr>`).join('')}
+  ${S.myguild?`<tr><td>${im('guildprize','i16')}</td><td>${esc(S.myguild.name)}<br><small>あなたのギルド</small></td><td class="r">${S.myguild.fee}%</td><td><small>${S.npcs.filter(n=>n.guild==='my').map(n=>esc(n.shop)).join('<br>')||'-'}</small></td><td>${S.guild==='my'?'<small class="blue">所属中</small>':`<button onclick="S.guild='my';save();render()">加盟</button>`}</td></tr>`:''}
   </table></div>`;
   h+=`<div class="c"><big>ギルド結成</big></div>`;
-  if(S.myguild) h+=`<div class="c">${im('guildprize','i16')}あなたのギルド「${esc(S.myguild.name)}」 会費${S.myguild.fee}%・加盟店：${S.npcs.filter(n=>n.guild==='my').map(n=>esc(n.shop)).join('，')||'なし'}<br><button onclick="inviteGuild()">加盟を勧誘する（2時間）</button></div>`;
-  else h+= S.dig>=10? `<div class="c">ギルド名 <input id="gName" maxlength="12"> 会費 <input type="number" id="gFee" value="5" min="1" max="10" style="width:50px">% <button onclick="makeGuild()">結成する（¥500,000）</button></div>` : `<div class="c note">ギルドの結成には爵位ポイント10以上が必要です（現在${S.dig}pt）。</div>`;
+  if(S.myguild) h+=`<div class="c"><button onclick="inviteGuild()">加盟を勧誘する（2時間）</button></div>`;
+  else h+= S.dig>=GUILD_DIG? `<div class="c">ギルド名 <input id="gName" maxlength="12"> 会費 <input type="number" id="gFee" value="5" min="0" max="10">% <button onclick="makeGuild()">結成する（${yen(GUILD_COST)}）</button></div>` : `<div class="c note">ギルドの結成には爵位ポイント${GUILD_DIG}以上が必要です（現在${S.dig}pt）。</div>`;
   return h;
-};
-function joinGuild(id){ S.guild=id; setFlash(`「${GUILDS.find(g=>g.id===id).name}」に加盟しました`); save(); render(); }
-function makeGuild(){ if(S.money<500000){ setFlash('資金が足りません',1); render(); return; } S.money-=500000; S.myguild={name:$('#gName').value.trim()||'新ギルド',fee:clamp(+$('#gFee').value||5,1,10)}; news(`${S.owner}がギルド「${S.myguild.name}」を結成した`); setFlash('ギルドを結成しました！'); save(); render(); }
+}
+function joinGuild(id){ S.guild=id; setFlash(`「${guildInfo(id).name}」に加盟しました`); save(); render(); }
+function makeGuild(){ if(S.money<GUILD_COST){ setFlash('資金が足りません',1); render(); return; } S.money-=GUILD_COST; S.myguild={name:$('#gName').value.trim()||'新ギルド',fee:clamp(+$('#gFee').value||0,0,10)}; S.guild='my'; news(`${S.owner}がギルド「${S.myguild.name}」を結成した`); setFlash('ギルドを結成しました！'); save(); render(); }
 function inviteGuild(){ if(!spendTime(120)){ setFlash('持ち時間が足りません',1); render(); return; } const c=S.npcs.filter(n=>n.guild!=='my'); if(!c.length) return; const n=pick(c); if(Math.random()<0.25+n.friend*0.03+S.dig*0.01){ n.guild='my'; setFlash(`${n.shop}がギルドに加盟してくれた！`); } else setFlash(`${n.shop}に断られてしまった…`); save(); render(); }
+
+/* ---------- オンラインのギルド ---------- */
+let gTab=0;
+function guildTx(id,fn){
+  const ref=NET.db.doc('guilds/'+id);
+  return (async()=>{
+    for(let i=0;i<4;i++){ try{ const l=await ref.acquire({holder:NET.uid,ttlMs:6000}); if(!l||l.acquired) break; }catch(e){ break; } await sleep(400+rnd(600)); }
+    const s=await ref.get(); if(!s.exists) return 'gone';
+    const g=JSON.parse(JSON.stringify(s.data())); g.members=g.members||{}; g.reqs=g.reqs||{}; g.board=g.board||[];
+    const r=fn(g);
+    if(r==='delete'){ await ref.delete(); return r; }
+    if(r!=='nochange') await ref.set(g);
+    return r;
+  })().catch(e=>{ netErr(e); return 'error'; });
+}
+function syncGuild(){
+  if(!S||!NET.online) return;
+  if(S.myguild){ S.money+=500000; letter('ギルド受付','kaoguild',`以前に作ったギルド「${S.myguild.name}」は，オンラインのギルドに作り直しになりました。結成費用¥500,000をお返しします。【施設】→[ギルド]から改めて結成してください。`); S.myguild=null; if(S.guild==='my') S.guild=null; save(); }
+  if(['a','b','my'].includes(S.guild)){ S.guild=null; save(); }
+  if(S.guild && !['a','b','my'].includes(S.guild)){
+    const g=NET.guilds[S.guild];
+    if(!g || !(g.members||{})[NET.uid]){ const name=g?g.name:''; S.guild=null; save(); letter('ギルド受付','kaoguild', g?`ギルド「${name}」から脱退となりました。`:'所属していたギルドが解散しました。'); }
+  }
+  if(!S.guild){ const mine=Object.entries(NET.guilds).find(([id,g])=>(g.members||{})[NET.uid]); if(mine){ S.guild=mine[0]; save(); letter('ギルド受付','kaoguild',`ギルド「${mine[1].name}」への加盟が認められました！`); } }
+}
+function guildRows(){
+  const rk=ranking(); const pts={}; rk.forEach(r=>pts[r.key]=r.point||0);
+  return Object.entries(NET.guilds).map(([id,g])=>({id,g,lv:guildLv(g.exp),n:Object.keys(g.members||{}).length,pt:Object.keys(g.members||{}).reduce((a,u)=>a+(pts[u]||0),0)})).sort((a,b)=>b.pt-a.pt);
+}
+function guildOnline(){
+  const my=S.guild&&NET.guilds[S.guild]?NET.guilds[S.guild]:null, myId=my?S.guild:null;
+  const leader=my&&my.leader===NET.uid;
+  const tabs=`<div class="tabs">${['ギルド一覧',my?'わがギルド':null,my?'ギルド掲示板':null,leader?'リーダーの部屋':null,!my?'ギルド結成':null].map((x,i)=>x?`<span class="${gTab===i?'on':''}" onclick="gTab=${i};render()">${x}</span>`:'').join('')}</div>`;
+  let h=`<div class="c"><big>ギルド</big></div>`;
+  h+=talk('kaoguild','ギルド受付',my?`あなたは「${esc(my.name)}」（Lv${guildLv(my.exp)}）の一員です。会費は売上の${my.fee}%で，ギルド金庫に貯まります。レベルが上がるほど，人気と売れ行きのボーナスが大きくなります。`:'ギルドに入ると，売上の一部を会費としてギルド金庫に納めます。そのかわり人気と売れ行きにボーナスがつき，仲間と協力できますよ。');
+  if(!my && gTab!==0 && gTab!==4) gTab=0;
+  if(my && gTab===4) gTab=1;
+  if(!leader && gTab===3) gTab=1;
+  h+=tabs;
+  if(gTab===0){
+    const rows=guildRows();
+    h+=`<div class="tbl"><table class="t" style="width:100%"><tr><th>ギルド</th><th>Lv・点数</th><th></th></tr>
+    ${rows.map(r=>{ const g=r.g, req=(g.reqs||{})[NET.uid];
+      return `<tr><td>${im(g.icon||'guildprize','i16')} <b>${esc(g.name)}</b><br><small>リーダー ${esc(g.leaderName||'')}・加盟${r.n}店・会費${g.fee}%・${g.open?'<span class=blue>自由加盟</span>':'承認制'}</small>${g.msg?`<br><small>「${esc(g.msg)}」</small>`:''}<br><small>${Object.values(g.members||{}).map(m=>esc(m.shop)).join('，')}</small></td>
+      <td class="r nw">Lv${r.lv}<br><small>${r.pt.toLocaleString()}点</small></td>
+      <td>${myId===r.id?'<small class="blue">所属中</small>':my?'':req?'<small>申請中</small>':`<button onclick="guildJoin(${R(r.id)})">${g.open?'加盟':'加盟申請'}</button>`}</td></tr>`; }).join('')||'<tr><td colspan=3 class="c">まだギルドはありません。最初のギルドを作ってみましょう！</td></tr>'}
+    </table></div><div class="c note">点数は加盟店のランキング点数の合計です。</div>`;
+  } else if(gTab===1 && my){
+    const lv=guildLv(my.exp), next=GUILD_LV[lv];
+    h+=`<div class="tbl"><table class="t" style="width:100%">
+      <tr><th>ギルド</th><td>${im(my.icon||'guildprize','i16')} <b>${esc(my.name)}</b></td></tr>
+      <tr><th>レベル</th><td>Lv${lv} <small>（${next?`次のLvまで ${yen(next-(my.exp||0))}`:'最大'}）</small><br><small>ボーナス：人気 +${(0.5+lv*0.5).toFixed(1)}/日・売れ行き +${((0.5+lv*0.5)*3).toFixed(1)}%</small></td></tr>
+      <tr><th>金庫</th><td>${yen(my.fund||0)}</td></tr>
+      <tr><th>会費</th><td>売上の${my.fee}%</td></tr>
+      <tr><th>リーダー</th><td>${esc(my.leaderName||'')}</td></tr>
+      ${my.msg?`<tr><th>告知</th><td>${esc(my.msg)}</td></tr>`:''}
+      <tr><th>加盟店</th><td>${Object.entries(my.members||{}).map(([u,m])=>`${kao(m.kao||1)} ${esc(m.shop)}${u===my.leader?' <small class=red>[リーダー]</small>':''}`).join('<br>')}</td></tr>
+    </table></div>
+    <div class="c"><big>金庫に寄付する</big></div>
+    <div class="c"><input type="number" id="gDon" value="10000" min="100" style="width:120px"> 円 <button onclick="guildDonate()">寄付する</button></div>
+    <div class="c note">寄付や会費がギルドの経験になり，レベルが上がります。</div>
+    <div class="c toolbar"><button onclick="guildLeave()">ギルドを抜ける</button></div>`;
+  } else if(gTab===2 && my){
+    h+=`<div class="c"><input id="gMsg" maxlength="60" placeholder="仲間へのメッセージ" style="width:70%"> <button onclick="guildPost()">書き込む</button></div>
+    <div class="tbl"><table class="t" style="width:100%">${(my.board||[]).slice().reverse().map(p=>`<tr><td class="c" style="width:56px">${kao(p.kao||1)}</td><td><small>${fmtDay(p.d)}</small> <b>${esc(p.name)}</b><br>${esc(p.m)}</td></tr>`).join('')||'<tr><td>まだ書き込みはありません</td></tr>'}</table></div>`;
+  } else if(gTab===3 && leader){
+    const reqs=Object.entries(my.reqs||{});
+    h+=`<div class="c"><big>加盟申請</big></div>
+    <div class="tbl"><table class="t" style="width:100%">${reqs.map(([u,m])=>`<tr><td>${kao(m.kao||1)}</td><td>${esc(m.shop)}<br><small>${esc(m.name)}</small></td><td class="nw"><button onclick="guildReq(${R(u)},1)">承認</button><button onclick="guildReq(${R(u)},0)">断る</button></td></tr>`).join('')||'<tr><td class="c">申請はありません</td></tr>'}</table></div>
+    <div class="c"><big>ギルドの設定</big></div>
+    <div class="tbl"><table class="t">
+      <tr><th>会費</th><td><select id="gsFee">${[0,1,2,3,4,5,6,7,8,9,10].map(v=>`<option ${v===my.fee?'selected':''}>${v}</option>`).join('')}</select> %</td></tr>
+      <tr><th>加盟</th><td><select id="gsOpen"><option value="0" ${my.open?'':'selected'}>承認制</option><option value="1" ${my.open?'selected':''}>自由加盟</option></select></td></tr>
+      <tr><th>紋章</th><td>${GUILD_ICONS.map(ic=>`<label style="display:inline-block;margin:3px"><input type="radio" name="gsIcon" value="${ic}" ${ic===(my.icon||'guildprize')?'checked':''}>${im(ic,'i16')}</label>`).join('')}</td></tr>
+      <tr><th>告知</th><td><input id="gsMsg" maxlength="60" value="${esc(my.msg||'')}" style="width:100%"></td></tr>
+    </table></div>
+    <div class="c"><button onclick="guildSettings()">設定を保存</button></div>
+    <div class="c"><big>金庫を使う</big>　<small>（金庫 ${yen(my.fund||0)}）</small></div>
+    <div class="c toolbar"><button onclick="guildAd()">ギルド広告を出す（金庫から¥50,000）</button></div>
+    <div class="c note">加盟店みんなの人気が10上がります。</div>
+    <div class="c"><input type="number" id="gDist" value="10000" min="1" style="width:120px"> 円ずつ <button onclick="guildDistribute()">加盟店に分配する</button></div>
+    <div class="c"><big>加盟店の管理</big></div>
+    <div class="tbl"><table class="t" style="width:100%">${Object.entries(my.members||{}).filter(([u])=>u!==NET.uid).map(([u,m])=>`<tr><td>${esc(m.shop)}<br><small>${esc(m.name)}</small></td><td class="nw"><button onclick="guildLeader(${R(u)})">リーダーを譲る</button><button onclick="guildKick(${R(u)})">除名</button></td></tr>`).join('')||'<tr><td class="c">ほかの加盟店はいません</td></tr>'}</table></div>
+    <div class="c toolbar"><button class="red" onclick="guildDisband()">ギルドを解散する</button></div>
+    <div class="c note">解散すると，金庫のお金は加盟店で山分けされます。</div>`;
+  } else if(gTab===4 && !my){
+    h+= S.dig>=GUILD_DIG? `<div class="tbl"><table class="t">
+      <tr><th>ギルド名</th><td><input id="gName" maxlength="12"></td></tr>
+      <tr><th>会費</th><td><select id="gFee">${[0,1,2,3,4,5,6,7,8,9,10].map(v=>`<option ${v===3?'selected':''}>${v}</option>`).join('')}</select> %</td></tr>
+      <tr><th>加盟</th><td><select id="gOpen"><option value="1">自由加盟</option><option value="0">承認制</option></select></td></tr>
+      <tr><th>紋章</th><td>${GUILD_ICONS.map((ic,i)=>`<label style="display:inline-block;margin:3px"><input type="radio" name="gIcon" value="${ic}" ${i===0?'checked':''}>${im(ic,'i16')}</label>`).join('')}</td></tr>
+    </table></div><div class="c"><button onclick="guildCreate()">結成する（${yen(GUILD_COST)}）</button></div>` : `<div class="c note">ギルドの結成には爵位ポイント${GUILD_DIG}以上（${DIGNITY[digLevel(GUILD_DIG)]}）が必要です（現在${S.dig}pt）。<br>ランキング1位や王様の依頼で爵位ポイントを集めましょう。</div>`;
+  }
+  return h;
+}
+function me4g(){ return {name:S.owner,shop:S.shop,kao:S.kao,t:Date.now()}; }
+async function guildCreate(){
+  const name=$('#gName').value.trim(); if(!name){ setFlash('ギルド名を入れてください',1); render(); return; }
+  if(Object.values(NET.guilds).some(g=>g.name===name)){ setFlash('同じ名前のギルドがあります',1); render(); return; }
+  if(S.money<GUILD_COST){ setFlash('資金が足りません',1); render(); return; }
+  const ic=(document.querySelector('input[name=gIcon]:checked')||{}).value||'guildprize';
+  S.money-=GUILD_COST; save();
+  try{
+    const ref=await NET.db.collection('guilds').add({name,leader:NET.uid,leaderName:S.owner,fee:+$('#gFee').value,open:$('#gOpen').value==='1',icon:ic,msg:'',fund:0,exp:0,members:{[NET.uid]:me4g()},reqs:{},board:[],t:Date.now()});
+    S.guild=ref.id; gTab=1; news(`${S.owner}（${S.shop}）がギルド「${name}」を結成した！`); setFlash(`ギルド「${esc(name)}」を結成しました！`);
+  }catch(e){ netErr(e); S.money+=GUILD_COST; setFlash('結成に失敗しました',1); }
+  save(); render();
+}
+async function guildJoin(k){
+  const id=REFS[k];
+  const r=await guildTx(id,g=>{ if(g.open){ g.members[NET.uid]=me4g(); delete g.reqs[NET.uid]; return 'joined'; } g.reqs[NET.uid]=me4g(); return 'req'; });
+  if(r==='joined'){ S.guild=id; gTab=1; setFlash(`「${esc(NET.guilds[id]?NET.guilds[id].name:'')}」に加盟しました！`); news(`${S.shop}がギルド「${NET.guilds[id]?NET.guilds[id].name:''}」に加盟した`); }
+  else if(r==='req'){ const g=NET.guilds[id]; if(g) sendMail(g.leader,{kind:'letter',body:`ギルド「${g.name}」への加盟申請が届きました。ギルドの「リーダーの部屋」から承認できます。`}); setFlash('加盟を申請しました。リーダーの承認を待ってください'); }
+  else setFlash('手続きに失敗しました',1);
+  save(); render();
+}
+function guildLeave(){
+  confirmBox('ギルドを抜けますか？',async()=>{
+    const id=S.guild; const g0=NET.guilds[id]||{};
+    const r=await guildTx(id,g=>{ delete g.members[NET.uid]; const rest=Object.keys(g.members); if(!rest.length) return 'delete'; if(g.leader===NET.uid){ g.leader=rest[0]; g.leaderName=g.members[rest[0]].name; } return 'ok'; });
+    S.guild=null; gTab=0; setFlash(r==='delete'?'ギルドを抜けました（加盟店がいなくなったので解散しました）':'ギルドを抜けました'); save(); render();
+  });
+}
+function guildDonate(){
+  const v=Math.max(0,parseInt($('#gDon').value)||0); if(!v) return; if(S.money<v){ setFlash('資金が足りません',1); render(); return; }
+  S.money-=v; save();
+  guildTx(S.guild,g=>{ g.fund=(g.fund||0)+v; g.exp=(g.exp||0)+v; g.board.push({name:S.owner,kao:S.kao,d:day(),m:`金庫に${yen(v)}を寄付しました`,t:Date.now()}); g.board=g.board.slice(-30); }).then(r=>{ if(r==='error'||r==='gone'){ S.money+=v; setFlash('寄付に失敗しました',1); } else setFlash(`${yen(v)}を寄付しました`); save(); render(); });
+}
+function guildPost(){ const m=$('#gMsg').value.trim(); if(!m) return; guildTx(S.guild,g=>{ g.board.push({name:S.owner,kao:S.kao,d:day(),m,t:Date.now()}); g.board=g.board.slice(-30); }).then(()=>render()); }
+function guildReq(k,ok){ const u=REFS[k]; guildTx(S.guild,g=>{ const m=g.reqs[u]; delete g.reqs[u]; if(ok&&m) g.members[u]=m; }).then(()=>{ if(!ok) sendMail(u,{kind:'letter',body:'ギルドへの加盟申請は見送られました。'}); setFlash(ok?'加盟を承認しました':'申請を断りました'); render(); }); }
+function guildSettings(){ const fee=+$('#gsFee').value, open=$('#gsOpen').value==='1', msg=$('#gsMsg').value.trim(), icon=(document.querySelector('input[name=gsIcon]:checked')||{}).value||'guildprize'; guildTx(S.guild,g=>{ g.fee=fee; g.open=open; g.msg=msg; g.icon=icon; }).then(()=>{ setFlash('ギルドの設定を保存しました'); render(); }); }
+function guildAd(){
+  guildTx(S.guild,g=>{ if((g.fund||0)<50000) return 'poor'; g.fund-=50000; return Object.keys(g.members); }).then(r=>{
+    if(r==='poor'){ setFlash('金庫のお金が足りません',1); render(); return; }
+    if(Array.isArray(r)){ const gi=guildInfo(S.guild); r.forEach(u=>{ if(u===NET.uid) S.pop=clamp(S.pop+10,0,100); else sendMail(u,{kind:'gpop',amount:10,gname:gi?gi.name:''}); }); news(`ギルド「${gi?gi.name:''}」が街中に広告を出した！`); setFlash('ギルド広告を出しました！ 加盟店みんなの人気が上がります'); }
+    save(); render();
+  });
+}
+function guildDistribute(){
+  const v=Math.max(0,parseInt($('#gDist').value)||0); if(!v) return;
+  guildTx(S.guild,g=>{ const us=Object.keys(g.members); if((g.fund||0)<v*us.length) return 'poor'; g.fund-=v*us.length; return us; }).then(r=>{
+    if(r==='poor'){ setFlash('金庫のお金が足りません（加盟店の数×金額が必要です）',1); render(); return; }
+    if(Array.isArray(r)){ r.forEach(u=>{ if(u===NET.uid) S.money+=v; else sendMail(u,{kind:'money',amount:v,note:'ギルド金庫からの分配金'}); }); setFlash(`加盟店に${yen(v)}ずつ分配しました`); }
+    save(); render();
+  });
+}
+function guildKick(k){ const u=REFS[k]; confirmBox('この店をギルドから除名しますか？',()=>guildTx(S.guild,g=>{ delete g.members[u]; }).then(()=>{ setFlash('除名しました'); render(); })); }
+function guildLeader(k){ const u=REFS[k]; confirmBox('リーダーを譲りますか？',()=>guildTx(S.guild,g=>{ if(!g.members[u]) return 'nochange'; g.leader=u; g.leaderName=g.members[u].name; }).then(()=>{ gTab=1; setFlash('リーダーを譲りました'); render(); })); }
+function guildDisband(){
+  confirmBox('本当にギルドを解散しますか？ 金庫のお金は加盟店で山分けされます。',async()=>{
+    const s=await NET.db.doc('guilds/'+S.guild).get(); if(!s.exists) return;
+    const g=s.data(), us=Object.keys(g.members||{}), share=us.length?Math.floor((g.fund||0)/us.length):0;
+    us.forEach(u=>{ if(u===NET.uid) S.money+=share; else if(share>0) sendMail(u,{kind:'money',amount:share,note:`ギルド「${g.name}」解散による分配金`}); });
+    await NET.db.doc('guilds/'+S.guild).delete().catch(e=>netErr(e));
+    news(`ギルド「${g.name}」が解散した`); S.guild=null; gTab=0; setFlash('ギルドを解散しました'); save(); render();
+  });
+}
 
 /* 競技場：スライムレース */
 let race=null;
