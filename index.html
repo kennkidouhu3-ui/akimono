@@ -292,7 +292,7 @@ let route='rank';
 let sub={};
 let REFS=[];
 function R(v){ REFS.push(v); return REFS.length-1; }
-const NET={kind:'',ready:false,online:false,db:null,uid:null,shops:{},town:null,bbs:[],news:[],auc:[],mailQ:{},readonly:false,lastSave:0};
+const NET={jobs:[],kind:'',ready:false,online:false,db:null,uid:null,shops:{},town:null,bbs:[],news:[],auc:[],mailQ:{},readonly:false,lastSave:0};
 function defaultTown(){ return {day:0,lord:null,tax:3,msg:'',safety:80,guard:0,bal:null,riot:{}}; }
 let _dt=defaultTown();
 function T(){ if(NET.online) return NET.town||_dt; return S?S.townLocal:_dt; }
@@ -471,7 +471,8 @@ function processMail(){
       else if(m.kind==='letter'){ letter(who,face,m.body||''); }
       else if(m.kind==='duel'){ if(m.win){ S.pop=clamp(S.pop-3,0,100); letter(who,face,`${who}に決闘を挑まれ，敗れてしまった…（人気が下がった）`); } else { S.pop=clamp(S.pop+3,0,100); letter(who,face,`${who}に決闘を挑まれたが，見事返り討ちにした！（人気が上がった）`); } }
       else if(m.kind==='admin'){ applyAdmin(m); }
-      else if(m.kind==='wipe'){ NET.db.doc('mail/'+id).delete().catch(()=>{}); try{ localStorage.removeItem(SAVE); }catch(e){} S=null; lastPub=''; setFlash('管理人によってお店のデータがリセットされました。新しくお店を開いてください。',1); render(); return; }
+      else if(m.kind==='time'){ S.time=Math.min(maxTime(),S.time+(m.minutes||0)); letter(who,face,`求人「${m.title||'手伝い'}」を引き受けて，${hm(m.minutes||0)}働いてくれました。持ち時間が増えました。`); }
+      else if(m.kind==='wipe'){ NET.db.doc('mail/'+id).delete().catch(()=>{}); try{ localStorage.removeItem(SAVE); }catch(e){} S=null; lastPub=''; try{ localStorage.removeItem(UIDKEY); localStorage.setItem(LOGOUTKEY,'1'); }catch(e){} setFlash('管理人によってお店のデータがリセットされました。新しくお店を開いてください。',1); render(); return; }
       else if(m.kind==='tax'){ S.money+=m.amount; letter('大臣','kaominister',`${m.fromShop||who}から税 ${yen(m.amount)} が納められました。`); }
     }
     NET.db.doc('mail/'+id).delete().catch(()=>{});
@@ -480,7 +481,7 @@ function processMail(){
 }
 /* ---------- Firebase 接続（Claude の外で遊ぶとき） ---------- */
 const FB_EMBED={apiKey:"AIzaSyBkhd5bhjf0-PF1OzG5kiMK_etf2qVrzG4",authDomain:"akimono.firebaseapp.com",projectId:"akimono",storageBucket:"akimono.firebasestorage.app",messagingSenderId:"952406395304",appId:"1:952406395304:web:6a85d5c2c06ecb9f5fb59d"};
-const FBKEY='akimono-fbcfg', UIDKEY='akimono-uid';
+const FBKEY='akimono-fbcfg', UIDKEY='akimono-uid', LOGOUTKEY='akimono-loggedout';
 function parseFbConfig(txt){
   const o={}; String(txt).replace(/(apiKey|authDomain|projectId|storageBucket|messagingSenderId|appId|measurementId)\s*["']?\s*:\s*["']([^"']+)["']/g,(m,k,v)=>{ o[k]=v; });
   return o.apiKey&&o.projectId? o : null;
@@ -505,8 +506,8 @@ async function firebaseNet(cfg){
   const wq=q=>({ where:(f,o,v)=>wq(q.where(f,o,v)), orderBy:(f,d)=>wq(q.orderBy(f,d||'asc')), limit:n=>wq(q.limit(n)), get:()=>q.get(), onSnapshot:(n,e)=>q.onSnapshot(n,e) });
   const wd=r=>({ id:r.id, path:r.path, get:()=>r.get(), set:d=>r.set(d), update:d=>r.update(d), delete:()=>r.delete(), acquire:async()=>({acquired:true}), onSnapshot:(n,e)=>r.onSnapshot(n,e) });
   const db={ doc:p=>wd(fs.doc(p)), collection:p=>{ const c=fs.collection(p); return {...wq(c), path:p, add:async d=>wd(await c.add(d)), doc:id=>wd(id?c.doc(id):c.doc())}; } };
-  let uid=null; try{ uid=localStorage.getItem(UIDKEY); }catch(e){}
-  return {db, uid: uid || cred.user.uid};
+  let uid=null, out=false; try{ uid=localStorage.getItem(UIDKEY); out=localStorage.getItem(LOGOUTKEY)==='1'; }catch(e){}
+  return {db, uid: uid || cred.user.uid, guest: !uid && out};
 }
 function inviteLink(){
   const base=location.origin+location.pathname;
@@ -523,15 +524,63 @@ function useTransferCode(){
   const v=($('#tcIn').value||'').trim(); if(v.length<10){ setFlash('引き継ぎコードが正しくありません',1); render(); return; }
   confirmBox('このコードのデータに切り替えます。今この端末で遊んでいるデータは使えなくなります。よろしいですか？',()=>{ try{ localStorage.setItem(UIDKEY,v); localStorage.removeItem(SAVE); }catch(e){} location.reload(); });
 }
+
+/* ---------- ログイン（店主名＋パスワード） ---------- */
+function useLogin(){ return NET.kind==='firebase' && NET.online; }
+function accKey(name){ return 'accounts/'+encodeURIComponent(String(name).trim()); }
+async function pwHash(name,pw){ return sha('login:'+String(name).trim()+':'+pw); }
+async function doLogin(){
+  const name=$('#lgName').value.trim(), pw=$('#lgPw').value;
+  if(!name||!pw){ setFlash('店主名とパスワードを入れてください',1); render(); return; }
+  try{
+    const s=await NET.db.doc(accKey(name)).get();
+    if(!s.exists){ setFlash('その店主名のお店は見つかりませんでした',1); render(); return; }
+    const a=s.data();
+    if(a.hash!==await pwHash(name,pw)){ setFlash('パスワードが違います',1); render(); return; }
+    try{ localStorage.setItem(UIDKEY,a.uid); localStorage.removeItem(LOGOUTKEY); localStorage.removeItem(SAVE); }catch(e){}
+    location.reload();
+  }catch(e){ netErr(e); setFlash('ログインに失敗しました。通信状態を確認してください',1); render(); }
+}
+function doLogout(){
+  confirmBox('ログアウトしますか？ 次に遊ぶときは店主名とパスワードでログインします。',async()=>{
+    save(); await saveRemote(true); await publishShop(true);
+    try{ localStorage.removeItem(UIDKEY); localStorage.setItem(LOGOUTKEY,'1'); localStorage.removeItem(SAVE); }catch(e){}
+    location.reload();
+  });
+}
+async function registerLogin(){
+  const pw=$('#rgPw').value, pw2=$('#rgPw2').value, name=($('#rgName').value||'').trim();
+  if(!name){ setFlash('ログインに使う店主名を入れてください',1); render(); return; }
+  if(!pw||pw.length<4){ setFlash('パスワードは4文字以上にしてください',1); render(); return; }
+  if(pw!==pw2){ setFlash('確認用のパスワードが一致しません',1); render(); return; }
+  try{
+    const ref=NET.db.doc(accKey(name)); const s=await ref.get();
+    if(s.exists && s.data().uid!==NET.uid){ setFlash('その店主名はすでにほかの人が使っています',1); render(); return; }
+    if(S.loginName && S.loginName!==name){ NET.db.doc(accKey(S.loginName)).delete().catch(()=>{}); }
+    await ref.set({uid:NET.uid,hash:await pwHash(name,pw),owner:S.owner,t:Date.now()});
+    S.loginName=name; save(); saveRemote(true);
+    try{ localStorage.setItem(UIDKEY,NET.uid); localStorage.removeItem(LOGOUTKEY); }catch(e){}
+    setFlash(`ログイン設定をしました。次からは「${esc(name)}」とパスワードでログインできます。`);
+  }catch(e){ netErr(e); setFlash('設定に失敗しました',1); }
+  render();
+}
+function loginSettingsHtml(){
+  if(!useLogin()||!S) return '';
+  return `<hr><div class="c"><big>ログイン設定</big></div>
+  ${S.loginName?`<div class="c">ログイン名：<b>${esc(S.loginName)}</b></div>`:`<div class="flash">まだログイン用のパスワードが設定されていません。設定すると，別の端末からも店主名とパスワードで続きを遊べます。</div>`}
+  <div class="tbl"><table class="t">
+    <tr><th>ログイン名</th><td><input id="rgName" maxlength="10" value="${esc(S.loginName||S.owner)}"></td></tr>
+    <tr><th>${S.loginName?'新しい':''}パスワード</th><td><input type="password" id="rgPw" maxlength="30"></td></tr>
+    <tr><th>確認</th><td><input type="password" id="rgPw2" maxlength="30"></td></tr>
+  </table></div>
+  <div class="c"><button onclick="registerLogin()">${S.loginName?'変更する':'設定する'}</button> ${S.loginName?'<button onclick="doLogout()">ログアウト</button>':''}</div>`;
+}
 function copyText(id){ const e=$('#'+id); if(!e) return; e.select(); try{ navigator.clipboard.writeText(e.value).then(()=>{ setFlash('コピーしました'); render(); },()=>{ document.execCommand('copy'); setFlash('コピーしました'); render(); }); }catch(x){ document.execCommand('copy'); } }
 function onlineSettingsHtml(){
   if(NET.kind==='claude') return '';
   let h='<hr><div class="c"><big>オンライン設定</big></div>';
   if(NET.kind==='firebase'&&NET.online){
-    h+=`<div class="c">友達招待リンク（これを送ると一緒に遊べます）<br><input id="invL" readonly value="${esc(inviteLink())}" style="width:90%"><br><button onclick="copyText('invL')">コピー</button></div>
-    <div class="c" style="margin-top:8px">引き継ぎコード（別の端末で続きを遊ぶとき）<br><input id="tcOut" readonly value="${esc(NET.uid)}" style="width:90%"><br><button onclick="copyText('tcOut')">コピー</button></div>
-    <div class="c" style="margin-top:8px">別の端末のコードを入力<br><input id="tcIn" style="width:70%"> <button onclick="useTransferCode()">切り替える</button></div>
-    <div class="c note">引き継ぎコードは他人に教えないでください。</div>`;
+    h+=`<div class="c">友達招待リンク（これを送ると一緒に遊べます）<br><input id="invL" readonly value="${esc(inviteLink())}" style="width:90%"><br><button onclick="copyText('invL')">コピー</button></div>`;
   } else if(!FB_EMBED){
     h+=`<div class="c note">Firebase の firebaseConfig を貼り付けると，Claude のアカウントがない人ともオンラインで遊べます。</div>
     <div class="c"><textarea id="fbTxt" rows="6" style="width:95%" placeholder="apiKey: &quot;...&quot;, authDomain: ..., projectId: ..."></textarea><br><button onclick="saveFbSetup()">保存してオンラインにする</button></div>`;
@@ -546,13 +595,14 @@ async function initNet(){
       const [cdb,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
       if(cdb&&user){ const id=await user.id(); if(id){ db=cdb; uid=id; NET.kind='claude'; } }
     }
-    if(!db){ const cfg=fbConfig(); if(cfg){ const r=await firebaseNet(cfg); db=r.db; uid=r.uid; NET.kind='firebase'; } }
+    if(!db){ const cfg=fbConfig(); if(cfg){ const r=await firebaseNet(cfg); db=r.db; uid=r.uid; NET.kind='firebase'; NET.guest=!!r.guest; } }
     if(!db||!uid) throw 0;
     NET.db=db; NET.uid=uid; NET.online=true;
     if(S && S.uid && S.uid!==uid) S=null;
+    if(NET.guest) S=null;
     if(S && !S.uid) S.uid=uid;
     try{
-      const snap=await db.doc('data/users/'+uid+'/save').get();
+      const snap=NET.guest? {exists:false} : await db.doc('data/users/'+uid+'/save').get();
       if(snap.exists){ const r=migrate(JSON.parse(snap.data().json)); if(!S || (r.realLast||0)>(S.realLast||0)){ S=r; S.uid=uid; if(route!=='admin') route='rank'; } }
     }catch(e){ console.warn(e); }
     db.collection('shops').onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]=d.data()); NET.shops=o; softRender(); },netErr);
@@ -561,6 +611,7 @@ async function initNet(){
     db.collection('bbs').orderBy('t','desc').limit(40).onSnapshot(s=>{ NET.bbs=s.docs.map(d=>d.data()); softRender(); },netErr);
     db.collection('news').orderBy('t','desc').limit(60).onSnapshot(s=>{ NET.news=s.docs.map(d=>d.data()); softRender(); },netErr);
     db.collection('auc').onSnapshot(s=>{ NET.auc=s.docs.map(d=>({id:d.id,...d.data()})); softRender(); },netErr);
+    db.collection('jobs').onSnapshot(s=>{ NET.jobs=s.docs.map(d=>({id:d.id,...d.data()})); softRender(); },netErr);
   }catch(e){ if(e) console.warn(e); NET.online=false; }
   NET.ready=true;
   if(S){ catchUp(); processMail(); publishShop(true); }
@@ -569,7 +620,7 @@ async function initNet(){
 function softRender(){
   if(document.querySelector('.modal')) return;
   const a=document.activeElement; if(a&&['INPUT','SELECT','TEXTAREA'].includes(a.tagName)) return;
-  if(!S || ['rank','street','bbs','log','auc','lord','army','letter'].includes(route)) render();
+  if(!S || ['rank','street','bbs','log','auc','lord','army','letter','work'].includes(route)) render();
 }
 function catchUp(){
   if(!S) return 0;
@@ -875,7 +926,7 @@ function render(){
   const app=$('#app');
   REFS=[];
   if(!S && route==='admin'){ let bd=''; try{ bd=SCREENS.admin(); }catch(e){ bd='<p class="red">'+esc(e.message)+'</p>'; } const f=flash?`<div class="flash ${flash.err?'err':''}">${flash.m}</div>`:''; flash=null; app.innerHTML=im('logo','logo','width=350 height=70')+`<div class="c">${netBadge()}</div>`+f+bd; return; }
-  if(!S){ app.innerHTML=titleScreen(); return; }
+  if(!S){ const f=flash?`<div class="flash ${flash.err?'err':''}">${flash.m}</div>`:''; flash=null; app.innerHTML=f+titleScreen(); return; }
   let body='';
   try{ body=(SCREENS[route]||SCREENS.rank)(); }catch(e){ console.error(e); body='<p class="red">表示エラー: '+esc(e.message)+'</p>'; }
   const f = flash? `<div class="flash ${flash.err?'err':''}">${flash.m}</div>`:'';
@@ -922,10 +973,19 @@ function titleScreen(){
   <div class="c"><big>商人ランキング</big></div>
   ${NET.online? rankTable(10) : `<div class="c note">${NET.ready?'オフラインのため，ランキングはお店を開くと表示されます。':'オンラインに接続しています…'}</div>`}
   <hr>
+  ${useLogin()?`<div class="c"><big>ログイン</big></div>
+  <div class="tbl"><table class="t">
+    <tr><th>店主名</th><td><input id="lgName" maxlength="10" autocomplete="username"></td></tr>
+    <tr><th>パスワード</th><td><input type="password" id="lgPw" maxlength="30" autocomplete="current-password" onkeydown="if(event.key==='Enter'&&!event.isComposing)doLogin()"></td></tr>
+  </table></div>
+  <div class="c"><button onclick="doLogin()">店へ入る</button></div>
+  <hr><div class="c"><big>新しくお店を開く</big></div>`:''}
   <div class="c" style="margin-bottom:6px">剣と魔法の街で，自分だけのお店を開こう。</div>
   <div class="tbl"><table class="t">
     <tr><th>店主名</th><td><input id="nOwner" maxlength="10" placeholder="例：アルト"></td></tr>
     <tr><th>店名</th><td><input id="nShop" maxlength="14" placeholder="例：アルト商店"></td></tr>
+    ${useLogin()?`<tr><th>パスワード</th><td><input type="password" id="nPw" maxlength="30" autocomplete="new-password" placeholder="4文字以上"></td></tr>
+    <tr><th>確認</th><td><input type="password" id="nPw2" maxlength="30" autocomplete="new-password"></td></tr>`:''}
     <tr><th>顔</th><td><div style="max-height:170px;overflow:auto;max-width:420px">${faces}</div></td></tr>
   </table></div>
   <div class="c"><button onclick="startNew()" style="padding:4px 20px" ${NET.ready?'':'disabled'}>${NET.ready?'新装開店':'接続中…'}</button></div>
@@ -933,11 +993,28 @@ function titleScreen(){
   <div class="c note">${NET.online?'進行はオンラインに保存されます。':'進行はこのブラウザに保存されます。'}</div>
   ${NET.ready&&!NET.online&&!window.claude?`<div class="c"><a onclick="modal(onlineSettingsHtml()+'<div class=c><button onclick=closeModal()>閉じる</button></div>')">オンライン設定（管理者向け）</a></div>`:''}`;
 }
-function startNew(){
-  const o=$('#nOwner').value.trim()||'名無しの店主';
+async function startNew(){
+  const o=$('#nOwner').value.trim();
   const s=$('#nShop').value.trim()||(o+'商店');
   const k=+((document.querySelector('input[name=kao]:checked')||{}).value||1);
-  newState(o,s,k); if(NET.online) S.uid=NET.uid; save(); processMail(); saveRemote(true); publishShop(true); go('rank');
+  if(useLogin()){
+    const pw=$('#nPw').value, pw2=$('#nPw2').value;
+    if(!o){ setFlash('店主名を入れてください（ログインに使います）',1); render(); return; }
+    if(!pw||pw.length<4){ setFlash('パスワードは4文字以上にしてください',1); render(); return; }
+    if(pw!==pw2){ setFlash('確認用のパスワードが一致しません',1); render(); return; }
+    try{
+      const ref=NET.db.doc(accKey(o)); const ex=await ref.get();
+      if(ex.exists){ setFlash('その店主名はすでに使われています。別の名前にするか，上の「ログイン」から入ってください',1); render(); return; }
+      const uid='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+      newState(o,s,k); S.uid=uid; S.loginName=o;
+      await NET.db.doc('data/users/'+uid+'/save').set({json:JSON.stringify(S),t:Date.now()});
+      await ref.set({uid,hash:await pwHash(o,pw),owner:o,t:Date.now()});
+      try{ localStorage.setItem(UIDKEY,uid); localStorage.removeItem(LOGOUTKEY); localStorage.setItem(SAVE,JSON.stringify(S)); }catch(e){}
+      location.reload();
+    }catch(e){ netErr(e); setFlash('開店に失敗しました。通信状態を確認してください',1); render(); }
+    return;
+  }
+  newState(o||'名無しの店主',s,k); if(NET.online) S.uid=NET.uid; save(); processMail(); saveRemote(true); publishShop(true); go('rank');
 }
 
 /* ============================================================
@@ -1409,6 +1486,7 @@ SCREENS.other=function(){
   <div class="c"><big>セーブ</big></div>
   <div class="c"><button onclick="saveNow()">いますぐセーブする</button></div>
   <div class="c note">${NET.online?'オンラインに自動で保存されています（別の端末でも続きから遊べます）。':'このブラウザに自動で保存されています。'}<br>時間は現実の1秒＝ゲーム内1分で進みます（1日＝24分）。持ち時間は最大${hm(maxTime())}まで貯まります。</div>
+  ${loginSettingsHtml()}
   ${onlineSettingsHtml()}
   <hr>
   <div class="c"><button onclick="closeShop()" class="red">閉店する（データ削除）</button></div>`;
@@ -1492,19 +1570,90 @@ function buyNpc(id,i){
   S.money-=cost; n.money+=cost; c.stock-=q; add(c.no,q); n.friend++;
   setFlash(`${n.shop}で${ITEMS[c.no].name}を${q}${ITEMS[c.no].scale}買いました（${yen(cost)}）`); save(); render();
 }
+const NPC_JOBS=[
+  {name:'倉庫の荷運び',t:180,pay:4000},{name:'酒場の給仕',t:240,pay:6500},
+  {name:'薬草摘みの手伝い',t:120,pay:1500,get:[1,15]},{name:'隊商の護衛',t:360,pay:18000,need:60},
+  {name:'鉱山の雑用',t:300,pay:5000,get:[5,5]},{name:'城壁の修理',t:480,pay:14000},
+  {name:'牧場の乳しぼり',t:150,pay:2500,get:[26,3]},{name:'木こりの手伝い',t:240,pay:3000,get:[3,10]},
+  {name:'図書館の写本',t:300,pay:9000},{name:'魔物の見張り番',t:420,pay:16000,need:80},
+];
 SCREENS.work=function(){
-  const d=day(); if(!S.work||S.work.d!==d){ S.work={d,jobs:[
-    {name:'倉庫の荷運び',t:180,pay:4000},{name:'酒場の給仕',t:240,pay:6500},
-    {name:'薬草摘みの手伝い',t:120,pay:1500,get:[1,15]},{name:'隊商の護衛',t:360,pay:18000,need:60},
-    {name:'鉱山の雑用',t:300,pay:5000,get:[5,5]},{name:'城壁の修理',t:480,pay:14000},
-  ].sort(()=>Math.random()-.5).slice(0,4)}; }
-  const st=myStat();
-  return `<div class="c"><big>求人</big></div>
-  ${talk('kaohelp','求人係','今日のお仕事はこちらです。お店の資金が苦しい時はぜひ！')}
-  <div class="tbl"><table class="t"><tr><th>仕事</th><th>時間</th><th>報酬</th><th></th></tr>
-  ${S.work.jobs.map((j,i)=>`<tr><td>${esc(j.name)}${j.need?`<br><small class="${st.attack>=j.need?'':'red'}">攻撃${j.need}以上</small>`:''}</td><td class="nw">${hm(j.t)}</td><td class="nw">${yen(j.pay)}${j.get?'<br>'+iname(j.get[0])+'×'+j.get[1]:''}</td><td><button ${j.need&&st.attack<j.need?'disabled':''} onclick="doWork(${i})">働く</button></td></tr>`).join('')}
-  </table></div>`;
+  const d=day(); if(!S.work||S.work.d!==d){ S.work={d,jobs:NPC_JOBS.slice().sort(()=>Math.random()-.5).slice(0,4)}; }
+  const st=myStat(), tab=sub.t||0;
+  const tabs=NET.online?`<div class="tabs"><span class="${tab===0?'on':''}" onclick="sub.t=0;render()">プレイヤーの求人</span><span class="${tab===1?'on':''}" onclick="sub.t=1;render()">求人を出す</span><span class="${tab===2?'on':''}" onclick="sub.t=2;render()">街の日雇い</span></div>`:'';
+  let h=`<div class="c"><big>求人</big></div>${talk('kaohelp','求人係',NET.online?'お店どうしで仕事を頼んだり，引き受けたりできます。報酬は求人を出したときに預かっておくので安心ですよ。':'今日のお仕事はこちらです。お店の資金が苦しい時はぜひ！')}${tabs}`;
+  if(NET.online && tab===0){
+    const js=(NET.jobs||[]).filter(x=>!x.done).sort((a,b)=>b.t-a.t);
+    h+=`<div class="tbl"><table class="t" style="width:100%"><tr><th>依頼主</th><th>仕事の内容</th><th>報酬</th><th></th></tr>
+    ${js.map(x=>{ const mine=x.poster===NET.uid, left=x.end-S.clock;
+      const what= x.kind==='item'? `${iname(x.no)}×${x.n}を納品<br><small>所持 ${S.stock[x.no]||0}</small>` : `${x.hours}時間の手伝い<br><small>持ち時間を${x.hours}時間使います</small>`;
+      const ok= x.kind==='item'? has(x.no,x.n) : S.time>=x.hours*60;
+      return `<tr><td class="c">${kao(x.posterKao||1)}<br><small>${esc(x.posterName)}</small></td><td><b>${esc(x.title||'')}</b><br>${what}<br><small class="note">あと${hm(Math.max(0,left))}</small></td><td class="r nw">${yen(x.reward)}</td>
+      <td>${mine?`<button onclick="cancelJob(${R(x.id)})">取り下げ</button>`:`<button ${ok&&left>0?'':'disabled'} onclick="takeJob(${R(x.id)})">引き受ける</button>`}</td></tr>`; }).join('')||'<tr><td colspan=4 class="c">いま出ている求人はありません</td></tr>'}
+    </table></div>`;
+  } else if(NET.online && tab===1){
+    const items=ITEMLIST.filter(it=>it.price>0).map(it=>`<option value="${it.no}">${esc(it.name)}</option>`).join('');
+    h+=`<div class="tbl"><table class="t">
+      <tr><th>種類</th><td><select id="jbKind" onchange="$('#jbItemRow').style.display=this.value==='item'?'':'none';$('#jbTimeRow').style.display=this.value==='time'?'':'none'"><option value="item">品物を納品してほしい</option><option value="time">時間を手伝ってほしい</option></select></td></tr>
+      <tr><th>題名</th><td><input id="jbTitle" maxlength="20" placeholder="例：ポーション大募集！" style="width:100%"></td></tr>
+      <tr id="jbItemRow"><th>品物</th><td><select id="jbNo">${items}</select> ×<input type="number" id="jbN" value="10" min="1"></td></tr>
+      <tr id="jbTimeRow" style="display:none"><th>時間</th><td><input type="number" id="jbH" value="3" min="1" max="24"> 時間 <small>（引き受けた人の持ち時間が，あなたの持ち時間になります）</small></td></tr>
+      <tr><th>報酬</th><td><input type="number" id="jbR" value="10000" min="100" style="width:120px"> 円</td></tr>
+      <tr><th>期限</th><td><select id="jbD"><option value="1">1日</option><option value="2" selected>2日</option><option value="3">3日</option></select></td></tr>
+    </table></div>
+    <div class="c"><button onclick="postJob()">求人を出す（10分）</button></div>
+    <div class="c note">報酬は求人を出したときに預けます。期限までに誰も引き受けなかったり，取り下げたりすると返ってきます。</div>`;
+  } else {
+    h+=`<div class="tbl"><table class="t"><tr><th>仕事</th><th>時間</th><th>報酬</th><th></th></tr>
+    ${S.work.jobs.map((j,i)=>`<tr><td>${esc(j.name)}${j.need?`<br><small class="${st.attack>=j.need?'':'red'}">攻撃${j.need}以上</small>`:''}</td><td class="nw">${hm(j.t)}</td><td class="nw">${yen(j.pay)}${j.get?'<br>'+iname(j.get[0])+'×'+j.get[1]:''}</td><td><button ${j.need&&st.attack<j.need?'disabled':''} onclick="doWork(${i})">働く</button></td></tr>`).join('')}
+    </table></div><div class="c note">街の日雇いは毎日入れ替わります。</div>`;
+  }
+  return h;
 };
+async function postJob(){
+  const kind=$('#jbKind').value, title=$('#jbTitle').value.trim(), reward=Math.max(100,parseInt($('#jbR').value)||0), days=+$('#jbD').value;
+  const no=+$('#jbNo').value, n=Math.max(1,parseInt($('#jbN').value)||1), hours=clamp(parseInt($('#jbH').value)||1,1,24);
+  if(S.money<reward){ setFlash('報酬を預けるお金が足りません',1); render(); return; }
+  if(!spendTime(10)){ setFlash('持ち時間が足りません',1); render(); return; }
+  S.money-=reward; save();
+  const doc={poster:NET.uid,posterName:S.owner,posterShop:S.shop,posterKao:S.kao,kind,title:title||(kind==='item'?ITEMS[no].name+'募集':hours+'時間の手伝い募集'),reward,end:S.clock+days*1440,done:false,t:Date.now()};
+  if(kind==='item'){ doc.no=no; doc.n=n; } else doc.hours=hours;
+  try{ await NET.db.collection('jobs').add(doc); news(`${S.shop}が求人「${doc.title}」を出しました（報酬${yen(reward)}）`); setFlash('求人を出しました'); sub.t=0; }
+  catch(e){ netErr(e); S.money+=reward; setFlash('求人を出せませんでした',1); }
+  save(); render();
+}
+async function takeJob(k){
+  const id=REFS[k]; const ref=NET.db.doc('jobs/'+id);
+  try{
+    const l=await ref.acquire({holder:NET.uid,ttlMs:6000}); if(l&&!l.acquired){ setFlash('ほかの人が手続き中です',1); render(); return; }
+    const s=await ref.get(); if(!s.exists){ setFlash('この求人は終了しました',1); render(); return; }
+    const x=s.data(); if(x.done||x.end<=S.clock){ setFlash('この求人は締め切られました',1); render(); return; }
+    if(x.kind==='item'){ if(!has(x.no,x.n)){ setFlash('品物が足りません',1); render(); return; } }
+    else if(S.time<x.hours*60){ setFlash('持ち時間が足りません',1); render(); return; }
+    await ref.update({done:true,worker:NET.uid,workerName:S.owner});
+    if(x.kind==='item'){ add(x.no,-x.n); await sendMail(x.poster,{kind:'item',no:x.no,n:x.n,note:`求人「${x.title}」の納品（${S.owner}より）`}); }
+    else { S.time-=x.hours*60; await sendMail(x.poster,{kind:'time',minutes:x.hours*60,title:x.title}); }
+    S.money+=x.reward;
+    await ref.delete();
+    news(`${S.owner}（${S.shop}）が${x.posterName}の求人「${x.title}」を引き受けました`);
+    setFlash(`求人「${esc(x.title)}」を引き受けました！ 報酬${yen(x.reward)}を受け取りました`);
+  }catch(e){ netErr(e); setFlash('引き受けに失敗しました',1); }
+  save(); render();
+}
+async function cancelJob(k){
+  const id=REFS[k]; const ref=NET.db.doc('jobs/'+id);
+  try{ const s=await ref.get(); if(!s.exists||s.data().done){ setFlash('この求人はすでに終了しています',1); render(); return; }
+    await ref.delete(); S.money+=s.data().reward; setFlash('求人を取り下げました。報酬は戻りました'); }
+  catch(e){ netErr(e); setFlash('取り下げに失敗しました',1); }
+  save(); render();
+}
+async function checkMyJobs(){
+  if(!NET.online||!S) return;
+  for(const x of (NET.jobs||[])){
+    if(x.poster!==NET.uid||x.done||x.end>S.clock) continue;
+    try{ const ref=NET.db.doc('jobs/'+x.id); const s=await ref.get(); if(s.exists&&!s.data().done){ await ref.delete(); S.money+=x.reward; letter('求人係','kaohelp',`求人「${x.title}」は期限までに引き受け手がいませんでした。報酬${yen(x.reward)}をお返しします。`); save(); } }catch(e){ netErr(e); }
+  }
+}
 function doWork(i){
   const j=S.work.jobs[i]; if(!spendTime(j.t)){ setFlash(`持ち時間が足りません（必要：${hm(j.t)}）`,1); render(); return; }
   S.money+=j.pay; if(j.get) add(j.get[0],j.get[1]);
@@ -1662,6 +1811,7 @@ SCREENS.log=function(){
 SCREENS.rank=function(){
   const L=T().lord;
   return `${im('logo','logo','width=350 height=70')}
+  ${useLogin()&&!S.loginName?`<div class="flash">ログイン用のパスワードがまだ設定されていません。<a onclick="go('other')">【自店】→[手続]</a>で設定すると，別の端末からも続きを遊べます。</div>`:''}
   ${noticeHtml()}
   ${L&&T().msg?`<div class="flash">領主${esc(L.name)}より告知：${esc(T().msg)}</div>`:''}
   <div class="c"><big>商人ランキング</big> <small>（点数順・毎日の決算で1位が優勝）</small></div>
@@ -2095,7 +2245,7 @@ function adminDelete(k){
   const key=REFS[k]; const p=NET.shops[key]||{};
   confirmBox(`「${esc(p.shop||'')}」を削除しますか？ このプレイヤーのお店とセーブが消えます。`,async()=>{
     await sendMail(key,{kind:'wipe'});
-    try{ await NET.db.doc('shops/'+key).delete(); await NET.db.doc('data/users/'+key+'/save').delete(); }catch(e){ netErr(e); }
+    try{ await NET.db.doc('shops/'+key).delete(); await NET.db.doc('data/users/'+key+'/save').delete(); const ac=await NET.db.collection('accounts').where('uid','==',key).get(); await Promise.all(ac.docs.map(d=>NET.db.doc('accounts/'+d.id).delete())); }catch(e){ netErr(e); }
     setFlash('削除しました'); render();
   });
 }
@@ -2119,7 +2269,7 @@ function adminResetAll(){
       try{
         const uids=Object.keys(NET.shops);
         for(const u of uids){ if(u!==NET.uid) await sendMail(u,{kind:'wipe'}); await NET.db.doc('shops/'+u).delete().catch(()=>{}); await NET.db.doc('data/users/'+u+'/save').delete().catch(()=>{}); }
-        for(const col of ['bbs','news','auc']){ const s=await NET.db.collection(col).limit(500).get(); await Promise.all(s.docs.map(d=>NET.db.doc(col+'/'+d.id).delete())); }
+        for(const col of ['bbs','news','auc','accounts','jobs']){ const s=await NET.db.collection(col).limit(500).get(); await Promise.all(s.docs.map(d=>NET.db.doc(col+'/'+d.id).delete())); }
         await NET.db.doc('town/state').set(defaultTown());
         await NET.db.doc('data/users/'+NET.uid+'/save').delete().catch(()=>{});
       }catch(e){ netErr(e); }
@@ -2157,6 +2307,7 @@ function tick(){
   if(saveTick%10===0) save();
   if(saveTick%60===0){ saveRemote(); publishShop(); }
   if(saveTick%60===30) checkNetAuctions();
+  if(saveTick%60===45) checkMyJobs();
 }
 (function boot(){
   S=load();
