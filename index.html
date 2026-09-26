@@ -413,8 +413,14 @@ function allShops(){
       point:calcPoint(n.pop,n.wins,(n.ph||[]).reduce((a,b)=>a+b,0),n.today*0.45),sale:n.today,exps:0,comment:'',found:S.createdAt,rkY:n.rankY||0,st:totalStat(n.st,null),btype:n.btype,cases:n.cases})));
 }
 function playerShops(){
-  return Object.values(NET.shops).filter(s=>s&&s.uid&&s.uid!==NET.uid).map(s=>({me:false,key:s.uid,uid:s.uid,name:s.owner,shop:s.shop,money:s.money||0,dig:s.dig||0,kao:s.kao||1,job:s.job||'',pop:s.pop||0,wins:s.wins||0,soldiers:s.soldiers||0,guild:s.guild||null,t:s.t||0,comment:s.comment||'',
-    point:s.point!=null?s.point:calcPoint(s.pop||0,s.wins||0,0,0),sale:s.sale||0,exps:s.exps||0,found:s.found||0,rkY:s.rkY||0,st:s.st||null,btype:s.btype||0,cases:s.cases||[]}));
+  const IDLE_H=36;   // 現実の時間で1日半（36時間）営業していなければ休業中
+  return Object.values(NET.shops).filter(s=>s&&s.uid&&s.uid!==NET.uid).map(s=>{
+    const h=Math.max(0,(Date.now()-(s.t||Date.now()))/3600000), idle=h>=IDLE_H;
+    const base=typeof s.point==='number'?s.point:calcPoint(s.pop||0,s.wins||0,0,0);
+    return {idle,idleH:h,me:false,key:s.uid,uid:s.uid,name:s.owner,shop:s.shop,money:s.money||0,dig:s.dig||0,kao:s.kao||1,job:s.job||'',pop:s.pop||0,wins:s.wins||0,soldiers:s.soldiers||0,guild:s.guild||null,t:s.t||0,comment:s.comment||'',
+    // 休業中になったら，そこから3日かけてゆっくり点数が下がる（最低2割は残る）
+    point: idle? Math.floor(base*Math.max(0.2,1-(h-IDLE_H)/72)) : base,
+    sale:idle?0:(s.sale||0),exps:s.exps||0,found:s.found||0,rkY:s.rkY||0,st:s.st||null,btype:s.btype||0,cases:s.cases||[],house:s.house||0}; });
 }
 function ranking(){
   const by=(x,y)=>(y.point-x.point)||(y.money-x.money);
@@ -496,6 +502,10 @@ function processMail(){
       else if(m.kind==='item'){ if(ITEMS[m.no]){ add(m.no,m.n); letter(who==='だれか'?'住み込みドワーフ':who,m.note?'kaodwarf':face,`${note}${ITEMS[m.no].name}×${m.n}が届いたぞい。倉庫に入れておいたからの。`); } }
       else if(m.kind==='letter'){ letter(who,face,m.body||''); }
       else if(m.kind==='duel'){ if(m.win){ S.pop=clamp(S.pop-3,0,100); letter(who,face,`${who}に決闘を挑まれ，敗れてしまった…（人気が下がった）`); } else { S.pop=clamp(S.pop+3,0,100); letter(who,face,`${who}に決闘を挑まれたが，見事返り討ちにした！（人気が上がった）`); } }
+      else if(m.kind==='prize'){
+        if(m.rank===1){ S.wins++; const bd=digLevel(S.dig); S.dig+=1; letter('大臣','kaominister',`${fmtDay(m.day)}の商人ランキング1位おめでとうございます！（${(m.point||0).toLocaleString()}点）褒美として爵位ポイント1を授けます（現在${S.dig}pt）。`+(digLevel(S.dig)>bd?`${DIGNITY[digLevel(S.dig)]}に叙爵されました！`:'')); if(digLevel(S.dig)>bd) news(`${S.owner}（${S.shop}）が${DIGNITY[digLevel(S.dig)]}に叙爵された`); }
+        else { const g=PRIZE[m.rank-1]||0; S.money+=g; letter('大臣','kaominister',`${fmtDay(m.day)}の商人ランキング${m.rank}位おめでとうございます！ 賞金${yen(g)}を授けます。`); }
+      }
       else if(m.kind==='admin'){ applyAdmin(m); }
       else if(m.kind==='gpop'){ S.pop=clamp(S.pop+(m.amount||0),0,100); letter(who,face,`ギルド「${m.gname||''}」の広告が出されました。人気が${m.amount}上がりました！`); }
       else if(m.kind==='time'){ S.time=Math.min(maxTime(),S.time+(m.minutes||0)); letter(who,face,`求人「${m.title||'手伝い'}」を引き受けて，${hm(m.minutes||0)}働いてくれました。持ち時間が増えました。`); }
@@ -692,7 +702,7 @@ function kickedScreen(){
 function softRender(){
   if(document.querySelector('.modal')) return;
   const a=document.activeElement; if(a&&['INPUT','SELECT','TEXTAREA'].includes(a.tagName)) return;
-  if(!S || ['rank','street','bbs','log','auc','lord','army','letter','work','guild'].includes(route)) render();
+  if(!S || ['rank','street','bbs','log','auc','lord','army','letter','work','guild','dignity'].includes(route)) render();
 }
 let AWAY=false;
 function catchUp(){
@@ -725,10 +735,22 @@ function clash(t,logs){
     t.riot={}; t.bal=null; t.msg='';
   }
 }
+const PRIZE=[0,100000,50000];   // 2位・3位の賞金（1位は爵位ポイント+1）
 function townDaily(d){
+  let awards=[];
   townTx(t=>{
     if((t.day||0)>=d) return null;
-    t.day=d; const logs=[];
+    t.day=d; const logs=[]; awards=[];
+    // 商人ランキングの表彰（オンライン：街で1回だけ行う）
+    if(NET.online){
+      const rk=ranking().filter(r=>!r.idle);
+      if(rk.length>=2){
+        const top=rk.slice(0,3).map((r,i)=>({key:r.key,name:r.name,shop:r.shop,point:r.point||0,rank:i+1}));
+        t.results={d,top};
+        top.forEach(r=>awards.push(r));
+        logs.push(`${fmtDay(d)}の商人ランキング：1位 ${top[0].shop}（${top[0].point.toLocaleString()}点）`+(top[1]?`／2位 ${top[1].shop}`:'')+(top[2]?`／3位 ${top[2].shop}`:''));
+      }
+    }
     if(!t.riot) t.riot={};
     if(rebelSum(t)>0) clash(t,logs);
     if(!t.lord){
@@ -739,7 +761,9 @@ function townDaily(d){
     if(!t.bal && t.safety<50 && Math.random()<0.35){ t.bal={n:600+rnd(1400)}; logs.push(`山賊バルバロスが${t.bal.n}人の手下を率いて反乱を起こした！`); }
     if(!NET.online && isLordMe(t) && t.tax>=7 && Math.random()<0.3){ const n=pick(S.npcs); t.riot['npc:'+n.id]={n:100+rnd(400),name:n.owner,shop:n.shop}; logs.push(`${n.owner}（${n.shop}）が重税に反発して反乱を起こした！`); }
     return logs;
-  }).then(logs=>{ (logs||[]).forEach(m=>{ S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); }); if(logs&&logs.length) softRender(); });
+  }).then(logs=>{
+    if(logs) awards.forEach(a=>sendMail(a.key,{kind:'prize',rank:a.rank,day:d,point:a.point}));
+    (logs||[]).forEach(m=>{ S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); }); if(logs&&logs.length) softRender(); });
 }
 
 /* ============================================================
@@ -903,13 +927,15 @@ function settle(){
   // ランキング・優勝
   const rk=ranking();
   rk.forEach((r,i)=>{ if(r.me) S.rankY=i+1; else if(r.id!=null&&S.npcs[r.id]) S.npcs[r.id].rankY=i+1; });
-  if(rk[0] && rk[0].me && (!NET.online || rk.length>=2)){
+  if(NET.online){ publishShop(true); }
+  else if(rk[0] && rk[0].me){
     S.wins++; const bd=digLevel(S.dig); S.dig+=1;
     news(`本日の商人ランキング1位は${S.shop}！（通算${S.wins}回目）`);
     letter('大臣','kaominister',`本日の商人ランキング1位おめでとうございます！ 褒美として爵位ポイント1を授けます（現在${S.dig}pt）。`+(digLevel(S.dig)>bd?`${DIGNITY[digLevel(S.dig)]}に叙爵されました！`:''));
     if(digLevel(S.dig)>bd) news(`${S.owner}（${S.shop}）が${DIGNITY[digLevel(S.dig)]}に叙爵された`);
   }
-  else if(rk[0] && !NET.online && rk[0].id!=null){ const n=S.npcs[rk[0].id]; n.wins++; n.dig=Math.min(40,n.dig+1); news(`本日の商人ランキング1位は${n.shop}でした`); }
+  else if(rk[0] && rk[0].id!=null){ const n=S.npcs[rk[0].id]; n.wins++; n.dig=Math.min(40,n.dig+1); news(`本日の商人ランキング1位は${n.shop}でした`); }
+  if(!NET.online){ [1,2].forEach(i=>{ if(rk[i]&&rk[i].me){ const g=PRIZE[i]; S.money+=g; letter('大臣','kaominister',`本日の商人ランキング${i+1}位おめでとうございます！ 賞金${yen(g)}を授けます。`); } }); }
   // 街（領主・治安・反乱）…最新の決算のみ
   if(d >= Math.floor(nowClock()/1440)) townDaily(d);
   // 宝くじ（2日に1回）
@@ -966,7 +992,7 @@ function refreshAuction(){
 const MENU=[
   ['自店',[['店内','main'],['ステータス','status'],['倉庫','stock'],['お掃除','sweep'],['収支','balance'],['修練','expe'],['手続','other']]],
   ['取引',[['市場','market'],['商店通り','street'],['求人','work'],['依頼所','req'],['競売所','auc'],['交換市','exch'],['質屋','pawn'],['宮殿','palace']]],
-  ['情報',[['ランキング','rank'],['風景','town'],['新聞','log'],['図書館','library']]],
+  ['情報',[['ランキング','rank'],['爵位名鑑','dignity'],['風景','town'],['新聞','log'],['図書館','library']]],
   ['施設',[['領主邸','lord'],['傭兵所','army'],['荘園','manor'],['ギルド','guild'],['競技場','slime'],['住宅地','hometown'],['銀行','bank'],['しりとり広場','shiritori']]],
   ['交流',[['郵便局','letter'],['宅配便','dwarf'],['掲示板','bbs']]],
 ];
@@ -1033,9 +1059,14 @@ function rankTable(limit){
       ${r.comment?`<br><small>「${esc(r.comment)}」</small>`:''}
       <br><small>今期売上 <b>${yen(r.sale||0)}</b>　資金 <b>${yen(r.money)}</b>　熟練 ${Math.floor((r.exps||0)/10)}%</small>
       ${r.st?`<br><small>${expd(r)}</small>`:''}
-      ${r.t&&!r.me&&!String(r.key).startsWith('npc:')?`<br><small class="note">${ago(r.t)}</small>`:''}</td></tr>`; }).join('')}
+      ${r.t&&!r.me&&!String(r.key).startsWith('npc:')?`<br><small class="note">${r.idle?'<span class=red>休業中</span>・':''}${ago(r.t)}</small>`:''}</td></tr>`; }).join('')}
   </table></div>
   <div class="c note">点数＝人気 × 利益（直近3日の純利益と今期の売上）× 優勝回数による補正。優勝を重ねるほど点数は伸びにくくなります。</div>`;
+}
+function resultsHtml(){
+  const r=NET.online?T().results:null; if(!r||!r.top||!r.top.length) return '';
+  const md=['🥇','🥈','🥉'], pz=['爵位+1pt',yen(PRIZE[1]),yen(PRIZE[2])];
+  return `<div class="flash" style="text-align:center"><b>${fmtDay(r.d)}の表彰</b><br>${r.top.map((x,i)=>`${md[i]} ${esc(x.shop)} <small>${(x.point||0).toLocaleString()}点・${pz[i]}</small>`).join('<br>')}</div>`;
 }
 function noticeHtml(){ const n=T().notice; return n?`<div class="flash" style="border-color:#d0402a;background:#fff4ee"><b>お知らせ</b>：${esc(n).replace(/\n/g,'<br>')}</div>`:''; }
 function ago(t){ const s=(Date.now()-t)/1000; if(s<120) return '営業中'; if(s<3600) return Math.round(s/60)+'分前に営業'; if(s<86400) return Math.round(s/3600)+'時間前に営業'; return Math.round(s/86400)+'日前に営業'; }
@@ -1698,8 +1729,22 @@ SCREENS.street=function(){
   if(sub.uid){
     const p=NET.shops[sub.uid];
     if(!p) return `<p class="c">お店が見つかりません。<a onclick="go('street')">戻る</a></p>`;
+    const pr=ranking(); const pi=pr.findIndex(r=>r.key===sub.uid); const pe=pr[pi]||{};
+    const gi=guildInfo(p.guild); const st=p.st||{life:0,attack:0,defence:0,tech:0};
     return `<div class="c"><big>${esc(p.shop)}</big>　<small class="blue">プレイヤーのお店</small></div>
-    ${talk(p.kao||1,p.owner,`${esc(p.comment||'いらっしゃいませ！')}<br><small>人気 ${popStars(p.pop||0)}　爵位 ${DIGNITY[digLevel(p.dig||0)]}　${(JOBS[p.job]||JOBS['']).name}　${ago(p.t||0)}</small>`)}
+    ${talk(p.kao||1,p.owner,`${esc(p.comment||'いらっしゃいませ！')}<br><small>${ago(p.t||0)}</small>`)}
+    <div class="c"><big>店主の情報</big></div>
+    <div class="tbl"><table class="t" style="width:100%">
+      <tr><th>爵位</th><td>${DIGNITY[digLevel(p.dig||0)]} <small>（${p.dig||0}pt）</small></td><th>職業</th><td>${im((JOBS[p.job]||JOBS['']).img,'','width=20 height=30')}${(JOBS[p.job]||JOBS['']).name}</td></tr>
+      <tr><th>順位</th><td>${pi>=0?(pi+1)+'位':'-'} <small>${(pe.point||0).toLocaleString()}点</small></td><th>優勝</th><td>${p.wins||0}回</td></tr>
+      <tr><th>人気</th><td colspan="3"><small>${popStars(p.pop||0)}</small></td></tr>
+      <tr><th>資金</th><td class="r">${yen(p.money||0)}</td><th>今期売上</th><td class="r">${yen(pe.sale||0)}</td></tr>
+      <tr><th>ギルド</th><td>${gi?guildIcon(p.guild)+esc(gi.name):'なし'}</td><th>住まい</th><td><small>${(HOUSES[p.house||0]||HOUSES[0]).name}</small></td></tr>
+      <tr><th>兵士</th><td>${p.soldiers||0}人</td><th>熟練</th><td>${Math.floor((p.exps||0)/10)}%</td></tr>
+      <tr><th>戦闘</th><td colspan="3"><small>【${BTYPES[p.btype||0]}】 ${im('ability-no-4','i16')}${st.life} ${im('ability-no-1','i16')}${st.attack} ${im('ability-no-2','i16')}${st.defence} ${im('ability-no-3','i16')}${st.tech}${p.weapon?'　武器：'+esc(p.weapon):''}</small></td></tr>
+      ${p.found?`<tr><th>開店</th><td colspan="3"><small>${new Date(p.found).toLocaleDateString('ja-JP')}</small></td></tr>`:''}
+    </table></div>
+    <div class="c"><big>陳列中の商品</big></div>
     <div class="tbl"><table class="t"><tr><th>商品</th><th>価格</th><th>在庫</th><th></th></tr>
     ${(p.cases||[]).map((c,i)=>c&&c.stock>0&&ITEMS[c.no]?`<tr><td class="nw">${iname(c.no)}</td><td class="r nw">${yen(c.price)}<br><small>標準${yen(ITEMS[c.no].price)}</small></td><td class="r">${c.stock}</td><td class="nw"><input type="number" id="pq${i}" value="1" min="1" max="${c.stock}" style="width:52px"><button onclick="buyPlayer(${R(sub.uid)},${i})">買う</button></td></tr>`:'').join('')||'<tr><td colspan=4 class="c">陳列されている商品はありません</td></tr>'}
     </table></div>
@@ -1999,10 +2044,26 @@ SCREENS.rank=function(){
   ${useLogin()&&!S.loginName?`<div class="flash">ログイン用のパスワードがまだ設定されていません。<a onclick="go('other')">【自店】→[手続]</a>で設定すると，別の端末からも続きを遊べます。</div>`:''}
   ${noticeHtml()}
   ${L&&T().msg?`<div class="flash">領主${esc(L.name)}より告知：${esc(T().msg)}</div>`:''}
-  <div class="c"><big>商人ランキング</big> <small>（点数順・毎日の決算で1位が優勝）</small></div>
+  <div class="c"><big>商人ランキング</big> <small>（点数順・毎日の決算で表彰）</small></div>
+  ${resultsHtml()}
   ${rankTable()}
+  <div class="c note">毎日の決算で，1位は<b>爵位ポイント+1</b>，2位は<b>¥100,000</b>，3位は<b>¥50,000</b>がもらえます。<br>現実の時間で1日半以上ゲームを開いていない店は「休業中」となり，表彰の対象外になって点数がゆっくり下がります。<br><a onclick="go('dignity')">爵位名鑑を見る</a></div>
   <div class="tbl"><table class="t"><tr><th colspan="2">最新ニュース</th></tr>
   ${newsList().slice(0,6).map(n=>`<tr><td class="nw"><small>${fmtDay(n.d)} ${n.t}</small></td><td>${esc(n.m)}</td></tr>`).join('')||'<tr><td colspan=2>まだありません</td></tr>'}</table></div>`;
+};
+SCREENS.dignity=function(){
+  const list=ranking().slice().sort((a,b)=>(b.dig-a.dig)||(b.point-a.point));
+  const steps=DIGNITY.map((n,i)=>`<tr><td class="c"><b>${n}</b></td><td class="r">${DIG_POINT[i]}pt〜</td><td><small>${['はじめの身分','ランキング1位や王様の依頼で昇格','','ギルドを結成できる','','','最高位'][i]||''}</small></td></tr>`).join('');
+  const L=T().lord;
+  return `<div class="c"><big>爵位名鑑</big></div>
+  ${talk('kaominister','大臣','わが国の商人たちの爵位を記した名鑑じゃ。爵位ポイントは，<b>ランキング1位</b>（+1pt）や<b>王様の依頼の達成</b>（+2pt），<b>反乱の鎮圧</b>（+2pt），<b>立派な住宅</b>，<b>お祝いパーティ</b>などで得られるぞ。')}
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>爵位</th><th>必要pt</th><th></th></tr>${steps}</table></div>
+  <div class="c"><big>商人たちの爵位</big></div>
+  <div class="tbl"><table class="t" style="width:100%"><tr><th></th><th>店主</th><th>爵位</th><th>次まで</th></tr>
+  ${list.map(r=>{ const lv=digLevel(r.dig||0), nx=DIG_POINT[lv+1];
+    return `<tr ${r.me?'style="font-weight:bold"':''}><td>${kao(r.kao)}</td><td>${r.me?'<span class="span">'+esc(r.shop)+'</span>':(String(r.key).startsWith('npc:')?esc(r.shop):`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`)}<br><small>${esc(r.name)}${L&&L.key===r.key?' <span class=red>[領主]</span>':''}</small></td>
+      <td class="nw"><b>${DIGNITY[lv]}</b><br><small>${r.dig||0}pt</small></td><td class="r nw"><small>${nx!=null?(nx-(r.dig||0))+'pt':'最高位'}</small></td></tr>`; }).join('')}
+  </table></div>`;
 };
 SCREENS.library=function(){
   const tab=sub.t||0;
