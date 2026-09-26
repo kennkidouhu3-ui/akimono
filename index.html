@@ -106,6 +106,7 @@ small{font-size:12px;}
 @media (max-width:540px){ .tcell{height:84px;} .tcell img.bld{max-height:72px;} body{font-size:13px;} }
 
 /* NPC の印 */
+.npctag.strong{background:#fde8e8;border-color:#d44;color:#c22;font-weight:bold;}
 .npctag{display:inline-block;font-size:11px;line-height:1.3;padding:0 5px;border:1px solid #999;border-radius:3px;background:#eee;color:#666;font-weight:normal;vertical-align:middle;}
 /* ===== タッチしやすいUI（iPhone・iPad向けに全体を大きめに） ===== */
 body{font-size:16px;line-height:1.65;}
@@ -245,6 +246,13 @@ const NPCDEF = [
   {shop:'古書店ページ',owner:'ページ',kao:22,job:'book',pool:[15,16,17,20,21,10,78]},
   {shop:'ミノ牧場直売所',owner:'マーサ',kao:17,job:'cow',pool:[26,35,36,30]},
   {shop:'流れの行商人カイ',owner:'カイ',kao:9,job:'peddle',pool:[11,67,68,69,27,29]},
+  // ここから強豪NPC
+  {shop:'大商会ゴルド',owner:'ゴルド',kao:24,job:'peddle',pool:[44,56,61,50,69,70],strong:1,mult:1.5,popBase:82,digBase:60,money:30000000,
+   st:{life:900,attack:420,defence:380,tech:350},btype:10,comment:'商いは戦よ。わしに勝てる者はおらん。',dragon:{dname:'キングオブゴールド',color:0,st:{sp:88,gt:80,bu:82,pw:75,he:80,fx:70}}},
+  {shop:'豪商ヴァレンシア',owner:'ヴァレンシア',kao:16,job:'armor',pool:[56,50,55,49,54],strong:1,mult:2.05,popBase:76,digBase:30,money:12000000,
+   st:{life:650,attack:260,defence:330,tech:300},btype:1,comment:'気品ある品しか扱いませんの。',dragon:{dname:'ローズクイーン',color:3,st:{sp:82,gt:70,bu:86,pw:60,he:75,fx:78}}},
+  {shop:'武器商ドラクロワ',owner:'ドラクロワ',kao:11,job:'weapon',pool:[44,43,61,60],strong:1,mult:1.6,popBase:70,digBase:15,money:6000000,
+   st:{life:780,attack:480,defence:260,tech:320},btype:8,comment:'腕に覚えがあるなら，決闘を受けてやろう。',dragon:{dname:'ブラックファング',color:4,st:{sp:84,gt:86,bu:70,pw:88,he:70,fx:55}}},
 ];
 const GUILDS = [
   {id:'a',name:'黄金の天秤',img:'guild-a',fee:3,bonus:1.0,desc:'古くからの商人たちの互助組合。会費は安め。'},
@@ -347,11 +355,7 @@ function newState(owner,shop,kaoNo){
     imports:[],dragons:[],dragonsRet:[],draceLocal:{},createdAt:Date.now(),realLast:Date.now()
   };
   ITEMLIST.forEach(it=>{ if(it.plus>0 && it.price>0) s.market[it.no]=Math.max(1,Math.round(3*60/it.plus*8)); });
-  s.npcs=NPCDEF.map((d,i)=>{
-    const n={...d,id:i,money:150000+rnd(400000),pop:30+rnd(50),dig:rnd(4),today:0,friend:0,
-      st:{life:120+rnd(200),attack:20+rnd(80),defence:20+rnd(80),tech:20+rnd(80)},btype:rnd(11),cases:[],wins:0,guild:pick([null,null,'a','b'])};
-    npcRestock(n,true); return n;
-  });
+  s.npcs=NPCDEF.map((d,i)=>makeNpc(d,i));
   S=s;
   refreshRequests(); refreshBarter(); refreshAuction();
   news('新しいお店「'+shop+'」が開店しました！');
@@ -363,6 +367,7 @@ function migrate(s){
   if(s.soldiers==null) s.soldiers=0;
   if(!s.mailDone) s.mailDone=[];
   if(!s.townLocal) s.townLocal=defaultTown();
+  if(s.npcs&&s.npcs.length<NPCDEF.length){ for(let i=s.npcs.length;i<NPCDEF.length;i++) s.npcs.push(makeNpc(NPCDEF[i],i)); }
   if(!s.dragons) s.dragons=[]; if(!s.dragonsRet) s.dragonsRet=[]; if(!s.draceLocal) s.draceLocal={};
   delete s.speed; delete s.lord; delete s.safety; delete s.rebel;
   if(!s.clock || s.clock<0) s.clock=nowClock();
@@ -424,23 +429,23 @@ function mySummaryRow(){ const st=myStat(); return {me:true,key:myKey(),name:S.o
   point:myPoint(),sale:S.today.sales,exps:expSum(),comment:S.comment,found:S.createdAt,rkY:S.rankY||0,st,btype:S.btype,cases:S.cases.map(c=>c&&has(c.no)?{no:c.no,price:c.price,stock:S.stock[c.no]}:null)}; }
 function allShops(){
   return [mySummaryRow()]
-    .concat(S.npcs.map(n=>({me:false,npc:true,key:'npc:'+n.id,id:n.id,name:n.owner,shop:n.shop,money:n.money,dig:n.dig,kao:n.kao,job:n.job,pop:n.pop,wins:n.wins,guild:n.guild||null,soldiers:0,
-      point:calcPoint(n.pop,n.wins,(n.ph||[]).reduce((a,b)=>a+b,0),n.today*0.45),sale:n.today,exps:0,comment:'',found:S.createdAt,rkY:n.rankY||0,st:totalStat(n.st,null),btype:n.btype,cases:n.cases})));
+    .concat(S.npcs.map(n=>({me:false,npc:true,strong:!!n.strong,key:'npc:'+n.id,id:n.id,name:n.owner,shop:n.shop,money:n.money,dig:n.dig,kao:n.kao,job:n.job,pop:n.pop,wins:n.wins,guild:n.guild||null,soldiers:0,
+      point:Math.round(calcPoint(n.pop,n.wins,(n.ph||[]).reduce((a,b)=>a+b,0),n.today*0.45)*(n.mult||1)),sale:n.today,exps:0,comment:'',found:S.createdAt,rkY:n.rankY||0,st:totalStat(n.st,null),btype:n.btype,cases:n.cases})));
 }
 const NPC_BASE_DAY=Math.floor((Date.UTC(2026,8,26)-EPOCH)/1000/1440)+1;
 function npcOnline(){
   const D=Math.floor(nowClock()/1440)+1, dd=Math.max(0,D-NPC_BASE_DAY);
   return NPCDEF.map((d,i)=>{
     const s1=Math.sin(D/6+i*1.9), s2=Math.sin(D/2.7+i*0.7), s3=Math.sin(D/17+i*2.3);
-    const pop=clamp(Math.round(48+22*s1+8*s2),5,95);
+    const pop=d.strong? clamp(Math.round(d.popBase+10*s1+4*s2),50,99) : clamp(Math.round(48+22*s1+8*s2),5,95);
     const wins=Math.floor(dd/(20+i*6));
     const profit3=Math.max(0,Math.round(60000+50000*s3+25000*s2));
     const today=Math.max(0,Math.round(15000+12000*s1));
     const loc=S&&S.npcs&&S.npcs[i];
-    return {me:false,npc:true,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop,wins,
-      dig:Math.min(60,Math.floor(dd/(10+i*3))),money:Math.round(300000+dd*1800*(1+i*0.15)+120000*s3),
-      point:Math.round(calcPoint(pop,wins,profit3,today)*0.75),sale:today,exps:0,soldiers:0,guild:null,t:0,comment:'',rkY:0,
-      st:{life:150+i*25,attack:40+i*9,defence:35+i*8,tech:40+i*7},btype:i%11,cases:loc?loc.cases:[]};
+    return {me:false,npc:true,strong:!!d.strong,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop,wins,
+      dig:Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))),money:Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3),
+      point:Math.round(calcPoint(pop,wins,profit3,today)*0.75*(d.mult||1)),sale:Math.round(today*(d.mult||1)),exps:d.strong?600:0,soldiers:0,guild:null,t:0,comment:d.comment||'',rkY:0,
+      st:d.st||{life:150+i*25,attack:40+i*9,defence:35+i*8,tech:40+i*7},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
   });
 }
 function playerShops(){
@@ -809,6 +814,11 @@ function townDaily(d){
 /* ============================================================
    NPC
    ============================================================ */
+function makeNpc(d,i){
+  const n={...d,id:i,money:d.money||150000+rnd(400000),pop:d.popBase||30+rnd(50),dig:d.digBase||rnd(4),today:0,friend:0,
+    st:d.st?{...d.st}:{life:120+rnd(200),attack:20+rnd(80),defence:20+rnd(80),tech:20+rnd(80)},btype:d.btype!=null?d.btype:rnd(11),cases:[],wins:0,guild:d.strong?null:pick([null,null,'a','b'])};
+  npcRestock(n,true); return n;
+}
 function npcRestock(n,init){
   const ncase = 3+ (n.id%3);
   while(n.cases.length<ncase) n.cases.push(null);
@@ -872,7 +882,7 @@ function simulate(dt){
   S.npcs.forEach(n=>{
     n.cases.forEach(nc=>{
       if(!nc||nc.stock<=0) return;
-      const k=Math.min(nc.stock,poisson(saleRate(ITEMS[nc.no],nc.price,n.pop,1)*dt*0.9));
+      const k=Math.min(nc.stock,poisson(saleRate(ITEMS[nc.no],nc.price,n.pop,1)*dt*0.9*(n.mult||1)));
       if(k>0){ nc.stock-=k; const g=nc.price*k; const tax = NET.online?0:Math.round(g*taxRateFor('npc:'+n.id)/100); n.money+=g-tax; n.today+=g; if(tax) S.today.npctax=(S.today.npctax||0)+tax; }
     });
   });
@@ -959,7 +969,7 @@ function settle(){
   // NPC
   S.npcs.forEach(n=>{
     const empty=n.cases.filter(c=>!c||c.stock<=0).length;
-    n.pop=clamp(n.pop + (n.today>0?rr(0,4):-3) - empty + rr(-2,2),5,100);
+    n.pop=clamp(n.pop + (n.today>0?rr(0,4):-3) - empty + rr(-2,2),n.popBase?n.popBase-15:5,100);
     n.money-=CASECOST[n.cases.length]||0;
     npcRestock(n,false);
     n.cases.forEach(c=>{ if(c) c.price=Math.max(10,Math.round(c.price*rr(0.95,1.05))); });
@@ -1098,7 +1108,7 @@ function rankTable(limit){
     return `<tr ${r.me?'style="font-weight:bold"':''}>
     <td class="r nw"><b>No.${i+1}</b>${i<6?im('rank'+(i+1),'i16'):''}<br>${updown(r,i)}<br><b class="red">${(r.point||0).toLocaleString()}</b>点</td>
     <td class="c">${kao(r.kao)}<br>${im((JOBS[r.job]||JOBS['']).img,'','width=20 height=30')}</td>
-    <td>${guildIcon(r.guild)}${r.me?'<span class="span">'+esc(r.shop)+'</span>':(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${r.npc?' <span class="npctag">NPC</span>':''}${L&&L.key===r.key?' <small class="red">[領主]</small>':''} ${winIcons(r.wins)}
+    <td>${guildIcon(r.guild)}${r.me?'<span class="span">'+esc(r.shop)+'</span>':(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${r.npc?' <span class="npctag">NPC</span>':''}${r.strong?' <span class="npctag strong">強豪</span>':''}${L&&L.key===r.key?' <small class="red">[領主]</small>':''} ${winIcons(r.wins)}
       <br><small>${esc(r.name)}・${(JOBS[r.job]||JOBS['']).name}・${digHtml(r.dig)}${r.soldiers?'・兵'+r.soldiers:''}</small>
       <br><small>人気 ${popStars(r.pop)}</small>
       ${cs.length?`<br><small>${cs.map(c=>ii(c.no)).join('')} ${esc(ITEMS[first.no].name)} ${yen(first.price)}</small>`:''}
@@ -1491,7 +1501,7 @@ function doUse(no,i){
 function chooseTarget(no,i,t){
   const rows=[];
   if(no===80 && NET.online) playerShops().forEach(p=>rows.push(`<tr><td>${kao(p.kao)}</td><td>${esc(p.shop)}<br><small>${esc(p.name)}（プレイヤー）</small></td><td><button onclick="pickTarget(${R('p:'+p.uid)},${no},${i},${t})">選ぶ</button></td></tr>`));
-  S.npcs.forEach(n=>rows.push(`<tr><td>${kao(n.kao)}</td><td>${esc(n.shop)}<br><small>${esc(n.owner)}</small></td><td><button onclick="pickTarget(${R(n.id)},${no},${i},${t})">選ぶ</button></td></tr>`));
+  S.npcs.forEach(n=>rows.push(`<tr><td>${kao(n.kao)}</td><td>${esc(n.shop)}${n.strong?' <span class="npctag strong">強豪</span>':''}<br><small>${esc(n.owner)}${no===80&&n.st?`・HP${n.st.life} 攻${n.st.attack}`:''}</small></td><td><button onclick="pickTarget(${R(n.id)},${no},${i},${t})">選ぶ</button></td></tr>`));
   modal(`<div><big>相手を選ぶ</big></div><div class="tbl"><table class="t">${rows.join('')}</table></div><div class="c"><button onclick="closeModal()">やめる</button></div>`);
 }
 function pickTarget(k,no,i,t){ const tg=REFS[k]; closeModal(); if(!spendTime(t)){ setFlash('持ち時間が足りません',1); render(); return; } execUse(no,i,tg); }
@@ -1623,7 +1633,7 @@ function finishBattle(){
     for(const k in g) S.st[k]+=g[k];
     res.push(`能力が成長した：HP+${g.life} 攻撃+${g.attack} 防御+${g.defence} 技量+${g.tech}`);
     if(b.mon && Math.random()*100<b.mon.dropP){ add(b.mon.drop,b.mon.dropN); res.push(`${iname(b.mon.drop)}×${b.mon.dropN}を手に入れた！`); }
-    if(b.npc){ S.pop=clamp(S.pop+5,0,100); b.npc.pop=clamp(b.npc.pop-5,0,100); news(`${S.owner}が${b.npc.owner}に決闘を挑み，勝利しました`); }
+    if(b.npc){ S.pop=clamp(S.pop+(b.npc.strong?15:5),0,100); b.npc.pop=clamp(b.npc.pop-5,b.npc.popBase?b.npc.popBase-15:0,100); if(b.npc.strong){ S.money+=300000; S.dig+=1; res.push('<b class="red">強豪を打ち破った！ 賞金¥300,000と爵位ポイント+1を得た！</b>'); } news(`${S.owner}が${b.npc.owner}に決闘を挑み，勝利しました`); }
     if(b.puid){ S.pop=clamp(S.pop+5,0,100); sendMail(b.puid,{kind:'duel',win:true}); news(`${S.owner}（${S.shop}）が${b.foe.name}に決闘を挑み，勝利しました`); }
   } else {
     S.blose++;
@@ -1803,7 +1813,7 @@ SCREENS.street=function(){
   if(sub.id!=null){
     const n=S.npcs[sub.id];
     return `<div class="c"><big>${esc(n.shop)}</big></div>
-    ${talk(n.kao,n.owner,`いらっしゃいませ！${(JOBS[n.job]||{}).name}の${esc(n.shop)}へようこそ。<br><small>人気 ${popStars(n.pop)}　爵位 ${digHtml(n.dig)}</small>`)}
+    ${talk(n.kao,n.owner,`${n.strong?esc(n.comment)+' <span class="npctag strong">強豪</span>':`いらっしゃいませ！${(JOBS[n.job]||{}).name}の${esc(n.shop)}へようこそ。`}<br><small>人気 ${popStars(n.pop)}　爵位 ${digHtml(n.dig)}</small>`)}
     <div class="tbl"><table class="t"><tr><th>商品</th><th>価格</th><th>在庫</th><th></th></tr>
     ${n.cases.map((c,i)=>c&&c.stock>0?`<tr><td class="nw">${iname(c.no)}</td><td class="r nw">${yen(c.price)}<br><small>標準${yen(ITEMS[c.no].price)}</small></td><td class="r">${c.stock}</td><td class="nw"><input type="number" id="sq${i}" value="1" min="1" max="${c.stock}" style="width:52px"><button onclick="buyNpc(${n.id},${i})">買う</button></td></tr>`:'').join('')}
     </table></div>
@@ -2115,7 +2125,7 @@ SCREENS.dignity=function(){
   <div class="c"><big>商人たちの爵位</big></div>
   <div class="tbl"><table class="t" style="width:100%"><tr><th></th><th>店主</th><th>爵位</th><th>次まで</th></tr>
   ${list.map(r=>{ const lv=digLevel(r.dig||0), nx=DIG_POINT[lv+1];
-    return `<tr ${r.me?'style="font-weight:bold"':''}><td>${kao(r.kao)}</td><td>${r.me?'<span class="span">'+esc(r.shop)+'</span>':(r.npc?esc(r.shop)+' <span class="npctag">NPC</span>':`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`)}<br><small>${esc(r.name)}${L&&L.key===r.key?' <span class=red>[領主]</span>':''}</small></td>
+    return `<tr ${r.me?'style="font-weight:bold"':''}><td>${kao(r.kao)}</td><td>${r.me?'<span class="span">'+esc(r.shop)+'</span>':(r.npc?esc(r.shop)+' <span class="npctag">NPC</span>'+(r.strong?' <span class="npctag strong">強豪</span>':''):`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`)}<br><small>${esc(r.name)}${L&&L.key===r.key?' <span class=red>[領主]</span>':''}</small></td>
       <td class="nw">${digHtml(r.dig||0)}<br><small>${r.dig||0}pt</small></td><td class="r nw"><small>${nx!=null?(nx-(r.dig||0))+'pt':'最高位'}</small></td></tr>`; }).join('')}
   </table></div>`;
 };
@@ -2552,7 +2562,7 @@ function dragonScreen(){
   } else {
     h+=`<div id="drResults" class="c note">結果を読み込み中…</div>`;
     setTimeout(async()=>{ const el=$('#drResults'); if(!el) return; const d=curDay()%2===0?curDay():curDay()-1; let out=''; for(const dd of [d,d-2]) for(const kind of ['grd','nov']){ const doc=await raceDocGet(dd+'-'+kind).catch(()=>null); if(!doc||!doc.results) continue; const ri=doc.info||raceInfo(dd,kind);
-      out+=`<div class="tbl"><table class="t" style="width:100%"><tr><th colspan="3">${fmtDay(dd)} ${DR_KIND[kind].name}　<small>${ri.surf}${ri.dist}m・${ri.weather}</small></th></tr>${doc.results.map(r=>`<tr><td class="c nw">${r.place}着</td><td>${im('dragon1'+((r.color||0)+1),'i16')}<b>${esc(r.dname)}</b> <small>${r.npc?'<span class="npctag">NPC</span>':esc(r.shop)}・${r.strat}</small></td><td class="r nw">${r.prize?yen(r.prize):''}</td></tr>`).join('')}</table></div>`; }
+      out+=`<div class="tbl"><table class="t" style="width:100%"><tr><th colspan="3">${fmtDay(dd)} ${DR_KIND[kind].name}　<small>${ri.surf}${ri.dist}m・${ri.weather}</small></th></tr>${doc.results.map(r=>`<tr><td class="c nw">${r.place}着</td><td>${im('dragon1'+((r.color||0)+1),'i16')}<b>${esc(r.dname)}</b> <small>${r.npc?(r.strong?esc(r.shop)+' <span class="npctag strong">強豪</span>':'<span class="npctag">NPC</span>'):esc(r.shop)}・${r.strat}</small></td><td class="r nw">${r.prize?yen(r.prize):''}</td></tr>`).join('')}</table></div>`; }
       el.innerHTML=out||'まだ結果はありません。'; el.className=''; },30);
   }
   return h;
@@ -2613,12 +2623,13 @@ function resolveRace(doc){
   const ri=doc.info||raceInfo(doc.day,doc.kind), K=DR_KIND[doc.kind], rnd2=mul32(doc.day*13+(doc.kind==='grd'?5:2));
   const runners=Object.values(doc.entries||{}).map(e=>({...e}));
   const used=new Set(runners.map(r=>r.dname));
+  if(doc.kind==='grd'){ NPCDEF.filter(x=>x.dragon).forEach((x,k)=>{ if(rnd2()<0.5&&runners.length<8){ runners.push({npc:true,strong:true,dname:x.dragon.dname,shop:x.shop,owner:x.owner,color:x.dragon.color,st:{...x.dragon.st},cond:85,age:8,strat:DR_STRAT[(doc.day+k)%4]}); used.add(x.dragon.dname); } }); }
   while(runners.length<8){ const st={}; DR_STATS.forEach(([k])=>st[k]=K.lv[0]+Math.floor(rnd2()*(K.lv[1]-K.lv[0]))); let nm=DR_NPCNAMES[Math.floor(rnd2()*DR_NPCNAMES.length)]; while(used.has(nm)) nm=nm+'Ⅱ'; used.add(nm); runners.push({npc:true,dname:nm,shop:'',owner:'',color:Math.floor(rnd2()*5),st,cond:60+Math.floor(rnd2()*40),age:5,strat:DR_STRAT[Math.floor(rnd2()*4)]}); }
   const pace=runners.filter(r=>r.strat==='逃げ'||r.strat==='先行').length>=5?3:runners.filter(r=>r.strat==='逃げ').length>=3?3:1;
   runners.forEach((r,i)=>{ r.score=drScore(r,ri,pace)+i*1e-6; });
   runners.sort((a,b)=>b.score-a.score);
   const share=[0.6,0.25,0.15];
-  return runners.map((r,i)=>({place:i+1,uid:r.uid||null,did:r.did||null,dname:r.dname,shop:r.shop||'',owner:r.owner||'',color:r.color||0,strat:r.strat,npc:!!r.npc,prize:i<3?Math.round(K.purse*share[i]):0}));
+  return runners.map((r,i)=>({place:i+1,uid:r.uid||null,did:r.did||null,dname:r.dname,shop:r.shop||'',owner:r.owner||'',color:r.color||0,strat:r.strat,npc:!!r.npc,strong:!!r.strong,prize:i<3?Math.round(K.purse*share[i]):0}));
 }
 let drChecking=false;
 async function checkDragonRaces(){
