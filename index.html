@@ -104,6 +104,63 @@ small{font-size:12px;}
 .modal .box{background:#fff;border:2px solid #888;max-width:520px;width:100%;max-height:88vh;overflow:auto;padding:10px;}
 @media (min-width:720px){ .shopinner{zoom:1.4;} }
 @media (max-width:540px){ .tcell{height:84px;} .tcell img.bld{max-height:72px;} body{font-size:13px;} }
+
+/* ===== タッチしやすいUI（iPhone・iPad向けに全体を大きめに） ===== */
+body{font-size:16px;line-height:1.65;}
+.wrap{max-width:780px;padding:8px 12px 80px;}
+big,.big{font-size:16px;padding:1px 5px;}
+small{font-size:13px;}
+.note{font-size:13px;}
+.status{font-size:14px;line-height:1.7;margin:8px 0;}
+.head{gap:10px;}
+.menu a{display:inline-block;padding:7px 5px;font-size:16px;margin:0;}
+.submenu{margin-top:4px;}
+.submenu a{display:inline-block;padding:7px 10px;margin:3px 2px;background:#fff;border:1px solid #c9c6d6;border-radius:5px;font-size:15px;line-height:1.3;}
+.submenu a:hover{position:static;text-decoration:none;background:#f4f3fb;}
+a,.lk{padding:2px 1px;}
+button,.btn{white-space:nowrap;font-size:15px;padding:8px 14px;min-height:40px;border-radius:5px;margin:2px;}
+input,select,textarea{font-size:16px;padding:7px 8px;min-height:40px;border-radius:4px;}
+input[type=radio]{min-height:0;width:20px;height:20px;}
+input[type=number]{width:84px;}
+table.t{border-spacing:3px;}
+table.t td,table.t th{padding:8px 10px;}
+.tabs{margin:8px 0;}
+.tabs span{padding:7px 12px;margin:3px;font-size:15px;border-radius:5px;}
+.toolbar button{margin:4px;}
+.i16{width:22px;height:22px;}
+.i32{width:40px;height:20px;}
+.talk img.kao,img.kao{width:52px;height:52px;}
+.flash{font-size:15px;padding:10px 12px;margin:10px auto;border-radius:5px;}
+.msg{margin:10px auto;}
+hr{margin:12px auto;}
+.town{width:640px;}
+.tcell{height:120px;}
+.tcell .lbl{font-size:13px;padding:2px 7px;border-radius:4px;}
+.modal .box{padding:16px;border-radius:6px;}
+.bt-log{font-size:15px;}
+.track{height:48px;}
+.track img{height:44px;}
+.hpbar{height:8px;}
+@media (max-width:540px){
+  body{font-size:15px;}
+  input[type=number]{width:62px;}
+  .nm{min-width:120px;}
+  table.t td,table.t th{padding:6px 5px;}
+  .head img{width:22px;height:33px;}
+  .wrap{padding:6px 8px 80px;}
+  .menu a{font-size:15px;padding:7px 3px;}
+  .submenu a{font-size:14px;padding:7px 8px;}
+  table.t td,table.t th{padding:7px 7px;}
+  .tcell{height:92px;}
+  .tcell img.bld{max-height:76px;}
+  .tcell .lbl{font-size:12px;}
+}
+@media (min-width:720px){
+  body{font-size:17px;}
+  .shopinner{zoom:1.6;}
+  .tcell{height:140px;}
+  .tcell img.bld{max-height:118px;}
+}
 </style>
 </head>
 <body>
@@ -332,7 +389,7 @@ function townCands(){ return NET.online? ranking() : allShops(); }
 /* ---------- オンライン ---------- */
 async function sendMail(to,m){
   if(!NET.online||!to||NET.readonly) return false;
-  try{ await NET.db.collection('mail').add({...m,to,from:NET.uid,fromName:S.owner,fromShop:S.shop,fromKao:S.kao,t:Date.now()}); return true; }
+  try{ await NET.db.collection('mail').add({...m,to,from:NET.uid,fromName:S?S.owner:'街の管理人',fromShop:S?S.shop:'',fromKao:S?S.kao:1,t:Date.now()}); return true; }
   catch(e){ netErr(e); return false; }
 }
 async function newsNet(m){
@@ -396,6 +453,8 @@ function processMail(){
       else if(m.kind==='item'){ if(ITEMS[m.no]){ add(m.no,m.n); letter(who==='だれか'?'住み込みドワーフ':who,m.note?'kaodwarf':face,`${note}${ITEMS[m.no].name}×${m.n}が届いたぞい。倉庫に入れておいたからの。`); } }
       else if(m.kind==='letter'){ letter(who,face,m.body||''); }
       else if(m.kind==='duel'){ if(m.win){ S.pop=clamp(S.pop-3,0,100); letter(who,face,`${who}に決闘を挑まれ，敗れてしまった…（人気が下がった）`); } else { S.pop=clamp(S.pop+3,0,100); letter(who,face,`${who}に決闘を挑まれたが，見事返り討ちにした！（人気が上がった）`); } }
+      else if(m.kind==='admin'){ applyAdmin(m); }
+      else if(m.kind==='wipe'){ NET.db.doc('mail/'+id).delete().catch(()=>{}); try{ localStorage.removeItem(SAVE); }catch(e){} S=null; lastPub=''; setFlash('管理人によってお店のデータがリセットされました。新しくお店を開いてください。',1); render(); return; }
       else if(m.kind==='tax'){ S.money+=m.amount; letter('大臣','kaominister',`${m.fromShop||who}から税 ${yen(m.amount)} が納められました。`); }
     }
     NET.db.doc('mail/'+id).delete().catch(()=>{});
@@ -477,7 +536,7 @@ async function initNet(){
     if(S && !S.uid) S.uid=uid;
     try{
       const snap=await db.doc('data/users/'+uid+'/save').get();
-      if(snap.exists){ const r=migrate(JSON.parse(snap.data().json)); if(!S || (r.realLast||0)>(S.realLast||0)){ S=r; S.uid=uid; route='rank'; } }
+      if(snap.exists){ const r=migrate(JSON.parse(snap.data().json)); if(!S || (r.realLast||0)>(S.realLast||0)){ S=r; S.uid=uid; if(route!=='admin') route='rank'; } }
     }catch(e){ console.warn(e); }
     db.collection('shops').onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]=d.data()); NET.shops=o; softRender(); },netErr);
     db.doc('town/state').onSnapshot(s=>{ NET.town=s.exists?JSON.parse(JSON.stringify(s.data())):null; if(NET.town&&!NET.town.riot) NET.town.riot={}; softRender(); },netErr);
@@ -698,8 +757,13 @@ function settle(){
   if(tx>0 && L){ if(NET.online && L.key && L.key!=='bal') sendMail(L.key,{kind:'tax',amount:tx}); else if(L.key&&L.key.startsWith('npc:')&&S.npcs[+L.key.slice(4)]) S.npcs[+L.key.slice(4)].money+=tx; }
   // ランキング・優勝
   const rk=ranking();
-  if(rk[0] && rk[0].me){ S.wins++; news(`本日の商人ランキング1位は${S.shop}！（通算${S.wins}回目）`); }
-  else if(rk[0] && !NET.online && rk[0].id!=null){ const n=S.npcs[rk[0].id]; n.wins++; news(`本日の商人ランキング1位は${n.shop}でした`); }
+  if(rk[0] && rk[0].me && (!NET.online || rk.length>=2)){
+    S.wins++; const bd=digLevel(S.dig); S.dig+=1;
+    news(`本日の商人ランキング1位は${S.shop}！（通算${S.wins}回目）`);
+    letter('大臣','kaominister',`本日の商人ランキング1位おめでとうございます！ 褒美として爵位ポイント1を授けます（現在${S.dig}pt）。`+(digLevel(S.dig)>bd?`${DIGNITY[digLevel(S.dig)]}に叙爵されました！`:''));
+    if(digLevel(S.dig)>bd) news(`${S.owner}（${S.shop}）が${DIGNITY[digLevel(S.dig)]}に叙爵された`);
+  }
+  else if(rk[0] && !NET.online && rk[0].id!=null){ const n=S.npcs[rk[0].id]; n.wins++; n.dig=Math.min(40,n.dig+1); news(`本日の商人ランキング1位は${n.shop}でした`); }
   // 街（領主・治安・反乱）…最新の決算のみ
   if(d >= Math.floor(nowClock()/1440)) townDaily(d);
   // 宝くじ（2日に1回）
@@ -791,6 +855,7 @@ function statusLine(){
 function render(){
   const app=$('#app');
   REFS=[];
+  if(!S && route==='admin'){ let bd=''; try{ bd=SCREENS.admin(); }catch(e){ bd='<p class="red">'+esc(e.message)+'</p>'; } const f=flash?`<div class="flash ${flash.err?'err':''}">${flash.m}</div>`:''; flash=null; app.innerHTML=im('logo','logo','width=350 height=70')+`<div class="c">${netBadge()}</div>`+f+bd; return; }
   if(!S){ app.innerHTML=titleScreen(); return; }
   let body='';
   try{ body=(SCREENS[route]||SCREENS.rank)(); }catch(e){ console.error(e); body='<p class="red">表示エラー: '+esc(e.message)+'</p>'; }
@@ -810,6 +875,7 @@ function rankTable(limit){
     <td class="r nw">${yen(r.money)}</td><td class="r"><small>${Math.round(r.pop)}%</small></td><td><small>${DIGNITY[digLevel(r.dig)]}</small></td><td class="r">${r.wins}</td></tr>`).join('')}
   </table></div>`;
 }
+function noticeHtml(){ const n=T().notice; return n?`<div class="flash" style="border-color:#d0402a;background:#fff4ee"><b>お知らせ</b>：${esc(n).replace(/\n/g,'<br>')}</div>`:''; }
 function ago(t){ const s=(Date.now()-t)/1000; if(s<120) return '営業中'; if(s<3600) return Math.round(s/60)+'分前に営業'; if(s<86400) return Math.round(s/3600)+'時間前に営業'; return Math.round(s/86400)+'日前に営業'; }
 function openShop(k){ const key=REFS[k]; if(key==null) return; if(String(key).startsWith('npc:')) go('street',{id:+String(key).slice(4)}); else go('street',{uid:key}); }
 function titleScreen(){
@@ -817,6 +883,7 @@ function titleScreen(){
   return `
   ${im('logo','logo','width=350 height=70')}
   <div class="c">${netBadge()}</div>
+  ${noticeHtml()}
   ${T().lord&&T().msg?`<div class="flash">領主${esc(T().lord.name)}より告知：${esc(T().msg)}</div>`:''}
   <div class="c"><big>商人ランキング</big></div>
   ${NET.online? rankTable(10) : `<div class="c note">${NET.ready?'オフラインのため，ランキングはお店を開くと表示されます。':'オンラインに接続しています…'}</div>`}
@@ -1329,8 +1396,8 @@ SCREENS.market=function(){
   ${talk('kaoguide','市場の案内係','市場では標準価格で商品を仕入れられます。入荷は時間とともに少しずつ。仕入れには <b>持ち時間 20分＋1個につき20秒</b> かかります。')}
   ${tabs}
   <div class="tbl"><table class="t"><tr><th>商品</th><th>価格</th><th>在庫</th><th>所持</th><th>仕入</th></tr>
-  ${nos.map(n=>{ const it=ITEMS[n], st=S.market[n]||0; return `<tr><td>${ii(n)}${esc(it.name)}<br><small>${esc(it.info)}</small></td><td class="r nw">${yen(it.price)}</td><td class="r">${st}</td><td class="r">${S.stock[n]||0}</td>
-     <td class="nw">${st?`<input type="number" id="mq${n}" value="1" min="1" max="${st}" style="width:52px"><button onclick="buyMarket(${n})">買う</button>`:'<small>品切れ</small>'}</td></tr>`; }).join('')||'<tr><td colspan=5 class="c">この種類は市場に入荷しません</td></tr>'}
+  ${nos.map(n=>{ const it=ITEMS[n], st=S.market[n]||0; return `<tr><td class="nm">${ii(n)}${esc(it.name)}<br><small>${esc(it.info)}</small></td><td class="r nw">${yen(it.price)}</td><td class="r">${st}</td><td class="r">${S.stock[n]||0}</td>
+     <td class="c">${st?`<input type="number" id="mq${n}" value="1" min="1" max="${st}" style="width:52px"><button onclick="buyMarket(${n})">買う</button>`:'<small>品切れ</small>'}</td></tr>`; }).join('')||'<tr><td colspan=5 class="c">この種類は市場に入荷しません</td></tr>'}
   </table></div>
   <div class="c note">原料や上級の装備は市場に入荷しません。地図や本を使って自分で調達・製作しましょう。</div>`;
 };
@@ -1560,6 +1627,7 @@ SCREENS.log=function(){
 SCREENS.rank=function(){
   const L=T().lord;
   return `${im('logo','logo','width=350 height=70')}
+  ${noticeHtml()}
   ${L&&T().msg?`<div class="flash">領主${esc(L.name)}より告知：${esc(T().msg)}</div>`:''}
   <div class="c"><big>商人ランキング</big> <small>（総資金順・毎日の決算で1位が優勝）</small></div>
   ${rankTable()}
@@ -1756,6 +1824,64 @@ function assault(){
 function train(){ if(S.money<2000){ setFlash('資金が足りません',1); render(); return; } if(!spendTime(120)){ setFlash('持ち時間が足りません',1); render(); return; } S.money-=2000; const k=pick(['life','attack','defence','tech']); const v=k==='life'?3+rnd(4):1+rnd(2); S.st[k]+=v; setFlash(`訓練した！${{life:'HP',attack:'攻撃',defence:'防御',tech:'技量'}[k]}が${v}上がった`); save(); render(); }
 function fightRebel(){ if(!T().bal) return; if(!spendTime(180)){ setFlash('持ち時間が足りません',1); render(); return; } startBattle(9,null); }
 
+SCREENS.hometown=function(){
+  return `<div class="c"><big>住宅地</big></div>
+  ${talk('kaofather','不動産屋','家を持つと，ゆっくり休めて持ち時間の上限が増えますぞ。立派な家なら爵位ポイントももらえます。')}
+  <div class="tbl"><table class="t"><tr><th></th><th>住宅</th><th>価格</th><th>持ち時間上限</th><th></th></tr>
+  ${HOUSES.map((h,i)=>`<tr><td>${im(h.img,'','style="max-height:56px"')}</td><td>${h.name}${h.dig?`<br><small>爵位+${h.dig}pt</small>`:''}</td><td class="r">${yen(h.price)}</td><td class="r">+${h.plus/60}時間</td><td>${S.house===i?'<small class="blue">住居中</small>':i>S.house?`<button onclick="buyHouse(${i})">購入</button>`:''}</td></tr>`).join('')}
+  </table></div>
+  <div class="c"><big>ご近所</big></div>
+  <div class="c">${S.npcs.map(n=>`<span style="display:inline-block;margin:3px;text-align:center">${im(pick(['house1a','house1b','house2a','house2b']),'','style="height:40px"')}<br><small>${esc(n.owner)}</small></span>`).join('')}</div>`;
+};
+function buyHouse(i){ const h=HOUSES[i]; if(S.money<h.price){ setFlash('資金が足りません',1); render(); return; } S.money-=h.price; for(let k=S.house+1;k<=i;k++) S.dig+=(HOUSES[k].dig||0); S.house=i; setFlash(`${h.name}に引っ越しました！`); news(`${S.owner}が${h.name}を購入した`); save(); render(); }
+SCREENS.bank=function(){
+  const worth=S.money+S.bank;
+  const maxDep=Math.max(0,Math.floor(worth*0.7)-S.bank);
+  const credit=(50+S.bwin*2+digLevel(S.dig)*50+S.wins*10+Math.round(S.pop));
+  return `<div class="c"><big>銀行</big></div>
+  ${talk('kaofather','銀行員','預金には7日ごとに5%の利息がつきます（全資金の70%まで）。借入は借りた時に10%，その後は毎日5%の利息，14日以内にご返済ください。')}
+  <div class="tbl"><table class="t">
+    <tr><th>預金</th><td class="r">${yen(S.bank)}</td><td><input type="number" id="bkA" value="10000" style="width:100px"> <button onclick="bankOp(0)">預ける</button> <button onclick="bankOp(1)">引き出す</button></td></tr>
+    <tr><th>借金</th><td class="r">${yen(S.debt)}${S.debt?`<br><small>${S.debtDays}日経過</small>`:''}</td><td><button onclick="bankOp(2)">借りる</button> <button onclick="bankOp(3)">返す</button><br><small>借入限度 ${yen(credit*1000)}</small></td></tr>
+  </table></div><div class="c note">預け入れ可能額 ${yen(maxDep)}</div>`;
+};
+function bankOp(m){
+  const a=Math.max(0,parseInt($('#bkA').value)||0); if(!a) return;
+  const credit=(50+S.bwin*2+digLevel(S.dig)*50+S.wins*10+Math.round(S.pop))*1000;
+  if(m===0){ const mx=Math.max(0,Math.floor((S.money+S.bank)*0.7)-S.bank); const v=Math.min(a,mx,S.money); if(v<=0){ setFlash('これ以上預けられません',1); } else { S.money-=v; S.bank+=v; setFlash(`${yen(v)}預けました`); } }
+  if(m===1){ const v=Math.min(a,S.bank); S.bank-=v; S.money+=v; setFlash(`${yen(v)}引き出しました`); }
+  if(m===2){ if(S.debt+Math.round(a*1.1)>credit){ setFlash('借入限度を超えています',1); } else { S.money+=a; S.debt+=Math.round(a*1.1); if(!S.debtDays) S.debtDays=0; setFlash(`${yen(a)}借りました（返済額 ${yen(Math.round(a*1.1))}追加）`); } }
+  if(m===3){ const v=Math.min(a,S.debt,S.money); S.money-=v; S.debt-=v; if(S.debt<=0){ S.debt=0; S.debtDays=0; } setFlash(`${yen(v)}返済しました`); }
+  save(); render();
+}
+SCREENS.shiritori=function(){
+  const sh=S.shiri;
+  return `<div class="c"><big>しりとり広場</big></div>
+  ${talk('kaoguide','しりとり娘',`しりとりで遊びましょ！ひらがなで答えてね。続くほどお小遣いが増えるよ。「ん」で終わったら負け！<br>${sh.last?`いまの言葉は「<b>${esc(sh.last)}</b>」。「<b>${esc(tail(sh.last))}</b>」から始まる言葉をどうぞ！`:'好きな言葉から始めてね。'}<br><small>連続 ${sh.chain}回</small>`)}
+  <div class="c"><input id="shW" maxlength="12" placeholder="ひらがなで入力" onkeydown="if(event.key==='Enter'&&!event.isComposing&&event.keyCode!==229)shiri()"> <button onclick="shiri()">答える（10分）</button> <button onclick="S.shiri={last:'',used:[],chain:0};save();render()">やり直す</button></div>
+  <div class="c note">使った言葉：${sh.used.slice(-20).map(esc).join('・')||'なし'}</div>`;
+};
+function tail(w){ let c=w.slice(-1); if(c==='ー') c=w.slice(-2,-1); const small={'ゃ':'や','ゅ':'ゆ','ょ':'よ','ぁ':'あ','ぃ':'い','ぅ':'う','ぇ':'え','ぉ':'お','っ':'つ'}; return small[c]||c; }
+function shiri(){
+  const w=$('#shW').value.trim().replace(/[ァ-ヶ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60)).replace(/ヴ/g,'ゔ'); const sh=S.shiri;
+  if(!/^[ぁ-んー]{2,}$/.test(w)){ setFlash('ひらがな2文字以上で答えてね',1); render(); return; }
+  if(!spendTime(10)){ setFlash('持ち時間が足りません',1); render(); return; }
+  if(sh.last && w[0]!==tail(sh.last)){ setFlash(`「${tail(sh.last)}」から始まってないよ！`,1); render(); return; }
+  if(sh.used.includes(w)){ setFlash('その言葉はもう使ったよ！あなたの負け〜',1); S.shiri={last:'',used:[],chain:0}; save(); render(); return; }
+  if(tail(w)==='ん'){ setFlash('「ん」で終わっちゃった！あなたの負け〜',1); S.shiri={last:'',used:[],chain:0}; save(); render(); return; }
+  sh.used.push(w); sh.chain++;
+  const prize=100*sh.chain; S.money+=prize;
+  const cand=WORDS.filter(x=>x[0]===tail(w)&&!sh.used.includes(x)&&tail(x)!=='ん');
+  if(!cand.length){ const bonus=prize*5; S.money+=bonus; setFlash(`うーん…思いつかない！私の負け！ ボーナス${yen(bonus)}をどうぞ！`); S.shiri={last:'',used:[],chain:0}; save(); render(); return; }
+  const r=pick(cand); sh.used.push(r); sh.last=r;
+  setFlash(`「${esc(w)}」…いいね！（お小遣い${yen(prize)}）じゃあ私は「${esc(r)}」！`); save(); render();
+  setTimeout(()=>{ const i=$('#shW'); if(i) i.focus(); },50);
+}
+
+
+/* ============================================================
+   交流：郵便局・宅配便・掲示板
+   ============================================================ */
 SCREENS.letter=function(){
   S.letters.forEach(l=>l.read=true);
   return `<div class="c"><big>郵便局</big></div>
@@ -1843,6 +1969,136 @@ async function postBbs(){
   S.bbs=S.bbs.slice(0,40); save(); render();
 }
 
+
+/* ============================================================
+   管理者画面
+   ============================================================ */
+let ADMIN=false;
+function leaveAdmin(){ try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){} go('rank'); }
+function checkAdminHash(){ if(location.hash==='#admin'){ route='admin'; sub={}; menuOpen=2; return true; } return false; }
+async function sha(s){
+  try{ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('akimono:'+s)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
+  catch(e){ let h=7; for(const c of s) h=(h*31+c.charCodeAt(0))|0; return 'x'+h; }
+}
+async function adminLogin(){
+  const pw=$('#adPw').value; if(!pw) return;
+  const h=await sha(pw);
+  let cur=null;
+  try{ if(NET.online){ const s=await NET.db.doc('admin/config').get(); cur=s.exists?s.data().hash:null; } else cur=S?S.adminHash||null:null; }catch(e){ netErr(e); }
+  if(!cur){
+    if(pw.length<4){ setFlash('パスワードは4文字以上にしてください',1); render(); return; }
+    if(!NET.online&&!S){ setFlash('オフラインでは先にお店を開いてください',1); render(); return; }
+    try{ if(NET.online) await NET.db.doc('admin/config').set({hash:h,t:Date.now()}); else { S.adminHash=h; save(); } }catch(e){ netErr(e); setFlash('設定に失敗しました',1); render(); return; }
+    ADMIN=true; setFlash('管理者パスワードを設定しました。忘れないようにメモしておいてください。');
+  } else if(cur===h){ ADMIN=true; setFlash('管理者としてログインしました'); }
+  else setFlash('パスワードが違います',1);
+  render();
+}
+function adminPlayers(){
+  const a=S?[{me:true,key:myKey(),name:S.owner,shop:S.shop,money:S.money+S.bank-S.debt,dig:S.dig,kao:S.kao,t:Date.now()}]:[];
+  if(NET.online) playerShops().forEach(p=>a.push(p));
+  return a;
+}
+SCREENS.admin=function(){
+  if(!ADMIN) return `<div class="c"><big>管理者画面</big></div>
+    ${talk('kaominister','大臣','管理者のパスワードを入れてください。<br><small>まだ設定されていない場合は，ここで入れたパスワードが管理者パスワードになります（最初の1回だけ）。</small>')}
+    <div class="c"><input type="password" id="adPw" style="width:160px" onkeydown="if(event.key==='Enter'&&!event.isComposing)adminLogin()"> <button onclick="adminLogin()">ログイン</button></div>`;
+  const t=T();
+  const items=ITEMLIST.filter(it=>it.price>=0).map(it=>`<option value="${it.no}">${esc(it.name)}</option>`).join('');
+  return `<div class="c"><big>管理者画面</big> <small><a onclick="ADMIN=false;leaveAdmin()">ログアウト</a>　<a onclick="leaveAdmin()">ゲームに戻る</a></small></div>
+  <div class="c"><big>全体へのお知らせ</big></div>
+  <div class="c"><textarea id="adNotice" rows="3" style="width:95%" maxlength="200">${esc(t.notice||'')}</textarea><br><button onclick="adminNotice()">お知らせを出す</button> <button onclick="$('#adNotice').value='';adminNotice()">消す</button></div>
+  <div class="c note">ランキング画面やタイトル画面の一番上に表示されます。</div>
+  <hr>
+  <div class="c"><big>プレイヤーへの付与</big></div>
+  <div class="tbl"><table class="t"><tr><th></th><th>お店</th><th>資金</th><th>爵位</th><th></th></tr>
+  ${adminPlayers().map(p=>`<tr><td>${kao(p.kao)}</td><td>${esc(p.shop)}<br><small>${esc(p.name)}${p.me?'（あなた）':''}${p.t&&!p.me?'・'+ago(p.t):''}</small></td><td class="r nw">${yen(p.money)}</td><td class="nw"><small>${DIGNITY[digLevel(p.dig)]}<br>${p.dig}pt</small></td><td><button onclick="adminGiveBox(${R(p.key)})">付与</button>${p.me?'':`<br><button onclick="adminDelete(${R(p.key)})" class="red">削除</button>`}</td></tr>`).join('')}
+  </table></div>
+  <hr>
+  <div class="c"><big>街の管理</big></div>
+  <div class="tbl"><table class="t">
+    <tr><th>領主</th><td>${t.lord?esc(t.lord.name)+'（'+esc(t.lord.shop)+'）':'なし'}</td><td><button onclick="adminTown('lord')">解任する</button></td></tr>
+    <tr><th>反乱</th><td>${rebelSum(t)}人</td><td><button onclick="adminTown('rebel')">鎮める</button></td></tr>
+    <tr><th>治安</th><td>${Math.round(t.safety)}</td><td><button onclick="adminTown('safety')">100にする</button></td></tr>
+  </table></div>
+  ${NET.online?`<hr><div class="c"><big>データの掃除</big></div>
+  <div class="c toolbar"><button onclick="adminClear('bbs')">掲示板を全部消す</button> <button onclick="adminClear('news')">新聞を全部消す</button> <button onclick="adminClear('auc')">競売を全部消す</button></div>
+  <hr><div class="c"><button class="red" onclick="adminResetAll()">全店リセット（ゲームを最初から）</button></div>
+  <div class="c note">全店リセットをすると，すべてのプレイヤーのお店とセーブが消えます。元に戻せません。</div>`:''}
+  <hr><div class="c"><big>管理者パスワードの変更</big></div>
+  <div class="c"><input type="password" id="adNew" placeholder="新しいパスワード" style="width:160px"> <button onclick="adminChangePw()">変更</button></div>`;
+};
+function adminGiveBox(k){
+  const key=REFS[k];
+  const items=ITEMLIST.map(it=>`<option value="${it.no}">${esc(it.name)}</option>`).join('');
+  modal(`<div><big>付与する</big></div>
+  <table class="t" style="width:100%">
+  <tr><th>資金</th><td><input type="number" id="agM" value="0" style="width:120px"> 円 <small>（マイナスで減らす）</small></td></tr>
+  <tr><th>爵位pt</th><td><input type="number" id="agD" value="1" style="width:70px"> pt</td></tr>
+  <tr><th>アイテム</th><td><select id="agI"><option value="0">なし</option>${items}</select> ×<input type="number" id="agN" value="1" min="1" style="width:60px"></td></tr>
+  <tr><th>ひとこと</th><td><input id="agB" maxlength="60" style="width:100%" placeholder="例：ランキング1位おめでとう！"></td></tr>
+  </table>
+  <div class="c"><button onclick="adminGive(${R(key)})">送る</button> <button onclick="closeModal()">やめる</button></div>`);
+}
+function adminGive(k){
+  const key=REFS[k];
+  const money=parseInt($('#agM').value)||0, dig=parseInt($('#agD').value)||0, no=+$('#agI').value, n=Math.max(1,parseInt($('#agN').value)||1), body=$('#agB').value.trim();
+  closeModal();
+  const m={kind:'admin',money,dig,no:no||0,n:no?n:0,body};
+  if(key===myKey()){ applyAdmin(m); setFlash('付与しました'); save(); render(); return; }
+  sendMail(key,m).then(ok=>{ setFlash(ok?'付与しました（相手が次にゲームを開いたときに届きます）':'送れませんでした',!ok); render(); });
+}
+function applyAdmin(m){
+  const bd=digLevel(S.dig), parts=[];
+  if(m.money){ S.money+=m.money; parts.push((m.money>0?'資金 ':'資金 ')+(m.money>0?'+':'')+yen(m.money)); }
+  if(m.dig){ S.dig=Math.max(0,S.dig+m.dig); parts.push(`爵位ポイント ${m.dig>0?'+':''}${m.dig}`); }
+  if(m.no&&ITEMS[m.no]&&m.n){ add(m.no,m.n); parts.push(`${ITEMS[m.no].name}×${m.n}`); }
+  letter('街の管理人','kaominister',`${m.body?m.body+'<br>':''}管理人から ${parts.join('，')||'お知らせ'} が届きました。`.replace('<br>','　'));
+  if(digLevel(S.dig)>bd) news(`${S.owner}（${S.shop}）が${DIGNITY[digLevel(S.dig)]}に叙爵された`);
+}
+function adminDelete(k){
+  const key=REFS[k]; const p=NET.shops[key]||{};
+  confirmBox(`「${esc(p.shop||'')}」を削除しますか？ このプレイヤーのお店とセーブが消えます。`,async()=>{
+    await sendMail(key,{kind:'wipe'});
+    try{ await NET.db.doc('shops/'+key).delete(); await NET.db.doc('data/users/'+key+'/save').delete(); }catch(e){ netErr(e); }
+    setFlash('削除しました'); render();
+  });
+}
+function adminNotice(){ const v=$('#adNotice').value.trim(); townTx(t=>{ t.notice=v; }).then(()=>{ setFlash(v?'お知らせを出しました':'お知らせを消しました'); render(); }); }
+function adminTown(what){
+  townTx(t=>{
+    if(what==='lord'){ t.lord=null; t.msg=''; }
+    if(what==='rebel'){ t.riot={}; t.bal=null; }
+    if(what==='safety'){ t.safety=100; }
+  }).then(()=>{ setFlash({lord:'領主を解任しました（次の決算で新しい領主が選ばれます）',rebel:'反乱を鎮めました',safety:'治安を100にしました'}[what]); render(); });
+}
+async function adminClear(col){
+  confirmBox({bbs:'掲示板',news:'新聞',auc:'競売'}[col]+'を全部消しますか？',async()=>{
+    try{ const s=await NET.db.collection(col).limit(500).get(); await Promise.all(s.docs.map(d=>NET.db.doc(col+'/'+d.id).delete())); setFlash('消しました'); }catch(e){ netErr(e); setFlash('失敗しました',1); }
+    render();
+  });
+}
+function adminResetAll(){
+  confirmBox('本当に全店リセットしますか？ すべてのプレイヤーのデータが消えます。',()=>{
+    setTimeout(()=>confirmBox('最終確認です。元に戻せません。リセットしますか？',async()=>{
+      try{
+        const uids=Object.keys(NET.shops);
+        for(const u of uids){ if(u!==NET.uid) await sendMail(u,{kind:'wipe'}); await NET.db.doc('shops/'+u).delete().catch(()=>{}); await NET.db.doc('data/users/'+u+'/save').delete().catch(()=>{}); }
+        for(const col of ['bbs','news','auc']){ const s=await NET.db.collection(col).limit(500).get(); await Promise.all(s.docs.map(d=>NET.db.doc(col+'/'+d.id).delete())); }
+        await NET.db.doc('town/state').set(defaultTown());
+        await NET.db.doc('data/users/'+NET.uid+'/save').delete().catch(()=>{});
+      }catch(e){ netErr(e); }
+      try{ localStorage.removeItem(SAVE); }catch(e){} S=null; ADMIN=false; lastPub=''; leaveAdmin();
+    }),300);
+  });
+}
+async function adminChangePw(){
+  const pw=$('#adNew').value; if(!pw||pw.length<4){ setFlash('4文字以上で入れてください',1); render(); return; }
+  const h=await sha(pw);
+  try{ if(NET.online) await NET.db.doc('admin/config').set({hash:h,t:Date.now()}); else { S.adminHash=h; save(); } setFlash('管理者パスワードを変更しました'); }catch(e){ netErr(e); setFlash('変更に失敗しました',1); }
+  render();
+}
+
 /* ============================================================
    モーダル・ループ・起動
    ============================================================ */
@@ -1870,7 +2126,9 @@ function tick(){
 (function boot(){
   S=load();
   route='rank'; menuOpen=2;
+  checkAdminHash();
   render();
+  window.addEventListener('hashchange',()=>{ if(checkAdminHash()) render(); });
   initNet();
   setInterval(tick,1000);
   window.addEventListener('beforeunload',()=>{ if(S) save(); });
