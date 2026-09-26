@@ -537,13 +537,18 @@ async function doLogin(){
     if(!s.exists){ setFlash('その店主名のお店は見つかりませんでした',1); render(); return; }
     const a=s.data();
     if(a.hash!==await pwHash(name,pw)){ setFlash('パスワードが違います',1); render(); return; }
+    NET.switching=true;
     try{ localStorage.setItem(UIDKEY,a.uid); localStorage.removeItem(LOGOUTKEY); localStorage.removeItem(SAVE); }catch(e){}
     location.reload();
   }catch(e){ netErr(e); setFlash('ログインに失敗しました。通信状態を確認してください',1); render(); }
 }
+function headerLogout(){
+  if(!S.loginName){ setFlash('ログアウトする前に，ログイン用のパスワードを設定してください。設定しないままログアウトすると，このお店に戻れなくなります。',1); go('other'); return; }
+  doLogout();
+}
 function doLogout(){
   confirmBox('ログアウトしますか？ 次に遊ぶときは店主名とパスワードでログインします。',async()=>{
-    save(); await saveRemote(true); await publishShop(true);
+    save(); await saveRemote(true); await publishShop(true); NET.switching=true;
     try{ localStorage.removeItem(UIDKEY); localStorage.setItem(LOGOUTKEY,'1'); localStorage.removeItem(SAVE); }catch(e){}
     location.reload();
   });
@@ -910,7 +915,7 @@ function header(){
   <div class="head">
     ${im(job.img,'','width=30 height=45')}
     <div>
-      <div class="menu">${MENU.map((m,i)=>`<a onclick="menuOpen=${i};render()">【${m[0]}】</a>`).join(' ')} <a onclick="saveNow()" style="color:#d0402a">【セーブ】</a></div>
+      <div class="menu">${MENU.map((m,i)=>`<a onclick="menuOpen=${i};render()">【${m[0]}】</a>`).join(' ')} <a onclick="saveNow()" style="color:#d0402a">【セーブ】</a>${useLogin()?` <a onclick="headerLogout()" style="color:#d0402a">【ログアウト】</a>`:''}</div>
       <div class="submenu"><big>${g[0]}</big> &gt; ${g[1].map(x=>`<a onclick="go('${x[1]}')" ${route===x[1]?'style="color:#d0402a"':''}>[${x[0]}${x[1]==='letter'&&unread?'<span class=red>●'+unread+'</span>':''}]</a>`).join('')}</div>
     </div>
   </div>
@@ -1006,6 +1011,7 @@ async function startNew(){
       const ref=NET.db.doc(accKey(o)); const ex=await ref.get();
       if(ex.exists){ setFlash('その店主名はすでに使われています。別の名前にするか，上の「ログイン」から入ってください',1); render(); return; }
       const uid='p'+Date.now().toString(36)+Math.random().toString(36).slice(2,10);
+      NET.switching=true; NET.uid=uid;
       newState(o,s,k); S.uid=uid; S.loginName=o;
       await NET.db.doc('data/users/'+uid+'/save').set({json:JSON.stringify(S),t:Date.now()});
       await ref.set({uid,hash:await pwHash(o,pw),owner:o,t:Date.now()});
@@ -2297,7 +2303,7 @@ const _render=render;
 render=function(){ _render(); if(route==='battle') battlePlay(); };
 let saveTick=0;
 function tick(){
-  if(!S||!NET.ready) return;
+  if(!S||!NET.ready||NET.switching) return;
   const before=day();
   const gap=nowClock()-S.clock;
   if(gap>0){ advance(Math.min(gap,14*1440)); if(nowClock()>S.clock) S.clock=nowClock(); }
