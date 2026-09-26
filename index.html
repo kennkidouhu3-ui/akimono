@@ -372,17 +372,33 @@ function totalStat(st,eq){
 function myStat(){ return totalStat(S.st,S.eq); }
 function popStars(p){ const n=Math.round(p/20); return '★'.repeat(n)+'☆'.repeat(5-n)+` <small>(${Math.round(p)}%)</small>`; }
 function trashMsg(t){ return t<20?'きれい':t<50?'ちょっと汚れている':t<100?'散らかっている':t<200?'かなり汚い':'ゴミだらけ'; }
-function mySummaryRow(){ return {me:true,key:myKey(),name:S.owner,shop:S.shop,money:S.money+S.bank-S.debt,dig:S.dig,kao:S.kao,job:S.job,pop:S.pop,wins:S.wins,guild:S.guild,soldiers:S.soldiers,t:Date.now()}; }
+// 点数：元の商人物語の GetDTPoint と同じ考え方（人気 × 優勝回数補正 × 利益補正）
+function calcPoint(pop,wins,profit3,todayNet){
+  let p=(profit3*3+todayNet)/500000+1;
+  const r=0.5+(5/((wins||0)+10));
+  if(p>10) p=15-(50/p);
+  if(p<1) p=1/(2-p);
+  return Math.max(0,Math.floor(Math.round(pop*100)*r*p));
+}
+function myProfit3(){ return S.hist.slice(0,3).reduce((a,h)=>a+(h.sales-h.cost),0); }
+function myTodayNet(){ return S.today.sales-(S.today.tax||0); }
+function myPoint(){ return calcPoint(S.pop,S.wins,myProfit3(),myTodayNet()); }
+function expSum(){ return Object.values(S.exp||{}).reduce((a,b)=>a+b,0); }
+function mySummaryRow(){ const st=myStat(); return {me:true,key:myKey(),name:S.owner,shop:S.shop,money:S.money+S.bank-S.debt,dig:S.dig,kao:S.kao,job:S.job,pop:S.pop,wins:S.wins,guild:S.guild,soldiers:S.soldiers,t:Date.now(),
+  point:myPoint(),sale:S.today.sales,exps:expSum(),comment:S.comment,found:S.createdAt,rkY:S.rankY||0,st,btype:S.btype,cases:S.cases.map(c=>c&&has(c.no)?{no:c.no,price:c.price,stock:S.stock[c.no]}:null)}; }
 function allShops(){
   return [mySummaryRow()]
-    .concat(S.npcs.map(n=>({me:false,key:'npc:'+n.id,id:n.id,name:n.owner,shop:n.shop,money:n.money,dig:n.dig,kao:n.kao,job:n.job,pop:n.pop,wins:n.wins,guild:n.guild||null,soldiers:0})));
+    .concat(S.npcs.map(n=>({me:false,key:'npc:'+n.id,id:n.id,name:n.owner,shop:n.shop,money:n.money,dig:n.dig,kao:n.kao,job:n.job,pop:n.pop,wins:n.wins,guild:n.guild||null,soldiers:0,
+      point:calcPoint(n.pop,n.wins,(n.ph||[]).reduce((a,b)=>a+b,0),n.today*0.45),sale:n.today,exps:0,comment:'',found:S.createdAt,rkY:n.rankY||0,st:totalStat(n.st,null),btype:n.btype,cases:n.cases})));
 }
 function playerShops(){
-  return Object.values(NET.shops).filter(s=>s&&s.uid&&s.uid!==NET.uid).map(s=>({me:false,key:s.uid,uid:s.uid,name:s.owner,shop:s.shop,money:s.money||0,dig:s.dig||0,kao:s.kao||1,job:s.job||'',pop:s.pop||0,wins:s.wins||0,soldiers:s.soldiers||0,guild:s.guild||null,t:s.t||0,comment:s.comment||''}));
+  return Object.values(NET.shops).filter(s=>s&&s.uid&&s.uid!==NET.uid).map(s=>({me:false,key:s.uid,uid:s.uid,name:s.owner,shop:s.shop,money:s.money||0,dig:s.dig||0,kao:s.kao||1,job:s.job||'',pop:s.pop||0,wins:s.wins||0,soldiers:s.soldiers||0,guild:s.guild||null,t:s.t||0,comment:s.comment||'',
+    point:s.point!=null?s.point:calcPoint(s.pop||0,s.wins||0,0,0),sale:s.sale||0,exps:s.exps||0,found:s.found||0,rkY:s.rkY||0,st:s.st||null,btype:s.btype||0,cases:s.cases||[]}));
 }
 function ranking(){
-  if(NET.online){ const a=playerShops(); if(S) a.push(mySummaryRow()); return a.sort((x,y)=>y.money-x.money); }
-  return S? allShops().sort((a,b)=>b.money-a.money) : [];
+  const by=(x,y)=>(y.point-x.point)||(y.money-x.money);
+  if(NET.online){ const a=playerShops(); if(S) a.push(mySummaryRow()); return a.sort(by); }
+  return S? allShops().sort(by) : [];
 }
 function townCands(){ return NET.online? ranking() : allShops(); }
 
@@ -408,7 +424,8 @@ function shopSummary(){
   return {uid:NET.uid,owner:S.owner,shop:S.shop,kao:S.kao,job:S.job,comment:S.comment,money:Math.round(S.money+S.bank-S.debt),
     pop:Math.round(S.pop),dig:S.dig,wins:S.wins,soldiers:S.soldiers,guild:S.guild,house:S.house,
     st:{life:t.life,attack:t.attack,defence:t.defence,tech:t.tech},btype:S.btype,weapon:w,
-    cases:S.cases.map(c=>c&&has(c.no)?{no:c.no,price:c.price,stock:S.stock[c.no]}:null),day:day(),t:Date.now()};
+    cases:S.cases.map(c=>c&&has(c.no)?{no:c.no,price:c.price,stock:S.stock[c.no]}:null),day:day(),t:Date.now(),
+    point:myPoint(),sale:S.today.sales,exps:Math.round(expSum()),found:S.createdAt||0,rkY:S.rankY||0};
 }
 let lastPub='', pubBusy=false;
 async function publishShop(force){
@@ -749,6 +766,7 @@ function settle(){
     n.money-=CASECOST[n.cases.length]||0;
     npcRestock(n,false);
     n.cases.forEach(c=>{ if(c) c.price=Math.max(10,Math.round(c.price*rr(0.95,1.05))); });
+    n.ph=[Math.round(n.today*0.45)].concat(n.ph||[]).slice(0,3);
     n.today=0;
     if(Math.random()<0.03) n.dig=Math.min(6,n.dig+1);
   });
@@ -757,6 +775,7 @@ function settle(){
   if(tx>0 && L){ if(NET.online && L.key && L.key!=='bal') sendMail(L.key,{kind:'tax',amount:tx}); else if(L.key&&L.key.startsWith('npc:')&&S.npcs[+L.key.slice(4)]) S.npcs[+L.key.slice(4)].money+=tx; }
   // ランキング・優勝
   const rk=ranking();
+  rk.forEach((r,i)=>{ if(r.me) S.rankY=i+1; else if(r.id!=null&&S.npcs[r.id]) S.npcs[r.id].rankY=i+1; });
   if(rk[0] && rk[0].me && (!NET.online || rk.length>=2)){
     S.wins++; const bd=digLevel(S.dig); S.dig+=1;
     news(`本日の商人ランキング1位は${S.shop}！（通算${S.wins}回目）`);
@@ -869,11 +888,26 @@ function rankTable(limit){
   const rk=ranking().slice(0,limit||100);
   if(!rk.length) return '<div class="c note">まだ参加しているお店はありません。</div>';
   const L=T().lord;
-  return `<div class="tbl"><table class="t"><tr><th>順位</th><th></th><th>店名</th><th>資金</th><th>人気</th><th>爵位</th><th>優勝</th></tr>
-  ${rk.map((r,i)=>`<tr ${r.me?'style="font-weight:bold"':''}><td class="c nw">${i<6?im('rank'+(i+1),'i16'):''}${i+1}</td><td>${kao(r.kao)}</td>
-    <td>${r.me?'<span class="span">'+esc(r.shop)+'</span>':(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${L&&L.key===r.key?' <small class="red">[領主]</small>':''}<br><small>${esc(r.name)}・${(JOBS[r.job]||JOBS['']).name}${r.soldiers?'・兵'+r.soldiers:''}</small>${r.t&&!r.me?`<br><small class="note">${ago(r.t)}</small>`:''}</td>
-    <td class="r nw">${yen(r.money)}</td><td class="r"><small>${Math.round(r.pop)}%</small></td><td><small>${DIGNITY[digLevel(r.dig)]}</small></td><td class="r">${r.wins}</td></tr>`).join('')}
-  </table></div>`;
+  const updown=(r,i)=>{ if(!r.rkY) return '<small>(新)</small>'; const d=r.rkY-(i+1); return `<small>(${d===0?'→':d>0?'<span class=red>↑'+d+'</span>':'<span class=blue>↓'+(-d)+'</span>'})</small>`; };
+  const winIcons=w=>w? (w<=5? im('rank1','i16').repeat(w) : im('rank1','i16')+'×'+w) : '';
+  const expd=r=>r.st?`【${BTYPES[r.btype]||'普通'}】${Math.round((r.st.attack+r.st.defence+r.st.tech)/3)}exp　${im('ability-no-4','i16')}${r.st.life} ${im('ability-no-1','i16')}${r.st.attack} ${im('ability-no-2','i16')}${r.st.defence} ${im('ability-no-3','i16')}${r.st.tech}`:'';
+  return `<div class="tbl"><table class="t" style="width:100%"><tr><th>点数</th><th>店長</th><th>お店</th></tr>
+  ${rk.map((r,i)=>{
+    const cs=(r.cases||[]).filter(c=>c&&c.stock>0&&ITEMS[c.no]);
+    const first=cs[0];
+    return `<tr ${r.me?'style="font-weight:bold"':''}>
+    <td class="r nw"><b>No.${i+1}</b>${i<6?im('rank'+(i+1),'i16'):''}<br>${updown(r,i)}<br><b class="red">${(r.point||0).toLocaleString()}</b>点</td>
+    <td class="c">${kao(r.kao)}<br>${im((JOBS[r.job]||JOBS['']).img,'','width=20 height=30')}</td>
+    <td>${r.guild?im(r.guild==='my'?'guildprize':'guild-'+r.guild,'i16'):''}${r.me?'<span class="span">'+esc(r.shop)+'</span>':(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${L&&L.key===r.key?' <small class="red">[領主]</small>':''} ${winIcons(r.wins)}
+      <br><small>${esc(r.name)}・${(JOBS[r.job]||JOBS['']).name}・${DIGNITY[digLevel(r.dig)]}${r.soldiers?'・兵'+r.soldiers:''}</small>
+      <br><small>人気 ${popStars(r.pop)}</small>
+      ${cs.length?`<br><small>${cs.map(c=>ii(c.no)).join('')} ${esc(ITEMS[first.no].name)} ${yen(first.price)}</small>`:''}
+      ${r.comment?`<br><small>「${esc(r.comment)}」</small>`:''}
+      <br><small>今期売上 <b>${yen(r.sale||0)}</b>　資金 <b>${yen(r.money)}</b>　熟練 ${Math.floor((r.exps||0)/10)}%</small>
+      ${r.st?`<br><small>${expd(r)}</small>`:''}
+      ${r.t&&!r.me&&!String(r.key).startsWith('npc:')?`<br><small class="note">${ago(r.t)}</small>`:''}</td></tr>`; }).join('')}
+  </table></div>
+  <div class="c note">点数＝人気 × 利益（直近3日の純利益と今期の売上）× 優勝回数による補正。優勝を重ねるほど点数は伸びにくくなります。</div>`;
 }
 function noticeHtml(){ const n=T().notice; return n?`<div class="flash" style="border-color:#d0402a;background:#fff4ee"><b>お知らせ</b>：${esc(n).replace(/\n/g,'<br>')}</div>`:''; }
 function ago(t){ const s=(Date.now()-t)/1000; if(s<120) return '営業中'; if(s<3600) return Math.round(s/60)+'分前に営業'; if(s<86400) return Math.round(s/3600)+'時間前に営業'; return Math.round(s/86400)+'日前に営業'; }
@@ -1332,6 +1366,7 @@ SCREENS.balance=function(){
   const gf=S.guild?Math.round(S.today.sales*GUILDS.find(g=>g.id===S.guild).fee/100):0;
   return `<div class="c"><big>収支</big></div>
   <div class="tbl"><table class="t">
+    <tr><th>ランキング点数</th><td class="r"><b>${myPoint().toLocaleString()}</b>点</td></tr>
     <tr><th>本日の売上</th><td class="r">${yen(S.today.sales)}（${S.today.count}個）</td></tr>
     <tr><th>陳列棚維持費</th><td class="r">${yen(CASECOST[S.ncase])}</td></tr>
     <tr><th>商品保管費</th><td class="r">${yen(Math.round(hold))}</td></tr>
@@ -1629,7 +1664,7 @@ SCREENS.rank=function(){
   return `${im('logo','logo','width=350 height=70')}
   ${noticeHtml()}
   ${L&&T().msg?`<div class="flash">領主${esc(L.name)}より告知：${esc(T().msg)}</div>`:''}
-  <div class="c"><big>商人ランキング</big> <small>（総資金順・毎日の決算で1位が優勝）</small></div>
+  <div class="c"><big>商人ランキング</big> <small>（点数順・毎日の決算で1位が優勝）</small></div>
   ${rankTable()}
   <div class="tbl"><table class="t"><tr><th colspan="2">最新ニュース</th></tr>
   ${newsList().slice(0,6).map(n=>`<tr><td class="nw"><small>${fmtDay(n.d)} ${n.t}</small></td><td>${esc(n.m)}</td></tr>`).join('')||'<tr><td colspan=2>まだありません</td></tr>'}</table></div>`;
