@@ -402,14 +402,111 @@ async function saveNow(){
 function netErr(e){ console.warn(e); if(e&&e.code==='invalid_argument') NET.readonly=true; if(e&&e.code==='revoked'){ NET.online=false; } }
 function maxTime(){ return 72*60 + HOUSES[S.house].plus + DIG_TIME[digLevel(S.dig)]*60; }
 function day(){ return Math.floor(S.clock/1440)+1; }
-function fmtReal(ms){ const d=new Date(ms); return `${d.getMonth()+1}月${d.getDate()}日(${'日月火水木金土'[d.getDay()]}) ${d.getHours()}時`; }
+/* ---------- 山賊バルバロス襲来（レイドバトル）：3日ごと，21時（日本時間）から2時間 ---------- */
+const RAID_LEN=2*3600000, RAID_CD=3*60000;
+function next21(from){ const d=new Date(from); let c=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate(),12,0,0); while(c<from) c+=86400000; return c; }
+function raidActive(t){ t=t||T(); const r=t.raid; return !!(r&&!r.done&&Date.now()>=r.start&&Date.now()<r.end&&r.hp>0); }
+let raidChecking=false;
+async function checkRaid(){
+  if(!S||raidChecking) return; raidChecking=true;
+  try{
+    const now=Date.now(), t0=T();
+    const needSched=!t0.raidNext;
+    const needStart=t0.raidNext&&now>=t0.raidNext&&!(t0.raid&&!t0.raid.done);
+    const needEnd=t0.raid&&!t0.raid.done&&(now>=t0.raid.end||t0.raid.hp<=0);
+    if(needSched||needStart||needEnd){
+      const out=await townTx(t=>{
+        const now=Date.now(), logs=[]; let rew=null;
+        if(!t.raidNext){ t.raidNext=next21(now+24*3600000); logs.push(`山賊バルバロスが${fmtReal(t.raidNext)}ごろ，街を襲うらしい…`); }
+        if(t.raid&&!t.raid.done&&(now>=t.raid.end||t.raid.hp<=0)){
+          const r=t.raid; r.done=true; r.result=r.hp<=0?'win':'lose';
+          if(r.result==='win'){ t.safety=clamp(townVal(t,'safety',80)+15,0,100); rew={r:JSON.parse(JSON.stringify(r))}; logs.push(`山賊バルバロスを撃退した！ 街に平和が戻った（参加${Object.keys(r.dmg||{}).length}店）`); }
+          else { const lost=Math.round((t.fund||0)*0.3); t.fund=(t.fund||0)-lost; t.safety=clamp(townVal(t,'safety',80)-20,0,100); t.raidPenalty=r.id; logs.push(`山賊バルバロスに街を荒らされた…（街資金 −${yen(lost)}・全店の人気が下がった）`); }
+          t.raidNext=next21(r.end+48*3600000);
+          logs.push(`次の襲来は${fmtReal(t.raidNext)}ごろと噂されている`);
+        }
+        if(t.raidNext&&now>=t.raidNext&&!(t.raid&&!t.raid.done)){
+          const act=Math.max(1,(NET.online?playerShops().filter(p=>!p.idle).length+1:1));
+          const hp=Math.max(60000,40000*act);
+          t.raid={id:t.raidNext,start:t.raidNext,end:t.raidNext+RAID_LEN,hp,max:hp,buff:0,dmg:{},done:false};
+          t.raidNext=0; t.raidWarned=false;
+          logs.push(`【襲来】山賊バルバロスが攻めてきた！ ${fmtReal(t.raid.end)}までに撃退せよ！ 傭兵所で討伐・応援ができます`);
+        }
+        if(t.raidNext&&!t.raidWarned&&t.raidNext-now<=24*3600000){ t.raidWarned=true; logs.push(`【警報】山賊バルバロスの襲来は${fmtReal(t.raidNext)}！ みんなで迎え撃つ準備を！`); }
+        return {logs,rew};
+      });
+      if(out){ (out.logs||[]).forEach(m=>{ S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); });
+        if(out.rew) raidRewards(out.rew.r); softRender(); }
+    }
+    // 負けたときの罰（各自1回だけ）
+    const tp=T().raidPenalty; if(tp&&S.raidPen!==tp){ S.raidPen=tp; if((S.createdAt||0)<tp){ S.pop=clamp(S.pop-10,0,100); letter('大臣','kaominister','山賊バルバロスに街を荒らされ，お店の人気が下がってしまいました…。次こそ撃退しましょう。'); } save(); }
+  }catch(e){ console.warn(e); }
+  raidChecking=false;
+}
+function raidRewards(r){
+  const ents=Object.entries(r.dmg||{}); if(!ents.length) return;
+  const total=ents.reduce((a,[k,v])=>a+v.dmg,0)||1, pool=1000000+500000*ents.length;
+  const top=ents.slice().sort((a,b)=>b[1].dmg-a[1].dmg)[0][0];
+  ents.forEach(([k,v])=>{ const money=Math.round(pool*v.dmg/total)+(k===top?200000:0); const m={kind:'raidrew',money,exp:300,dig:k===top?2:1,mvp:k===top,dmg:v.dmg}; if(k===myKey()) applyRaidRew(m); else sendMail(k,m); });
+  news(`レイドのMVPは ${r.dmg[top].shop} ！`);
+}
+function applyRaidRew(m){ S.money+=m.money; S.bexp=(S.bexp||0)+(m.exp||0); S.dig+=m.dig||0; letter('大臣','kaominister',`山賊バルバロス撃退の報奨です。${m.mvp?'<MVP>':''}貢献 ${Math.round(m.dmg).toLocaleString()} により，賞金${yen(m.money)}・経験値${m.exp}・爵位ポイント+${m.dig}を授けます。`.replace('<MVP>','最も活躍した店として，')); save(); }
+function raidAdd(dmg,kind){
+  const key=myKey(), me={name:S.owner,shop:S.shop};
+  return townTx(t=>{ const r=t.raid; if(!r||r.done||Date.now()>=r.end||r.hp<=0) return 'closed';
+    const d=Math.round(dmg*(kind==='attack'?1+(r.buff||0)/100:1)); r.hp=Math.max(0,r.hp-d); r.dmg=r.dmg||{}; const x=r.dmg[key]||{...me,dmg:0}; x.dmg+=d; x.name=me.name; x.shop=me.shop; r.dmg[key]=x; return d; });
+}
+function raidAttack(){
+  if(!raidActive()){ setFlash('いまは襲来中ではありません',1); render(); return; }
+  const cd=(S.raidCd||0)-Date.now(); if(cd>0){ setFlash(`息を整えています。あと${Math.ceil(cd/1000)}秒で出撃できます`,1); render(); return; }
+  if(!spendTime(60)){ setFlash('持ち時間が足りません（1時間）',1); render(); return; }
+  S.raidCd=Date.now()+RAID_CD;
+  startBattle(9,null);
+}
+function raidCheer(kind){
+  if(!raidActive()) return;
+  if(kind==='money'){ if(S.money<30000){ setFlash('資金が足りません',1); render(); return; } S.money-=30000; }
+  else { if(!has(30,20)){ setFlash('ポーションが20個必要です',1); render(); return; } add(30,-20); }
+  const up=kind==='money'?5:3;
+  townTx(t=>{ const r=t.raid; if(!r||r.done) return 'closed'; r.buff=Math.min(100,(r.buff||0)+up); r.dmg=r.dmg||{}; const x=r.dmg[myKey()]||{name:S.owner,shop:S.shop,dmg:0}; x.dmg+=kind==='money'?6000:4000; x.cheer=(x.cheer||0)+1; r.dmg[myKey()]=x; return 'ok'; })
+    .then(r=>{ if(r==='ok'){ setFlash(`応援しました！ 討伐隊の攻撃力が${up}%上がった`); news(`${S.owner}（${S.shop}）が討伐隊を応援した！`); } else setFlash('いまは応援できません',1); save(); render(); });
+}
+function raidSoldiers(guard){
+  const n=Math.max(1,parseInt($('#rsN').value)||0);
+  if(guard){ if(!isLordMe()) return; townTx(t=>{ if((t.guard||0)<n) return 'poor'; t.guard-=n; return 'ok'; }).then(r=>{ if(r!=='ok'){ setFlash('護衛軍が足りません',1); render(); return; } raidAdd(n*60,'soldier').then(d=>{ setFlash(typeof d==='number'?`護衛軍${n}人が突撃！ ${d.toLocaleString()}のダメージ`:'いまは出せません',typeof d!=='number'); render(); }); }); return; }
+  if((S.soldiers||0)<n){ setFlash('兵士が足りません',1); render(); return; }
+  S.soldiers-=n; save();
+  raidAdd(n*60,'soldier').then(d=>{ if(typeof d!=='number'){ S.soldiers+=n; setFlash('いまは出せません',1); } else setFlash(`兵士${n}人が突撃！ ${d.toLocaleString()}のダメージを与えた`); save(); render(); });
+}
+function raidPanel(){
+  const t=T(), r=t.raid;
+  if(!raidActive(t)){
+    let h='';
+    if(r&&r.done&&Date.now()-r.end<12*3600000) h+=`<div class="flash ${r.result==='win'?'':'err'}">前回の襲来：<b>${r.result==='win'?'撃退成功！':'撃退失敗…'}</b>${raidTopHtml(r)}</div>`;
+    return h+`<div class="c note">山賊バルバロスは約3日ごと，<b>21時（日本時間）</b>に攻めてきて，2時間街に居座ります。みんなで力を合わせて撃退しましょう。</div>`;
+  }
+  const left=r.end-Date.now(), mine=(r.dmg||{})[myKey()], cd=Math.max(0,(S.raidCd||0)-Date.now());
+  return `<div class="tbl"><table class="t" style="width:100%">
+    <tr><td class="c" style="width:70px">${im('kaobal','','width=48 height=48')}<br><b>バルバロス</b></td><td>
+      <div class="hpbar e" style="width:100%;height:12px"><div style="width:${r.hp/r.max*100}%"></div></div>
+      <small>HP ${r.hp.toLocaleString()} / ${r.max.toLocaleString()}　残り${Math.floor(left/60000)}分</small><br>
+      <small>討伐隊の攻撃力 +${r.buff||0}%（応援）・あなたの貢献 ${mine?mine.dmg.toLocaleString():0}</small></td></tr></table></div>
+  <div class="c toolbar"><button onclick="raidAttack()" ${cd>0?'disabled':''} style="font-weight:bold">討伐に向かう（1時間）${cd>0?`<br><small>あと${Math.ceil(cd/1000)}秒</small>`:''}</button></div>
+  <div class="c"><big>応援する</big></div>
+  <div class="c toolbar"><button onclick="raidCheer('money')">声援（¥30,000）<br><small>攻撃力+5%</small></button> <button onclick="raidCheer('potion')">差し入れ（ポーション20）<br><small>攻撃力+3%</small></button></div>
+  <div class="c"><input type="number" id="rsN" value="${Math.min(50,S.soldiers||0)||10}" min="1" style="width:70px">人 <button onclick="raidSoldiers(false)">兵士を出す（1人60）</button>${isLordMe()?` <button onclick="raidSoldiers(true)">護衛軍を出す</button>`:''}</div>
+  <div class="c note">戦うのが苦手でも，応援や兵士で参加できます。撃退すると，貢献に応じて賞金・経験値・爵位ポイントがもらえます（MVPはさらにボーナス）。撃退できないと，街資金が奪われ全店の人気が下がります。</div>
+  ${raidTopHtml(r)}`;
+}
+function raidTopHtml(r){ const e=Object.values(r.dmg||{}).sort((a,b)=>b.dmg-a.dmg).slice(0,5); return e.length?`<div class="c"><small>貢献ランキング：${e.map((x,i)=>`${i+1}位 ${esc(x.shop)}（${Math.round(x.dmg).toLocaleString()}）`).join('・')}</small></div>`:''; }
+function fmtReal(ms){ const d=new Date(ms+9*3600000); return `${d.getUTCMonth()+1}月${d.getUTCDate()}日(${'日月火水木金土'[d.getUTCDay()]}) ${d.getUTCHours()}時`; }   // 日本時間で表示
 function balForecastHtml(){
-  const t=T();
-  if(t.bal) return `<div class="flash err" style="text-align:center">${im('kaobal','','width=32 height=32')} <b>山賊バルバロスが襲来中！</b>（手下${t.bal.n}人・護衛軍${t.guard||0}人）<br><small><a onclick="go('army')">傭兵所で討伐に参加する</a></small></div>`;
-  if(!t.balNext) return '';
-  const left=t.balNext-Date.now(); if(left<=0) return '';
+  const t=T(), r=t.raid;
+  if(raidActive(t)) return `<div class="flash err" style="text-align:center">${im('kaobal','','width=32 height=32')} <b>山賊バルバロス襲来中！</b> HP ${Math.round(r.hp/r.max*100)}%・残り${Math.floor((r.end-Date.now())/60000)}分<br><small><a onclick="go('army')">傭兵所で討伐・応援に参加する</a></small></div>`;
+  if(!t.raidNext) return '';
+  const left=t.raidNext-Date.now(); if(left<=0) return '';
   const h=Math.floor(left/3600000), soon=left<=24*3600000;
-  return `<div class="flash ${soon?'err':''}" style="text-align:center">${im('kaobal','','width=32 height=32')} ${soon?'<b>【警報】</b>':''}山賊バルバロスの襲来予定：<b>${fmtReal(t.balNext)}ごろ</b><br><small>あと約${h>=24?Math.floor(h/24)+'日'+(h%24)+'時間':h+'時間'}・いまの護衛軍 ${t.guard||0}人</small></div>`;
+  return `<div class="flash ${soon?'err':''}" style="text-align:center">${im('kaobal','','width=32 height=32')} ${soon?'<b>【警報】</b>':''}山賊バルバロスの襲来予定：<b>${fmtReal(t.raidNext)}</b>〜2時間<br><small>あと約${h>=24?Math.floor(h/24)+'日'+(h%24)+'時間':h+'時間'}・みんなで迎え撃とう</small></div>`;
 }
 function fmtDay(d){ if(d==null) return ''; d=Math.max(1,d)-1; const y=Math.floor(d/360)+1, mo=Math.floor(d%360/30)+1, dd=d%30+1; return `商暦${y}年${mo}月${dd}日`; }
 function clockStr(){ return `${fmtDay(day())} ${hms(S.clock%1440)}`; }
@@ -572,6 +669,7 @@ function processMail(){
       }
       else if(m.kind==='expose'){ S.pop=Math.round(S.pop/2); letter('大臣','kaominister','領主の命令で，お店に軍隊の取り締まりが入りました…。人気が大きく下がってしまいました。'); }
       else if(m.kind==='drres'){ applyDrRes(m); }
+      else if(m.kind==='raidrew'){ applyRaidRew(m); }
       else if(m.kind==='admin'){ applyAdmin(m); }
       else if(m.kind==='gpop'){ S.pop=clamp(S.pop+(m.amount||0),0,100); letter(who,face,`ギルド「${m.gname||''}」の広告が出されました。人気が${m.amount}上がりました！`); }
       else if(m.kind==='time'){ S.time=Math.min(maxTime(),S.time+(m.minutes||0)); letter(who,face,`求人「${m.title||'手伝い'}」を引き受けて，${hm(m.minutes||0)}働いてくれました。持ち時間が増えました。`); }
@@ -835,17 +933,16 @@ function townDaily(d){
     t.develop=clamp(townVal(t,'develop',50)+devem/25000-2,0,100);
     t.safety=clamp(townVal(t,'safety',80)+safem/25000-1+(tax<=5?2:tax<=10?0:tax<=15?-3:-6)+rr(-2,2),0,100);
     t.inPrev=t.inToday||0; t.outPrev=out; t.inToday=0;
-    // 山賊バルバロスの襲来：現実の時間でおよそ3日に1回。日時は前もって告知する
-    const now=Date.now(), H=3600000;
-    if(!t.balNext){ t.balNext=now+ (60+rnd(24))*H; t.balWarned=false; logs.push(`山賊バルバロスが${fmtReal(t.balNext)}ごろに攻めてくるらしい…`); }
-    if(!t.bal && t.balNext && !t.balWarned && t.balNext-now<=24*H){ t.balWarned=true; logs.push(`【警報】山賊バルバロスの軍勢が近づいている！ 襲来は${fmtReal(t.balNext)}ごろの見込み。護衛軍の備えを！`); }
-    if(!t.bal && t.balNext && now>=t.balNext){
-      const n=900+rnd(700)+Math.round((100-townVal(t,'safety',80))*15);
-      t.bal={n}; t.balNext=now+(64+rnd(16))*H; t.balWarned=false;
-      logs.push(`山賊バルバロスが${n}人の手下を率いて攻めてきた！ 次の襲来は${fmtReal(t.balNext)}ごろと噂されている`);
+    // NPCの店からも税をとる（オンライン。オフラインは売れるたびに計算済み）
+    if(NET.online){
+      const rateOf=k=>{ const m=(t.taxmode||{})[k], b=townVal(t,'tax',5); return m==='free'?0:m==='double'?b*2:b; };
+      const npcTax=npcOnline(d).reduce((a,n)=>a+Math.round(n.sale*rateOf(n.key)/100),0);
+      if(npcTax>0){ t.fund=(t.fund||0)+npcTax; t.inPrev=(t.inPrev||0)+npcTax; }
     }
-    // 治安がとても悪いと，予告なしに襲ってくることもある
-    if(!t.bal && townVal(t,'safety',80)<30 && Math.random()<0.15){ t.bal={n:600+rnd(900)}; logs.push(`治安の乱れに乗じて，山賊バルバロスが${t.bal.n}人で奇襲してきた！`); }
+    // 倍税・免税は街の治安にも響く
+    { const md=Object.values(t.taxmode||{}); const dbl=md.filter(x=>x==='double').length, fr=md.filter(x=>x==='free').length;
+      t.safety=clamp(townVal(t,'safety',80)-Math.min(5,dbl)+Math.min(2,fr*0.3),0,100); }
+    if(t.bal){ t.bal=null; }   // 旧方式の山賊軍は廃止（レイドに置き換え）
     if(!NET.online && isLordMe(t) && t.tax>=7 && Math.random()<0.3){ const n=pick(S.npcs); t.riot['npc:'+n.id]={n:100+rnd(400),name:n.owner,shop:n.shop}; logs.push(`${n.owner}（${n.shop}）が重税に反発して反乱を起こした！`); }
     return logs;
   }).then(logs=>{
@@ -1134,7 +1231,7 @@ const MENU=[
   ['自店',[['店内','main'],['ステータス','status'],['倉庫','stock'],['お掃除','sweep'],['収支','balance'],['手続','other']]],
   ['取引',[['市場','market'],['商店通り','street'],['求人','work'],['依頼所','req'],['競売所','auc'],['交換市','exch'],['質屋','pawn'],['宮殿','palace']]],
   ['情報',[['ランキング','rank'],['爵位名鑑','dignity'],['風景','town'],['新聞','log'],['図書館','library']]],
-  ['施設',[['領主邸','lord'],['傭兵所','army'],['荘園','manor'],['ギルド','guild'],['競技場','slime'],['住宅地','hometown'],['銀行','bank'],['しりとり広場','shiritori']]],
+  ['施設',[['領主邸','lord'],['傭兵所','army'],['荘園','manor'],['ギルド','guild'],['競技場','slime'],['住宅地','hometown'],['銀行','bank']]],
   ['交流',[['郵便局','letter'],['宅配便','dwarf'],['掲示板','bbs']]],
 ];
 let menuOpen=2;
@@ -1736,7 +1833,7 @@ function startBattle(mode,target){
     foe=mkFighter(p.owner||'？',p.st||{life:150,attack:50,defence:40,tech:50},p.btype||0,'kao'+(p.kao||1),null); foe.wname=p.weapon||'';
   }
   else if(mode===0){ npc=S.npcs[target]; foe=mkFighter(npc.owner,npc.st,npc.btype,'kao'+npc.kao,null); }
-  else if(mode===9){ foe={name:'山賊バルバロス',img:'kaobal',btype:10,hp:3000,max:3000,atk:420,def:180,tech:200,avoidPlus:0}; }
+  else if(mode===9){ foe={name:'山賊バルバロス',img:'kaobal',btype:10,hp:5000,max:5000,atk:380,def:160,tech:200,avoidPlus:0}; }
   else if(mode===4){
     mon=pick(TOP_MONS);
     foe={name:mon.name,img:'no-'+mon.img,fx:mon.fx,btype:mon.btype,hp:Math.max(10,Math.round(me.max*mon.hp/100)),atk:mon.atk,def:mon.def,tech:mon.tech,avoidPlus:0,top:1};
@@ -1788,6 +1885,7 @@ function act(a,d,log,col){
   }
 }
 function battleMenu(b){
+  if(b&&b.mode===9) return `<div class="c toolbar"><button onclick="go('army')" style="font-weight:bold">傭兵所に戻る（もう一度討伐・応援）</button></div>`;
   const tk=S.stock[80]||0, u=ITEMS[80].uses;
   const again=b&&b.mode!==9? `<button onclick="quickBattle(${b.mode},true)" ${tk&&b.mode!==9?'':'disabled'} style="font-weight:bold">同じ戦いをもう一度</button>`:'';
   return `<div class="c"><big>次の戦い</big>　<small>バトルチケット 残り<b>${tk}</b>枚・持ち時間 ${hm(S.time)}</small></div>
@@ -1806,12 +1904,10 @@ function quickBattle(mode,same){
 function finishBattle(){
   const b=BT; let res=[];
   if(b.mode===9){
-    const dealt=b.foe.max-Math.max(0,b.foe.hp);
-    const kill=Math.max(1,Math.round(dealt/6)+(b.win?50:0));
-    S.money+=Math.round(dealt*5);
-    res.push(`バルバロス軍の手下を${kill}人蹴散らした！ 戦功として${yen(dealt*5)}を得た`);
-    townTx(t=>{ if(!t.bal) return null; t.bal.n-=kill; if(t.bal.n<=0){ t.bal=null; if(rebelSum(t)<=0) t.riot={}; return 'win'; } return null; })
-      .then(r=>{ if(r==='win'){ S.dig+=2; S.money+=100000; letter('大臣','kaominister','山賊バルバロスの軍勢を壊滅させたそうですな！ 報奨金¥100,000と爵位ポイント+2を授けます。'); news(`${S.owner}（${S.shop}）が山賊バルバロスの反乱軍を壊滅させた！`); } save(); });
+    const dealt=Math.round((b.foe.max-Math.max(0,b.foe.hp))*3*(b.win?1.5:1));
+    S.bexp=(S.bexp||0)+30;
+    res.push(`バルバロスに挑んだ！${b.win?' <b class="blue">押し返した！（ダメージ1.5倍）</b>':''}`);
+    raidAdd(dealt,'attack').then(d=>{ const el=$('#btres'); if(typeof d==='number'){ if(el) el.innerHTML+=`<br><b class="red">レイドに ${d.toLocaleString()} のダメージを与えた！</b>（経験値+30）<br><a onclick="go('army')">傭兵所へ戻る</a>`; } else if(el) el.innerHTML+='<br>レイドは終わっていました。'; save(); });
   } else if(b.win){
     S.bwin++;
     res.push(`<b class="blue">${esc(b.me.name)}は${esc(b.foe.name)}に勝利した！！</b>`);
@@ -2379,10 +2475,11 @@ SCREENS.library=function(){
   <b>◆爵位と領主</b>　[宮殿]で王様の依頼を果たすと爵位が上がります。最初の領主は爵位の高い商人から選ばれ，税率を決めたり告知を出せます。[傭兵所]で兵士を雇って反乱を起こし，護衛軍を打ち破れば領主の座を奪えます。税が高いと治安が悪化し，山賊バルバロスが反乱を起こすことも…。<br>
   <b>◆領主の政治</b>　税は街資金に入り，領主が政務室で使い道を決めます。税率・開拓対策費（街の売れ行きが上がる）・治安対策費，店ごとの免税や２倍の税，軍隊による店舗の取り締まり，護衛軍の増強，荘園の特産品・地代・開墾，そして領主報酬の受け取りができます。だれでも街に資金援助できます。<br>
   <b>◆ギルドポイント（GP）</b>　加盟店の売上・寄付・依頼や求人・戦闘の勝利・クエストでGPが貯まります。リーダーと副リーダーはGPで，ギルド広告・看板商品（売れ行き+30%）・共同仕入れ（市場10%引き）・倉庫の拡張・義勇兵の派遣ができます。ギルドクエストを達成すると報酬，7日ごとのギルド対抗戦で上位になるとGPと賞金がもらえます。<br>
+  <b>◆山賊バルバロス（レイド）</b>　約3日ごとに，日本時間の21時から2時間，山賊バルバロスが街を襲います（予定日時はランキング画面などで予告）。傭兵所から討伐に向かうほか，声援・差し入れ・兵士で応援できます。撃退すると貢献に応じて賞金・経験値・爵位ポイント，失敗すると街資金が奪われ全店の人気が下がります。<br>
   <b>◆最上級の魔物</b>　バトルチケットで「最上級の魔物」に挑めます。とても強いですが，勝てば賞金（¥80万〜¥200万）がもらえます。戦闘のあとは，その画面からすぐ次の戦いに進めます。<br>
   <b>◆ドラゴンレース</b>　[競技場]の「ドラゴンレース」で，牧場でドラゴンを持ち（3頭まで），調教で能力を伸ばし，2日ごとの登竜レース・重賞レースに作戦を決めて出走させます。結果は能力と作戦で決まり，運は関係ありません。2勝以上して引退した竜は，仔竜を生めます。<br>
   <b>◆オンライン</b>　ランキング・商店通り・競売所・掲示板・新聞・領主はほかのプレイヤーと共通です。プレイヤーのお店で買い物をしたり，決闘・手紙・送金・贈り物もできます。時間は現実の1秒＝ゲーム内1分で進みます（1日＝24分）。<br>
-  <b>◆そのほか</b>　[銀行]で預金・借金，[荘園]で原料の定期収穫，[競技場]でスライムレース，[競売所]・[交換市]・[質屋]での取引，[宅配便]での輸入や送金，[しりとり広場]での小遣い稼ぎもできます。
+  <b>◆そのほか</b>　[銀行]で預金・借金，[荘園]で原料の定期収穫，[競技場]でスライムレース，[競売所]・[交換市]・[質屋]での取引，[宅配便]での輸入や送金，[宅配便]での貿易もできます。
   </td></tr></table></div>`;
 };
 
@@ -2394,7 +2491,7 @@ SCREENS.lord=function(){
   let face='kaominister';
   if(L){ if(L.key==='bal') face='kaobal'; else if(me) face='kao'+S.kao; else if(L.key.startsWith('npc:')&&S.npcs[+L.key.slice(4)]) face='kao'+S.npcs[+L.key.slice(4)].kao; else if(NET.shops[L.key]) face='kao'+(NET.shops[L.key].kao||1); }
   const tax=townVal(t,'tax',5), dev=townVal(t,'develop',50), saf=townVal(t,'safety',80);
-  const shops=townCands().filter(r=>!r.npc||!NET.online);
+  const shops=NET.online? ranking() : allShops();
   const byMode=m=>shops.filter(r=>(t.taxmode||{})[r.key]===m).map(r=>esc(r.shop)).join('，')||'なし';
   const nPl=NET.online?playerShops().length+1:S.npcs.length+1;
   const people=Math.round(5000+dev*300+saf*100+nPl*500);
@@ -2960,7 +3057,8 @@ function applyDrRes(m){
 SCREENS.army=function(){
   const st=myStat(), t=T(), me=isLordMe(), mine=(t.riot||{})[myKey()];
   let h=`<div class="c"><big>傭兵所</big></div>${balForecastHtml()}
-  ${talk('kaoarmy','傭兵隊長', rebelSum(t)>0?'反乱が起きているぞ！ 兵を率いて加勢するなら今だ！':'ここでは兵士を雇ったり，戦い方の訓練ができる。雇った兵士で反乱を起こせば，領主の座を奪うこともできるぞ。')}
+  ${talk('kaoarmy','傭兵隊長', raidActive(t)?'山賊バルバロスが来たぞ！ 腕に覚えのある者は討伐へ，そうでない者は応援を頼む！':rebelSum(t)>0?'反乱が起きているぞ！ 兵を率いて加勢するなら今だ！':'ここでは兵士を雇ったり，戦い方の訓練ができる。雇った兵士で反乱を起こせば，領主の座を奪うこともできるぞ。')}
+  ${raidActive(t)?'<div class="c"><big>山賊バルバロス襲来（レイド）</big></div>'+raidPanel()+'<hr>':''}
   <div class="tbl"><table class="t">
     <tr><th>雇っている兵士</th><td class="r"><b>${S.soldiers||0}人</b></td><td><small>給料 1人¥20/日</small></td></tr>
     <tr><th>護衛軍（領主側）</th><td class="r">${t.guard||0}人</td><td><small>領主：${t.lord?esc(t.lord.name):'なし'}</small></td></tr>
@@ -2982,7 +3080,7 @@ SCREENS.army=function(){
   <div class="tabs">${BTYPES.map((b,i)=>`<span class="${S.btype===i?'on':''}" onclick="S.btype=${i};save();render()">${b}</span>`).join('')}</div>
   <div class="c note">普通：攻撃中心／華麗：多彩／特攻：鋭い一撃／回避：よける／強化：能力上昇／堅固：守り重視／回復：歌で回復／命中：確実に当てる／必殺：強烈な一撃／技巧：気合技／奮戦：何でもこなす</div>
   <div class="c toolbar"><button onclick="train()">訓練する（2時間・¥2,000）</button> <button onclick="go('use',{no:80})">バトルチケットを使う（残り${S.stock[80]||0}枚）</button></div>`;
-  if(t.bal) h+=`<div class="c"><big>バルバロス討伐</big><br>${im('kaobal','','width=48 height=48')}<br>山賊バルバロス軍 残り${t.bal.n}人<br><button onclick="fightRebel()">自ら討伐に向かう（3時間）</button></div>`;
+  if(!raidActive(t)) h+=`<div class="c"><big>山賊バルバロス襲来（レイド）</big></div>${raidPanel()}`;
   return h;
 };
 function hireSoldier(){
@@ -3017,7 +3115,7 @@ function assault(){
   });
 }
 function train(){ if(S.money<2000){ setFlash('資金が足りません',1); render(); return; } if(!spendTime(120)){ setFlash('持ち時間が足りません',1); render(); return; } S.money-=2000; const k=pick(['life','attack','defence','tech']); const v=k==='life'?3+rnd(4):1+rnd(2); S.st[k]+=v; setFlash(`訓練した！${{life:'HP',attack:'攻撃',defence:'防御',tech:'技量'}[k]}が${v}上がった`); save(); render(); }
-function fightRebel(){ if(!T().bal) return; if(!spendTime(180)){ setFlash('持ち時間が足りません',1); render(); return; } startBattle(9,null); }
+function fightRebel(){ return raidAttack(); if(!spendTime(180)){ setFlash('持ち時間が足りません',1); render(); return; } startBattle(9,null); }
 
 SCREENS.hometown=function(){
   const tw=T(), saf=townVal(tw,'safety',80);
@@ -3365,6 +3463,7 @@ function tick(){
   if(saveTick%60===30) checkNetAuctions();
   if(saveTick%60===45) checkMyJobs();
   if(saveTick%20===10) checkDragonRaces();
+  if(saveTick%15===5) checkRaid();
 }
 (function boot(){
   S=load();
