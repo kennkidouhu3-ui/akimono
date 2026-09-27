@@ -948,6 +948,7 @@ function simulate(dt){
   });
   // 輸入
   S.imports=S.imports.filter(o=>{
+    if(o.money){ if(S.clock>=o.at){ S.money+=o.money; letter('住み込みドワーフ','kaodwarf',`${o.town}への輸出の代金 ${yen(o.money)} を受け取ってきたぞい。`); return false; } return true; }
     if(S.clock>=o.at){ add(o.no,o.n); letter('住み込みドワーフ','kaodwarf',`注文の${ITEMS[o.no].name}×${o.n}が届いたぞい。倉庫に入れておいたからの。`); return false; }
     return true;
   });
@@ -1532,11 +1533,12 @@ SCREENS.use=function(){
     const get = u.get.map(([n,x,p])=>`${iname(x)}×${n}${p<100?`<small>(${p}%)</small>`:''}`).join(' ')||(specialDesc(no,i)||'－');
     return `<tr><td>${esc(u.name)}${u.needexp?`<br><small class="${ex>=u.needexp?'':'red'}">熟練度${u.needexp}%以上</small>`:''}${u.job?`<br><small>${u.job}なら短縮</small>`:''}</td>
       <td><small>${need}</small></td><td><small>${get}</small></td><td class="nw">${hm(t)}</td>
-      <td><button ${ok?'':'disabled'} onclick="doUse(${no},${i})">${esc(u.action||'実行')}</button></td></tr>`;
+      <td class="nw">${ok&&canMulti(no,i)&&maxTimes(no,i)>=2?`<input type="number" id="mt${i}" value="${maxTimes(no,i)}" min="1" max="${maxTimes(no,i)}" style="width:56px">回<br><button onclick="useN(${no},${i})">${esc(u.action||'実行')}</button><br><small class="note">最大${maxTimes(no,i)}回</small>`:`<button ${ok?'':'disabled'} onclick="doUse(${no},${i})">${esc(u.action||'実行')}</button>`}</td></tr>`;
   }).join('');
   return `<div class="c"><big>${esc(it.name)}</big>を使う　<small>所持 ${S.stock[no]}${it.scale}・熟練度 ${ex.toFixed(1)}%</small></div>
   <div class="c"><small>${esc(it.info)}</small></div>
-  <div class="tbl"><table class="t"><tr><th>内容</th><th>必要</th><th>入手</th><th>時間</th><th></th></tr>${rows}</table></div>
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>内容</th><th>必要</th><th>入手</th><th>時間</th><th></th></tr>${rows}</table></div>
+  <div class="c note">回数を入れると，持ち時間と材料が続くかぎりまとめて実行します（最大99回）。</div>
   <div class="c"><a onclick="go('stock')">倉庫へ戻る</a></div>`;
 };
 function specialDesc(no,i){
@@ -1568,6 +1570,54 @@ function chooseTarget(no,i,t){
   modal(`<div><big>相手を選ぶ</big></div><div class="tbl"><table class="t">${rows.join('')}</table></div><div class="c"><button onclick="closeModal()">やめる</button></div>`);
 }
 function pickTarget(k,no,i,t){ const tg=REFS[k]; closeModal(); if(!spendTime(t)){ setFlash('持ち時間が足りません',1); render(); return; } execUse(no,i,tg); }
+// まとめて使えるか（戦闘・相手を選ぶもの・陳列棚キット・転職は1回ずつ）
+function canMulti(no,i){ if(no===80||no===63||no===78) return false; if((no===62&&i===1)||(no===65&&i<2)) return false; return true; }
+function maxTimes(no,i){
+  const u=ITEMS[no].uses[i]; let m=99;
+  u.use.forEach(([n,x])=>{ m=Math.min(m,Math.floor((S.stock[x]||0)/n)); });
+  const t=useTime(u,no); m=Math.min(m,Math.floor(S.time/Math.max(1,t)));
+  return Math.max(0,m);
+}
+function useN(no,i){
+  const mx=maxTimes(no,i); const n=clamp(parseInt(($('#mt'+i)||{}).value)||1,1,mx||1);
+  if(n<=1){ doUse(no,i); return; }
+  execUseMulti(no,i,n);
+}
+function execUseMulti(no,i,times){
+  const it=ITEMS[no], u=it.uses[i];
+  const m0=S.money, p0=S.pop, gets={}, extra={};
+  let done=0, fails=0, totalT=0, lost=0;
+  for(let k=0;k<times;k++){
+    if(!u.use.every(([n,x])=>has(x,n))) break;
+    if(u.needexp && (S.exp[no]||0)<u.needexp) break;
+    const tt=useTime(u,no); if(S.time<tt) break;
+    S.time-=tt; totalT+=tt;
+    u.use.forEach(([n,x])=>add(x,-n));
+    const ex=S.exp[no]||0, msgs=[];
+    special(no,i,null,msgs);
+    msgs.forEach(m=>{ const key=m.replace(/[¥\d,]+/g,'…'); extra[key]=(extra[key]||0)+1; });
+    let got=false;
+    u.get.forEach(([n,x,p])=>{ const prob=Math.min(100,p+ex/5); if(Math.random()*100<prob){ const kk=Math.max(1,Math.round(n*rr(0.8,1.2))); add(x,kk); gets[x]=(gets[x]||0)+kk; got=true; } });
+    if(u.get.length&&!got) fails++;
+    if(u.exp) S.exp[no]=Math.min(100,ex+u.exp);
+    done++;
+    if(u.func==='lostbook'&&has(no)){
+      const pr=(u.param||'10,10').split(',').map(Number);
+      if(Math.random()*100 < pr[1]*(1-(S.exp[no]||0)/200)){ add(no,-1); lost++; if(!has(no)) break; }
+    }
+  }
+  const lines=[`【${esc(u.name)}】を <b>${done}回</b> 行いました（持ち時間 ${hm(totalT)}）`];
+  Object.keys(gets).forEach(x=>lines.push(`${iname(+x)}×${gets[x]}を手に入れた`));
+  if(fails) lines.push(`<small class="note">うち${fails}回は失敗…</small>`);
+  const dm=S.money-m0; if(dm) lines.push(`資金 ${dm>0?'+':''}${yen(dm)}`);
+  const dp=Math.round(S.pop-p0); if(dp) lines.push(`人気 ${dp>0?'+':''}${dp}`);
+  Object.keys(extra).slice(0,3).forEach(k=>{ if(!/稼いだ|人気/.test(k)) lines.push(`<small>${k}${extra[k]>1?`（×${extra[k]}）`:''}</small>`); });
+  if(lost) lines.push(`<span class="red">${esc(it.name)}が${lost}回ボロボロになってしまった…</span>`);
+  if(done<times) lines.push(`<small class="note">材料か持ち時間がなくなったので，${done}回で終わりました。</small>`);
+  setFlash(lines.join('<br>'));
+  save();
+  if(has(no)) go('use',{no}); else go('stock');
+}
 function execUse(no,i,target){
   const it=ITEMS[no], u=it.uses[i];
   u.use.forEach(([n,x])=>add(x,-n));
@@ -2983,24 +3033,63 @@ function sendLetter(){
 }
 SCREENS.dwarf=function(){
   const tab=sub.t||0;
-  const tabs=`<div class="tabs">${['輸入予約','宅配便を出す','送金'].map((t,i)=>`<span class="${tab===i?'on':''}" onclick="sub.t=${i};render()">${t}</span>`).join('')}</div>`;
+  const tabs=`<div class="tabs">${['輸入予約','宅配便を出す','送金','貿易'].map((t,i)=>`<span class="${tab===i?'on':''}" onclick="sub.t=${i};render()">${t}</span>`).join('')}</div>`;
   let h=`<div class="c"><big>宅配便</big></div>${talk('kaodwarf','住み込みドワーフ','ドワーフ宅配便は由緒ある組織じゃ。ワシに頼んでくれれば，いつでも商品を送り届けるぞい。')}${tabs}`;
   if(tab===0){
     const pool=ITEMLIST.filter(it=>it.price>0&&it.price<=20000&&['原料','薬','剣','鎧','盾','杖','アクセサリ'].includes(it.type));
     h+=`<div class="c note">遠くの街から品物を取り寄せるぞい。代金は標準価格の1.5倍，届くまで8時間じゃ。</div>
     <div class="c"><select id="imNo">${pool.map(it=>`<option value="${it.no}">${esc(it.name)}（${yen(Math.round(it.price*1.5))}）</option>`).join('')}</select> ×<input type="number" id="imN" value="10" min="1" max="500" style="width:60px"> <button onclick="orderImport()">注文する（20分）</button></div>
-    <div class="tbl"><table class="t"><tr><th>${im('dwfsign4','i16')}到着待ち</th><th>到着まで</th></tr>${S.imports.map(o=>`<tr><td>${iname(o.no)}×${o.n}</td><td>${hm(o.at-S.clock)}</td></tr>`).join('')||'<tr><td colspan=2 class="c">なし</td></tr>'}</table></div>`;
+    <div class="tbl"><table class="t"><tr><th>${im('dwfsign4','i16')}到着待ち</th><th>到着まで</th></tr>${S.imports.map(o=>`<tr><td>${o.money?`${esc(o.town)}への輸出代金 ${yen(o.money)}`:iname(o.no)+'×'+o.n}</td><td>${hm(o.at-S.clock)}</td></tr>`).join('')||'<tr><td colspan=2 class="c">なし</td></tr>'}</table></div>`;
   } else if(tab===1){
     const mine=Object.keys(S.stock).map(Number).filter(n=>ITEMS[n]&&ITEMS[n].price>0);
     h+=`<div class="c note">街の商人には品物を買い取ってもらえるぞい（専門の品なら標準価格の9割，それ以外は6割）。★印のプレイヤーには贈り物として届けるぞい。</div>
     <div class="c">宛先 <select id="dwTo">${recipOpts()}</select><br>
     ${mine.length?`<select id="dwNo">${mine.map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${S.stock[n]}）</option>`).join('')}</select> ×<input type="number" id="dwN" value="1" min="1" style="width:60px"> <button onclick="sendDwarf()">送る（20分）</button>`:'<small>送れる品がありません</small>'}</div>`;
+  } else if(tab===3){
+    h+=tradeHtml();
   } else {
     h+=`<div class="c note">資金の50%まで，手数料なしで他の店主に送金できるぞい。仲良くなると贈り物が届くこともあるそうな。</div>
     <div class="c">宛先 <select id="smTo">${recipOpts()}</select> <input type="number" id="smA" value="10000" style="width:100px"> <button onclick="sendMoney()">送金する</button></div>`;
   }
   return h;
 };
+const TRADE_TOWNS=['港町ポルト','砂漠の都サハラン','雪国ノルド','花の都フローラ','鉱山都市ガルド'];
+function tradeDeals(){
+  const d=curDay(), r=mul32(d*97+17);
+  const pool=ITEMLIST.filter(it=>it.price>0&&it.price<=30000&&!['本','地図'].includes(it.type)&&it.no!==80&&it.no!==11);
+  const buy=[], sell=[];
+  for(let i=0;i<4;i++){ const it=pool[Math.floor(r()*pool.length)]; const q=Math.max(1,Math.round(rr0(r,20000,120000)/it.price)); buy.push({id:'b'+i,town:TRADE_TOWNS[Math.floor(r()*5)],no:it.no,n:q,price:Math.round(it.price*q*(0.75+r()*0.35))}); }
+  for(let i=0;i<4;i++){ const it=pool[Math.floor(r()*pool.length)]; sell.push({id:'s'+i,town:TRADE_TOWNS[Math.floor(r()*5)],no:it.no,max:Math.max(1,Math.round(rr0(r,30000,200000)/it.price)),unit:Math.round(it.price*(1.25+r()*0.55))}); }
+  return {d,buy,sell};
+}
+function rr0(r,a,b){ return a+r()*(b-a); }
+function tradeHtml(){
+  const T0=tradeDeals(); S.trade=S.trade&&S.trade.d===T0.d?S.trade:{d:T0.d,done:{}};
+  return `<div class="c note">遠くの街とドワーフの船便で貿易するぞい。品ぞろえは毎日入れ替わるから，こまめに見るのじゃ。</div>
+  <div class="c"><big>貿易品リスト（他の街から買う）</big></div>
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>品物</th><th>街</th><th>値段</th><th></th></tr>
+  ${T0.buy.map(x=>`<tr><td>${iname(x.no)}×${x.n}<br><small>標準計${yen(ITEMS[x.no].price*x.n)}</small></td><td><small>${x.town}</small></td><td class="r nw">${yen(x.price)}</td><td>${S.trade.done[x.id]?'<small class="note">売約済</small>':`<button onclick="tradeBuy('${x.id}')">買う</button>`}</td></tr>`).join('')}
+  </table></div><div class="c note">届くまで6時間かかります。</div>
+  <div class="c"><big>他の街へ輸出</big></div>
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>求められている品</th><th>街</th><th>買取値</th><th></th></tr>
+  ${T0.sell.map(x=>{ const left=x.max-(S.trade.done[x.id]||0); return `<tr><td>${iname(x.no)}<br><small>あと${left}個まで・所持${S.stock[x.no]||0}</small></td><td><small>${x.town}</small></td><td class="r nw">1個 ${yen(x.unit)}<br><small>標準${yen(ITEMS[x.no].price)}</small></td><td class="nw">${left>0&&has(x.no)?`<input type="number" id="tx${x.id}" value="${Math.min(left,S.stock[x.no])}" min="1" max="${Math.min(left,S.stock[x.no])}" style="width:56px"><button onclick="tradeSell('${x.id}')">輸出</button>`:'<small class="note">－</small>'}</td></tr>`; }).join('')}
+  </table></div><div class="c note">代金は6時間後に届きます。輸出には持ち時間20分かかります。</div>`;
+}
+function tradeBuy(id){
+  const x=tradeDeals().buy.find(y=>y.id===id); if(!x||S.trade.done[id]) return;
+  if(S.money<x.price){ setFlash('資金が足りません',1); render(); return; }
+  if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; }
+  S.money-=x.price; S.trade.done[id]=1; S.imports.push({no:x.no,n:x.n,at:S.clock+360});
+  setFlash(`${x.town}から${ITEMS[x.no].name}×${x.n}を${yen(x.price)}で買い付けました（6時間後に到着）`); save(); render();
+}
+function tradeSell(id){
+  const x=tradeDeals().sell.find(y=>y.id===id); if(!x) return;
+  const left=x.max-(S.trade.done[id]||0), n=Math.min(left,S.stock[x.no]||0,Math.max(1,parseInt($('#tx'+id).value)||1)); if(n<=0) return;
+  if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; }
+  add(x.no,-n); S.trade.done[id]=(S.trade.done[id]||0)+n; const pay=x.unit*n;
+  S.imports.push({money:pay,at:S.clock+360,town:x.town,no:x.no,n});
+  setFlash(`${x.town}へ${ITEMS[x.no].name}×${n}を輸出しました（代金${yen(pay)}は6時間後に届きます）`); save(); render();
+}
 function orderImport(){ const no=+$('#imNo').value, n=clamp(parseInt($('#imN').value)||1,1,500); const c=Math.round(ITEMS[no].price*1.5)*n; if(S.money<c){ setFlash('資金が足りません',1); render(); return; } if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; } S.money-=c; S.imports.push({no,n,at:S.clock+480}); setFlash(`${ITEMS[no].name}×${n}を${yen(c)}で注文しました`); save(); render(); }
 function sendDwarf(){
   const r=recip($('#dwTo').value), no=+$('#dwNo').value, n=Math.min(S.stock[no]||0,Math.max(1,parseInt($('#dwN').value)||1)); if(!n) return;
