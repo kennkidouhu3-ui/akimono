@@ -1156,19 +1156,28 @@ function render(){
   if(route==='town') startTownAnim();
   if(route==='main') setupShopView();
 }
+let RANK_PAGE=0;
+function rankPager(total,per){
+  const pages=Math.ceil(total/per); if(pages<=1) return '';
+  return `<div class="tabs">${Array.from({length:pages},(_,i)=>`<span class="${RANK_PAGE===i?'on':''}" onclick="RANK_PAGE=${i};render()">${i*per+1}〜${Math.min(total,(i+1)*per)}位</span>`).join('')}</div>`;
+}
 function rankTable(limit){
-  const rk=ranking().slice(0,limit||100);
+  const PER=5, all=ranking(); const pages=Math.max(1,Math.ceil(all.length/PER)); if(RANK_PAGE>=pages) RANK_PAGE=0;
+  const off=RANK_PAGE*PER; const rk=all.slice(off,off+PER);
+  const myIdx=all.findIndex(r=>r.me);
   if(!rk.length) return '<div class="c note">まだ参加しているお店はありません。</div>';
   const L=T().lord;
   const updown=(r,i)=>{ if(r.npc) return '<span class="npctag">NPC</span>'; if(!r.rkY) return '<small>(新)</small>'; const d=r.rkY-(i+1); return `<small>(${d===0?'→':d>0?'<span class=red>↑'+d+'</span>':'<span class=blue>↓'+(-d)+'</span>'})</small>`; };
   const winIcons=w=>w? (w<=5? im('rank1','i16').repeat(w) : im('rank1','i16')+'×'+w) : '';
   const expd=r=>r.st?`【${BTYPES[r.btype]||'普通'}】${Math.round((r.st.attack+r.st.defence+r.st.tech)/3)}exp　${im('ability-no-4','i16')}${r.st.life} ${im('ability-no-1','i16')}${r.st.attack} ${im('ability-no-2','i16')}${r.st.defence} ${im('ability-no-3','i16')}${r.st.tech}`:'';
-  return `<div class="tbl"><table class="t" style="width:100%"><tr><th>点数</th><th>店長</th><th>お店</th></tr>
+  const pager=rankPager(all.length,PER);
+  const mine=myIdx>=0&&(myIdx<off||myIdx>=off+PER)?`<div class="c"><small>あなたのお店は <b>${myIdx+1}位</b> です <a onclick="RANK_PAGE=${Math.floor(myIdx/PER)};render()">（表示する）</a></small></div>`:'';
+  return `${mine}<div class="tbl"><table class="t" style="width:100%"><tr><th>点数</th><th>店長</th><th>お店</th></tr>
   ${rk.map((r,i)=>{
     const cs=(r.cases||[]).filter(c=>c&&c.stock>0&&ITEMS[c.no]);
     const first=cs[0];
     return `<tr ${r.me?'style="font-weight:bold"':''}>
-    <td class="r nw"><b>No.${i+1}</b>${i<6?im('rank'+(i+1),'i16'):''}<br>${updown(r,i)}<br><b class="red">${(r.point||0).toLocaleString()}</b>点</td>
+    <td class="r nw"><b>No.${off+i+1}</b>${off+i<6?im('rank'+(off+i+1),'i16'):''}<br>${updown(r,off+i)}<br><b class="red">${(r.point||0).toLocaleString()}</b>点</td>
     <td class="c">${kao(r.kao)}<br>${im((JOBS[r.job]||JOBS['']).img,'','width=20 height=30')}</td>
     <td>${guildIcon(r.guild)}${r.me?'<span class="span">'+esc(r.shop)+'</span>':(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${r.npc?' <span class="npctag">NPC</span>':''}${r.strong?' <span class="npctag strong">強豪</span>':''}${L&&L.key===r.key?' <small class="red">[領主]</small>':''} ${winIcons(r.wins)}
       <br><small>${esc(r.name)}・${(JOBS[r.job]||JOBS['']).name}・${digHtml(r.dig)}${r.soldiers?'・兵'+r.soldiers:''}</small>
@@ -1178,7 +1187,7 @@ function rankTable(limit){
       <br><small>今期売上 <b>${yen(r.sale||0)}</b>　資金 <b>${yen(r.money)}</b>　熟練 ${Math.floor((r.exps||0)/10)}%</small>
       ${r.st?`<br><small>${expd(r)}</small>`:''}
       ${r.t&&!r.me&&!String(r.key).startsWith('npc:')?`<br><small class="note">${r.idle?'<span class=red>休業中</span>・':''}${ago(r.t)}</small>`:''}</td></tr>`; }).join('')}
-  </table></div>
+  </table></div>${pager}
   <div class="c note"><span class="npctag">NPC</span> は街のコンピューター商人です（表彰されても賞品はもらえません）。<br>点数＝人気 × 利益（直近3日の純利益と今期の売上）× 優勝回数による補正。優勝を重ねるほど点数は伸びにくくなります。</div>`;
 }
 function resultsHtml(){
@@ -1195,17 +1204,15 @@ function titleScreen(){
   ${im('logo','logo','width=350 height=70')}
   <div class="c">${netBadge()}</div>
   ${noticeHtml()}
-  ${T().lord&&T().msg?`<div class="flash">領主${esc(T().lord.name)}より告知：${esc(T().msg)}</div>`:''}
-  <div class="c"><big>商人ランキング</big></div>
-  ${NET.online? rankTable(10) : `<div class="c note">${NET.ready?'オフラインのため，ランキングはお店を開くと表示されます。':'オンラインに接続しています…'}</div>`}
-  <hr>
   ${useLogin()?`<div class="c"><big>ログイン</big></div>
   <div class="tbl"><table class="t">
     <tr><th>店主名</th><td><input id="lgName" maxlength="10" autocomplete="username"></td></tr>
     <tr><th>パスワード</th><td><input type="password" id="lgPw" maxlength="30" autocomplete="current-password" onkeydown="if(event.key==='Enter'&&!event.isComposing)doLogin()"></td></tr>
   </table></div>
   <div class="c"><button onclick="doLogin()">店へ入る</button></div>
-  <hr><div class="c"><big>新しくお店を開く</big></div>`:''}
+  <div class="c"><small>はじめての方は <a onclick="document.getElementById('newshop').scrollIntoView({behavior:'smooth'})">新しくお店を開く</a></small></div>
+  <hr>`:''}
+  <div id="newshop" class="c"><big>新しくお店を開く</big></div>
   <div class="c" style="margin-bottom:6px">剣と魔法の街で，自分だけのお店を開こう。</div>
   <div class="tbl"><table class="t">
     <tr><th>店主名</th><td><input id="nOwner" maxlength="10" placeholder="例：アルト"></td></tr>
@@ -1215,6 +1222,10 @@ function titleScreen(){
     <tr><th>顔</th><td><div style="max-height:170px;overflow:auto;max-width:420px">${faces}</div></td></tr>
   </table></div>
   <div class="c"><button onclick="startNew()" style="padding:4px 20px" ${NET.ready?'':'disabled'}>${NET.ready?'新装開店':'接続中…'}</button></div>
+  <hr>
+  ${T().lord&&T().msg?`<div class="flash">領主${esc(T().lord.name)}より告知：${esc(T().msg)}</div>`:''}
+  <div class="c"><big>商人ランキング</big></div>
+  ${NET.online? rankTable() : `<div class="c note">${NET.ready?'オフラインのため，ランキングはお店を開くと表示されます。':'オンラインに接続しています…'}</div>`}
   <hr>
   <div class="c note">${NET.online?'進行はオンラインに保存されます。':'進行はこのブラウザに保存されます。'}</div>
   ${NET.ready&&!NET.online&&!window.claude?`<div class="c"><a onclick="modal(onlineSettingsHtml()+'<div class=c><button onclick=closeModal()>閉じる</button></div>')">オンライン設定（管理者向け）</a></div>`:''}`;
