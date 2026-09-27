@@ -441,8 +441,8 @@ function allShops(){
       point:Math.round(calcPoint(n.pop,n.wins,(n.ph||[]).reduce((a,b)=>a+b,0),n.today*0.45)*(n.mult||1)),sale:n.today,exps:0,comment:'',found:S.createdAt,rkY:n.rankY||0,st:totalStat(n.st,null),btype:n.btype,cases:n.cases})));
 }
 const NPC_BASE_DAY=Math.floor((Date.UTC(2026,8,26)-EPOCH)/1000/1440)+1;
-function npcOnline(){
-  const D=Math.floor(nowClock()/1440)+1, dd=Math.max(0,D-NPC_BASE_DAY);
+function npcOnline(atDay){
+  const D=atDay||Math.floor(nowClock()/1440)+1, dd=Math.max(0,D-NPC_BASE_DAY);
   return NPCDEF.map((d,i)=>{
     const s1=Math.sin(D/6+i*1.9), s2=Math.sin(D/2.7+i*0.7), s3=Math.sin(D/17+i*2.3);
     const pop=d.strong? clamp(Math.round(d.popBase+10*s1+4*s2),50,99) : clamp(Math.round(48+22*s1+8*s2),5,95);
@@ -471,6 +471,13 @@ function ranking(){
   if(NET.online){ const a=playerShops().concat(npcOnline()); if(S) a.push(mySummaryRow()); return a.sort(by); }
   return S? allShops().sort(by) : [];
 }
+function rankingAt(d){
+  // 表彰用：その日の終わりの点数で全員をそろえて比べる
+  const a=playerShops().filter(r=>!r.idle).map(r=>{ const s=NET.shops[r.uid]||{}; return {...r,point:(s.ptEnd&&s.ptEnd.d===d)?s.ptEnd.v:r.point}; });
+  a.push(...npcOnline(d));
+  if(S){ const me=mySummaryRow(); me.point=(S.ptEnd&&S.ptEnd.d===d)?S.ptEnd.v:me.point; a.push(me); }
+  return a.sort((x,y)=>(y.point-x.point)||(y.money-x.money));
+}
 function townCands(){ return NET.online? ranking().filter(r=>!r.npc) : allShops(); }
 
 /* ---------- オンライン ---------- */
@@ -496,7 +503,7 @@ function shopSummary(){
     pop:Math.round(S.pop),dig:S.dig,wins:S.wins,soldiers:S.soldiers,guild:S.guild,house:S.house,
     st:{life:t.life,attack:t.attack,defence:t.defence,tech:t.tech},btype:S.btype,weapon:w,
     cases:S.cases.map(c=>c&&has(c.no)?{no:c.no,price:c.price,stock:S.stock[c.no]}:null),day:day(),t:Date.now(),
-    point:myPoint(),sale:S.today.sales,exps:Math.round(expSum()),found:S.createdAt||0,rkY:S.rankY||0};
+    point:myPoint(),ptEnd:S.ptEnd||null,sale:S.today.sales,exps:Math.round(expSum()),found:S.createdAt||0,rkY:S.rankY||0};
 }
 let lastPub='', pubBusy=false;
 async function publishShop(force){
@@ -793,7 +800,7 @@ function townDaily(d){
     t._gwar=gwar;
     // 商人ランキングの表彰（オンライン：街で1回だけ行う）
     if(NET.online){
-      const rk=ranking().filter(r=>!r.idle);
+      const rk=rankingAt(d);
       if(rk.length>=2){
         const top=rk.slice(0,3).map((r,i)=>({key:r.key,name:r.name,shop:r.shop,point:r.point||0,rank:i+1,npc:!!r.npc}));
         t.results={d,top};
@@ -971,6 +978,7 @@ function closeAuction(a){
    ============================================================ */
 function settle(){
   const d=day()-1;
+  S.ptEnd={d,v:myPoint()};   // この日の最終点数（表彰はこの値で比べる）
   let cost=CASECOST[S.ncase]||0;
   let hold=0; for(const no in S.stock){ const it=ITEMS[no]; if(it) hold+=upkeep(it)*S.stock[no]; }
   hold=Math.round(hold);
