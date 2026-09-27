@@ -401,6 +401,15 @@ async function saveNow(){
 function netErr(e){ console.warn(e); if(e&&e.code==='invalid_argument') NET.readonly=true; if(e&&e.code==='revoked'){ NET.online=false; } }
 function maxTime(){ return 72*60 + HOUSES[S.house].plus + DIG_TIME[digLevel(S.dig)]*60; }
 function day(){ return Math.floor(S.clock/1440)+1; }
+function fmtReal(ms){ const d=new Date(ms); return `${d.getMonth()+1}月${d.getDate()}日(${'日月火水木金土'[d.getDay()]}) ${d.getHours()}時`; }
+function balForecastHtml(){
+  const t=T();
+  if(t.bal) return `<div class="flash err" style="text-align:center">${im('kaobal','','width=32 height=32')} <b>山賊バルバロスが襲来中！</b>（手下${t.bal.n}人・護衛軍${t.guard||0}人）<br><small><a onclick="go('army')">傭兵所で討伐に参加する</a></small></div>`;
+  if(!t.balNext) return '';
+  const left=t.balNext-Date.now(); if(left<=0) return '';
+  const h=Math.floor(left/3600000), soon=left<=24*3600000;
+  return `<div class="flash ${soon?'err':''}" style="text-align:center">${im('kaobal','','width=32 height=32')} ${soon?'<b>【警報】</b>':''}山賊バルバロスの襲来予定：<b>${fmtReal(t.balNext)}ごろ</b><br><small>あと約${h>=24?Math.floor(h/24)+'日'+(h%24)+'時間':h+'時間'}・いまの護衛軍 ${t.guard||0}人</small></div>`;
+}
 function fmtDay(d){ if(d==null) return ''; d=Math.max(1,d)-1; const y=Math.floor(d/360)+1, mo=Math.floor(d%360/30)+1, dd=d%30+1; return `商暦${y}年${mo}月${dd}日`; }
 function clockStr(){ return `${fmtDay(day())} ${hms(S.clock%1440)}`; }
 function news(t){ S.news.unshift({d:day(),t:hms(S.clock%1440),m:t}); S.news=S.news.slice(0,80); if(NET.online && (t.includes(S.shop)||t.includes(S.owner))) newsNet(t); }
@@ -429,8 +438,10 @@ function calcPoint(pop,wins,profit3,todayNet){
   if(p<1) p=1/(2-p);
   return Math.max(0,Math.floor(Math.round(pop*100)*r*p));
 }
-function myProfit3(){ return S.hist.slice(0,3).reduce((a,h)=>a+(h.sales-h.cost),0); }
-function myTodayNet(){ return S.today.sales-(S.today.tax||0); }
+// 元の商人物語と同じく「利益」＝売上−税−支出（仕入れなど）で点数が決まる
+function addPay(v){ if(!S) return; S.today.pay=(S.today.pay||0)+Math.round(v); }
+function myProfit3(){ return S.hist.slice(0,3).reduce((a,h)=>a+(h.sales-h.cost-(h.pay||0)),0); }
+function myTodayNet(){ return S.today.sales-(S.today.tax||0)-(S.today.pay||0); }
 function myPoint(){ return calcPoint(S.pop,S.wins,myProfit3(),myTodayNet()); }
 function expSum(){ return Object.values(S.exp||{}).reduce((a,b)=>a+b,0); }
 function mySummaryRow(){ const st=myStat(); return {me:true,key:myKey(),name:S.owner,shop:S.shop,money:S.money+S.bank-S.debt,dig:S.dig,kao:S.kao,job:S.job,pop:S.pop,wins:S.wins,guild:S.guild,soldiers:S.soldiers,t:Date.now(),
@@ -549,7 +560,7 @@ function processMail(){
       S.mailDone.push(id); S.mailDone=S.mailDone.slice(-300); changed=true;
       const who=m.fromName||'だれか', face='kao'+(m.fromKao||1), note=m.note?m.note+'：':'';
       if(m.kind==='buy'){ const it=ITEMS[m.no]; if(it){ const k=Math.min(S.stock[m.no]||0,m.n); if(k>0) add(m.no,-k); const g=m.price*m.n; S.money+=g; S.today.sales+=g; S.today.count+=m.n; S.today.items[m.no]=(S.today.items[m.no]||0)+m.n; S.trash+=m.n*0.25; letter(who,face,`${m.fromShop||''}の${who}さんが，${it.name}を${m.n}${it.scale}お買い上げくださいました。（${yen(g)}）`); } }
-      else if(m.kind==='money'){ S.money+=m.amount; letter(who,face,`${note}${yen(m.amount)}が届きました。`); }
+      else if(m.kind==='money'){ S.money+=m.amount; if(/返金/.test(m.note||'')) addPay(-m.amount); letter(who,face,`${note}${yen(m.amount)}が届きました。`); }
       else if(m.kind==='item'){ if(ITEMS[m.no]){ add(m.no,m.n); letter(who==='だれか'?'住み込みドワーフ':who,m.note?'kaodwarf':face,`${note}${ITEMS[m.no].name}×${m.n}が届いたぞい。倉庫に入れておいたからの。`); } }
       else if(m.kind==='letter'){ letter(who,face,m.body||''); }
       else if(m.kind==='duel'){ if(m.win){ S.pop=clamp(S.pop-3,0,100); letter(who,face,`${who}に決闘を挑まれ，敗れてしまった…（人気が下がった）`); } else { S.pop=clamp(S.pop+3,0,100); letter(who,face,`${who}に決闘を挑まれたが，見事返り討ちにした！（人気が上がった）`); } }
@@ -822,7 +833,17 @@ function townDaily(d){
     t.develop=clamp(townVal(t,'develop',50)+devem/25000-2,0,100);
     t.safety=clamp(townVal(t,'safety',80)+safem/25000-1+(tax<=5?2:tax<=10?0:tax<=15?-3:-6)+rr(-2,2),0,100);
     t.inPrev=t.inToday||0; t.outPrev=out; t.inToday=0;
-    if(!t.bal && t.safety<50 && Math.random()<0.35){ t.bal={n:600+rnd(1400)}; logs.push(`山賊バルバロスが${t.bal.n}人の手下を率いて反乱を起こした！`); }
+    // 山賊バルバロスの襲来：現実の時間でおよそ3日に1回。日時は前もって告知する
+    const now=Date.now(), H=3600000;
+    if(!t.balNext){ t.balNext=now+ (60+rnd(24))*H; t.balWarned=false; logs.push(`山賊バルバロスが${fmtReal(t.balNext)}ごろに攻めてくるらしい…`); }
+    if(!t.bal && t.balNext && !t.balWarned && t.balNext-now<=24*H){ t.balWarned=true; logs.push(`【警報】山賊バルバロスの軍勢が近づいている！ 襲来は${fmtReal(t.balNext)}ごろの見込み。護衛軍の備えを！`); }
+    if(!t.bal && t.balNext && now>=t.balNext){
+      const n=900+rnd(700)+Math.round((100-townVal(t,'safety',80))*15);
+      t.bal={n}; t.balNext=now+(64+rnd(16))*H; t.balWarned=false;
+      logs.push(`山賊バルバロスが${n}人の手下を率いて攻めてきた！ 次の襲来は${fmtReal(t.balNext)}ごろと噂されている`);
+    }
+    // 治安がとても悪いと，予告なしに襲ってくることもある
+    if(!t.bal && townVal(t,'safety',80)<30 && Math.random()<0.15){ t.bal={n:600+rnd(900)}; logs.push(`治安の乱れに乗じて，山賊バルバロスが${t.bal.n}人で奇襲してきた！`); }
     if(!NET.online && isLordMe(t) && t.tax>=7 && Math.random()<0.3){ const n=pick(S.npcs); t.riot['npc:'+n.id]={n:100+rnd(400),name:n.owner,shop:n.shop}; logs.push(`${n.owner}（${n.shop}）が重税に反発して反乱を起こした！`); }
     return logs;
   }).then(logs=>{
@@ -970,7 +991,7 @@ function closeAuction(a){
     else { add(a.no,a.n); letter('競売所','kaoamza',`${ITEMS[a.no].name}×${a.n}は入札がありませんでした。倉庫へお返しします。`); }
   } else {
     if(a.bidder===S.owner){ add(a.no,a.n); letter('競売所','kaoamza',`おめでとうございます！${ITEMS[a.no].name}×${a.n}を${yen(a.price)}で落札しました。倉庫へお届けしました。`); }
-    else if(a.myBid){ S.money+=a.myBid; }
+    else if(a.myBid){ S.money+=a.myBid; addPay(-a.myBid); }
   }
 }
 
@@ -1026,7 +1047,7 @@ function settle(){
   if(plots>0 && rentPer>0){ const rent=plots*rentPer; S.money-=rent; townTx(t=>{ t.fund=(t.fund||0)+rent; t.inToday=(t.inToday||0)+rent; }); mo.push(`（地代 ${yen(rent)} を納めました）`); }
   if(mo.length) letter('荘園の管理人','kaokeeper','今日の収穫です：'+mo.join('，'));
   // 履歴
-  S.hist.unshift({d,sales:S.today.sales,count:S.today.count,cost:cost+hold+gfee+upk+Math.round(S.today.tax||0),pop:Math.round(S.pop)});
+  S.hist.unshift({d,sales:S.today.sales,count:S.today.count,cost:cost+hold+gfee+upk+Math.round(S.today.tax||0),pay:Math.round(S.today.pay||0),pop:Math.round(S.pop)});
   S.hist=S.hist.slice(0,20);
   // NPC
   S.npcs.forEach(n=>{
@@ -1071,7 +1092,7 @@ function settle(){
   if(d%1===0) refreshBarter();
   refreshAuction();
   if(d%7===0){ S.king={idx:(S.king.idx+1)%KING_REQ.length,done:0}; news('王様から新たな依頼が出された'); }
-  S.today={sales:0,count:0,items:{},tax:0};
+  S.today={sales:0,count:0,items:{},tax:0,pay:0};
   // 掲示板のNPC発言
   if(!NET.online && Math.random()<0.7){ const n=pick(S.npcs); S.bbs.unshift({d:day(),name:n.owner,shop:n.shop,kao:n.kao,m:pick(['今日はよく売れたなぁ','市場の地図がなかなか入荷しないね','ミスリル鉱山で大物を掘り当てた！','競技場のスライム，3番が強いらしい','誰か鉄塊を安く譲ってくれないかな','バトルチケットで魔物退治してきたよ','領主の税金がちょっと高くないか？','新作の杖を仕入れました！ぜひ見に来てね']),}); S.bbs=S.bbs.slice(0,40); }
   news(`${fmtDay(d)}の決算が行われました`);
@@ -1188,14 +1209,14 @@ function rankTable(limit){
       ${r.st?`<br><small>${expd(r)}</small>`:''}
       ${r.t&&!r.me&&!String(r.key).startsWith('npc:')?`<br><small class="note">${r.idle?'<span class=red>休業中</span>・':''}${ago(r.t)}</small>`:''}</td></tr>`; }).join('')}
   </table></div>${pager}
-  <div class="c note"><span class="npctag">NPC</span> は街のコンピューター商人です（表彰されても賞品はもらえません）。<br>点数＝人気 × 利益（直近3日の純利益と今期の売上）× 優勝回数による補正。優勝を重ねるほど点数は伸びにくくなります。</div>`;
+  <div class="c note"><span class="npctag">NPC</span> は街のコンピューター商人です（表彰されても賞品はもらえません）。<br>点数＝人気 × 利益（直近3日と今期の利益。利益＝売上−税−経費−仕入れ）× 優勝回数による補正。優勝を重ねるほど点数は伸びにくくなります。</div>`;
 }
 function resultsHtml(){
   const r=NET.online?T().results:null; if(!r||!r.top||!r.top.length) return '';
   const md=['🥇','🥈','🥉'], pz=['爵位+1pt',yen(PRIZE[1]),yen(PRIZE[2])];
   return `<div class="flash" style="text-align:center"><b>${fmtDay(r.d)}の表彰</b><br>${r.top.map((x,i)=>`${md[i]} ${esc(x.shop)}${x.npc?' <span class="npctag">NPC</span>':''} <small>${(x.point||0).toLocaleString()}点・${pz[i]}</small>`).join('<br>')}</div>`;
 }
-function noticeHtml(){ const n=T().notice, dk=T().duke; const dh=dk&&dk.msg?`<div class="flash" style="border-color:#b8860b;background:#fffbe6">${im('dig7','i16')}<b>大公 ${esc(dk.name)}</b>のお言葉：${esc(dk.msg)}</div>`:''; return dh+(n?`<div class="flash" style="border-color:#d0402a;background:#fff4ee"><b>お知らせ</b>：${esc(n).replace(/\n/g,'<br>')}</div>`:''); }
+function noticeHtml(){ const n=T().notice, dk=T().duke; const bf=balForecastHtml(); const dh=dk&&dk.msg?`<div class="flash" style="border-color:#b8860b;background:#fffbe6">${im('dig7','i16')}<b>大公 ${esc(dk.name)}</b>のお言葉：${esc(dk.msg)}</div>`:''; return bf+dh+(n?`<div class="flash" style="border-color:#d0402a;background:#fff4ee"><b>お知らせ</b>：${esc(n).replace(/\n/g,'<br>')}</div>`:''); }
 function ago(t){ const s=(Date.now()-t)/1000; if(s<120) return '営業中'; if(s<3600) return Math.round(s/60)+'分前に営業'; if(s<86400) return Math.round(s/3600)+'時間前に営業'; return Math.round(s/86400)+'日前に営業'; }
 function openShop(k){ const key=REFS[k]; if(key==null) return; if(String(key).startsWith('npc:')) go('street',{id:+String(key).slice(4)}); else go('street',{uid:key}); }
 function titleScreen(){
@@ -1845,17 +1866,19 @@ SCREENS.balance=function(){
     ${S.popLog?`<tr><th>前回の人気の変化</th><td class="r"><small>売り方 ${S.popLog.sell>0?'+':''}${S.popLog.sell}／自然減 ${S.popLog.keep}／ごみ ${S.popLog.dirty}${S.popLog.guild?'／ギルド +'+S.popLog.guild:''}<br>合計 <b>${S.popLog.total>0?'+':''}${S.popLog.total}</b></small></td></tr>`:''}
     <tr><th>ランキング点数</th><td class="r"><b>${myPoint().toLocaleString()}</b>点</td></tr>
     <tr><th>本日の売上</th><td class="r">${yen(S.today.sales)}（${S.today.count}個）</td></tr>
+    <tr><th>本日の仕入れ・支出</th><td class="r red">−${yen(S.today.pay||0)}</td></tr>
+    <tr><th>本日の利益</th><td class="r"><b>${yen(myTodayNet())}</b> <small>（売上−税−仕入れ）</small></td></tr>
     <tr><th>陳列棚維持費</th><td class="r">${yen(CASECOST[S.ncase])}</td></tr>
     <tr><th>商品保管費</th><td class="r">${yen(Math.round(hold))}</td></tr>
     <tr><th>ギルド会費</th><td class="r">${yen(gf)}</td></tr>
-    <tr><th>領主への税</th><td class="r">${yen(Math.round(S.today.tax||0))}（${taxModeName(myKey())}・${taxRateFor(myKey())}%）</td></tr>
+    <tr><th>税（街資金へ）</th><td class="r">${yen(Math.round(S.today.tax||0))}（${taxModeName(myKey())}・${taxRateFor(myKey())}%）</td></tr>
     <tr><th>爵位年金</th><td class="r blue">+${yen(DIG_PENSION[digLevel(S.dig)])}（${DIGNITY[digLevel(S.dig)]}）</td></tr>
     <tr><th>兵士の給料</th><td class="r">${yen((S.soldiers||0)*20)}（${S.soldiers||0}人）</td></tr>
     <tr><th>資金</th><td class="r">${yen(S.money)}</td></tr><tr><th>預金／借金</th><td class="r">${yen(S.bank)} ／ ${yen(S.debt)}</td></tr>
   </table></div>
   <div class="c"><big>決算履歴</big></div>
-  <div class="tbl"><table class="t"><tr><th>日</th><th>売上</th><th>販売数</th><th>経費</th><th>人気</th></tr>
-  ${S.hist.map(h=>`<tr><td class="c nw"><small>${fmtDay(h.d)}</small></td><td class="r">${yen(h.sales)}</td><td class="r">${h.count}</td><td class="r">${yen(h.cost)}</td><td class="r">${h.pop}%</td></tr>`).join('')||'<tr><td colspan=5 class="c">まだ決算はありません</td></tr>'}
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>日</th><th>売上</th><th>経費<br><small>仕入れ</small></th><th>利益</th><th>人気</th></tr>
+  ${S.hist.map(h=>{ const pr=h.sales-h.cost-(h.pay||0); return `<tr><td class="c nw"><small>${fmtDay(h.d)}</small></td><td class="r">${yen(h.sales)}<br><small>${h.count}個</small></td><td class="r">${yen(h.cost)}<br><small>${yen(h.pay||0)}</small></td><td class="r ${pr<0?'red':'blue'}">${yen(pr)}</td><td class="r">${h.pop}%</td></tr>`; }).join('')||'<tr><td colspan=5 class="c">まだ決算はありません</td></tr>'}
   </table></div>
   ${S.today.count?`<div class="c"><big>本日売れた商品</big></div><div class="tbl"><table class="t">${Object.keys(S.today.items).map(n=>`<tr><td>${iname(+n)}</td><td class="r">${S.today.items[n]}</td></tr>`).join('')}</table></div>`:''}`;
 };
@@ -1929,7 +1952,7 @@ function buyMarket(n){
   const t=Math.round(20+q/3), unit=Math.round(it.price*(100-myDisc())/100), c=unit*q;
   if(S.money<c){ setFlash('資金が足りません',1); render(); return; }
   if(!spendTime(t)){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
-  S.money-=c; S.market[n]-=q; add(n,q);
+  S.money-=c; addPay(c); S.market[n]-=q; add(n,q);
   setFlash(`${it.name}を${q}${it.scale}仕入れました（${yen(c)}${myDisc()?`・爵位割引${myDisc()}%`:''}・${hm(t)}）`); save(); render();
 }
 
@@ -1996,7 +2019,7 @@ function buyPlayer(k,i){
   const cost=c.price*q, t=Math.round(20+q/3);
   if(S.money<cost){ setFlash('資金が足りません',1); render(); return; }
   if(!spendTime(t)){ setFlash('持ち時間が足りません',1); render(); return; }
-  S.money-=cost; add(c.no,q);
+  S.money-=cost; addPay(cost); add(c.no,q);
   const np=JSON.parse(JSON.stringify(p)); np.cases[i].stock-=q; NET.shops[uid]=np;
   sendMail(uid,{kind:'buy',no:c.no,n:q,price:c.price});
   setFlash(`${p.shop}で${ITEMS[c.no].name}を${q}${ITEMS[c.no].scale}買いました（${yen(cost)}）`); save(); render();
@@ -2006,7 +2029,7 @@ function buyNpc(id,i){
   const cost=c.price*q, t=Math.round(20+q/3);
   if(S.money<cost){ setFlash('資金が足りません',1); render(); return; }
   if(!spendTime(t)){ setFlash('持ち時間が足りません',1); render(); return; }
-  S.money-=cost; n.money+=cost; c.stock-=q; add(c.no,q); n.friend++;
+  S.money-=cost; addPay(cost); n.money+=cost; c.stock-=q; add(c.no,q); n.friend++;
   setFlash(`${n.shop}で${ITEMS[c.no].name}を${q}${ITEMS[c.no].scale}買いました（${yen(cost)}）`); save(); render();
 }
 const NPC_JOBS=[
@@ -2159,7 +2182,7 @@ async function bidNet2(id,v){
     else if(r.ret==='closed'){ setFlash('この競りは締め切られました',1); }
     else if(r.ret==='low'){ setFlash(`入札額が低すぎます（${yen(r.min)}以上）`,1); }
     else {
-      S.money-=v;
+      S.money-=v; addPay(v);
       if(r.prev){ if(r.prev.u===NET.uid) S.money+=r.prev.p; else sendMail(r.prev.u,{kind:'money',amount:r.prev.p,note:'競売所でより高い入札があったため返金'}); }
       setFlash(`${yen(v)}で入札しました。締切まで最高額なら落札です（上回られたら返金されます）`);
     }
@@ -2193,7 +2216,7 @@ function bid2(a,v,min){
   if(S.money<v){ setFlash('資金が足りません',1); render(); return; }
   // 前回の自分の入札を返金
   if(a.myBid){ S.money+=a.myBid; }
-  S.money-=v; a.myBid=v; a.price=v; a.bidder=S.owner;
+  S.money-=v; addPay(v); a.myBid=v; a.price=v; a.bidder=S.owner;
   setFlash(`${yen(v)}で入札しました。締切まで最高額なら落札です（他の人に上回られたら返金されます）`); save(); render();
 }
 function listAuc(){
@@ -2234,7 +2257,7 @@ SCREENS.pawn=function(){
   </table></div>`;
 };
 function pawnSell(){ const no=+$('#pwNo').value, n=Math.min(S.stock[no]||0,Math.max(1,parseInt($('#pwN').value)||1)); if(!n) return; add(no,-n); const g=Math.floor(ITEMS[no].price*0.4)*n; S.money+=g; S.pawn[no]=(S.pawn[no]||0)+n; setFlash(`${ITEMS[no].name}×${n}を${yen(g)}で売りました`); save(); render(); }
-function pawnBuy(no){ const p=Math.ceil(ITEMS[no].price*1.3); if(S.money<p){ setFlash('資金が足りません',1); render(); return; } S.money-=p; S.pawn[no]--; add(no,1); setFlash(`${ITEMS[no].name}を買いました`); save(); render(); }
+function pawnBuy(no){ const p=Math.ceil(ITEMS[no].price*1.3); if(S.money<p){ setFlash('資金が足りません',1); render(); return; } S.money-=p; addPay(p); S.pawn[no]--; add(no,1); setFlash(`${ITEMS[no].name}を買いました`); save(); render(); }
 SCREENS.palace=function(){
   const worth=S.money+S.bank-S.debt;
   const [msg,no,cnt]=KING_REQ[S.king.idx];
@@ -2346,7 +2369,7 @@ SCREENS.lord=function(){
   const people=Math.round(5000+dev*300+saf*100+nPl*500);
   const purpose= tax<3?'人民解放':((t.guard||0)*20*2>(t.devem||0)+(t.safem||0))?'軍事重視':'内政重視';
   const bar=(v,col)=>`<div class="hpbar" style="width:120px;display:inline-block"><div style="width:${v}%;background:${col}"></div></div> ${Math.round(v)}`;
-  let h=`<div class="c"><big>領主邸</big></div>`;
+  let h=`<div class="c"><big>領主邸</big></div>${balForecastHtml()}`;
   h+= L? talk(face,'領主 '+L.name,`わしが領主の${esc(L.name)}（${esc(L.shop)}）じゃ。${L.key==='bal'?'この街はオレの物だ。ぐわっはっは！':''}${t.msg?'<br>告知：'+esc(t.msg):''}`) : talk('kaominister','大臣','現在，領主の座は空位です。次の決算で，爵位が最も高い商人が領主に選ばれます。');
   h+=`<div class="c"><big>内政状況</big></div>
   <div class="tbl"><table class="t" style="width:100%">
@@ -2495,7 +2518,7 @@ function guildTx(id,fn){
     if(r==='delete') return {del:true,ret:r};
     if(r==='nochange') return {ret:r};
     return {set:g,ret:r};
-  }).then(r=>r.ret).catch(e=>{ netErr(e); return 'error'; });
+  }).then(r=>{ if(r.set) NET.guilds[id]=r.set; else if(r.del) delete NET.guilds[id]; return r.ret; }).catch(e=>{ netErr(e); return 'error'; });
 }
 function syncGuild(){
   if(!S||!NET.online) return;
@@ -2589,7 +2612,8 @@ function guildOnline(){
     }
   } else if(gTab===5 && my){
     const st=my.store||{}, used=Object.values(st).reduce((a,b)=>a+b,0), cap=my.storeCap||100;
-    const mine=Object.keys(S.stock).map(Number).filter(n=>ITEMS[n]&&ITEMS[n].price>0);
+    const eqd=Object.values(S.eq||{}).filter(Boolean);
+    const mine=Object.keys(S.stock).map(Number).filter(n=>ITEMS[n]&&ITEMS[n].price>0&&!(eqd.includes(n)&&S.stock[n]<=1)).sort((a,b)=>S.stock[b]-S.stock[a]);
     h+=`<div class="c"><big>ギルド倉庫</big>　<small>${used}/${cap}個</small></div>
     <div class="tbl"><table class="t" style="width:100%"><tr><th>品物</th><th>数</th><th></th></tr>${Object.entries(st).filter(([n,q])=>q>0&&ITEMS[n]).map(([n,q])=>`<tr><td>${iname(+n)}</td><td class="r">${q}</td><td class="nw"><input type="number" id="gsO${n}" value="1" min="1" max="${q}" style="width:60px"><button onclick="gStoreOut(${n})">取り出す</button></td></tr>`).join('')||'<tr><td colspan=3 class="c">空っぽです</td></tr>'}</table></div>
     <div class="c"><big>預ける</big></div>
@@ -2636,14 +2660,18 @@ function gpDefend(){
       render(); });
   });
 }
+let GBUSY=false;
 function gStoreIn(){
+  if(GBUSY) return;
   const no=+$('#gsNo').value, n=Math.min(S.stock[no]||0,Math.max(1,parseInt($('#gsN').value)||1)); if(!n) return;
-  add(no,-n); save();
-  guildTx(S.guild,g=>{ const st=g.store=g.store||{}; const used=Object.values(st).reduce((a,b)=>a+b,0); if(used+n>(g.storeCap||100)) return 'full'; st[no]=(st[no]||0)+n; }).then(r=>{ if(r==='full'||r==='error'||r==='gone'){ add(no,n); setFlash(r==='full'?'倉庫がいっぱいです':'預けられませんでした',1); } else setFlash(`${ITEMS[no].name}×${n}を預けました`); save(); render(); });
+  GBUSY=true; add(no,-n); save();
+  guildTx(S.guild,g=>{ const st=g.store=g.store||{}; const used=Object.values(st).reduce((a,b)=>a+b,0); if(used+n>(g.storeCap||100)) return 'full'; st[no]=(st[no]||0)+n; return 'ok'; }).then(r=>{ GBUSY=false; if(r!=='ok'){ add(no,n); setFlash(r==='full'?`倉庫がいっぱいです（あと${Math.max(0,(myGuildDoc()?myGuildDoc().storeCap||100:100)-Object.values((myGuildDoc()||{}).store||{}).reduce((a,b)=>a+b,0))}個まで）`:'預けられませんでした。通信状態を確認してもう一度お試しください',1); } else setFlash(`${ITEMS[no].name}×${n}を預けました`); save(); render(); });
 }
 function gStoreOut(no){
+  if(GBUSY) return;
   const n=Math.max(1,parseInt($('#gsO'+no).value)||1);
-  guildTx(S.guild,g=>{ const st=g.store=g.store||{}; if((st[no]||0)<n) return 'short'; st[no]-=n; if(st[no]<=0) delete st[no]; }).then(r=>{ if(r==='short'){ setFlash('倉庫の数が足りません',1); } else if(r!=='error'&&r!=='gone'){ add(no,n); setFlash(`${ITEMS[no].name}×${n}を取り出しました`); save(); } render(); });
+  GBUSY=true;
+  guildTx(S.guild,g=>{ const st=g.store=g.store||{}; if((st[no]||0)<n) return 'short'; st[no]-=n; if(st[no]<=0) delete st[no]; return 'ok'; }).then(r=>{ GBUSY=false; if(r==='short'){ setFlash('倉庫の数が足りません（ほかの人が先に取り出したかもしれません）',1); } else if(r==='ok'){ add(no,n); setFlash(`${ITEMS[no].name}×${n}を取り出しました`); save(); } else setFlash('取り出せませんでした。通信状態を確認してもう一度お試しください',1); render(); });
 }
 function me4g(){ return {name:S.owner,shop:S.shop,kao:S.kao,t:Date.now()}; }
 async function guildCreate(){
@@ -2900,7 +2928,7 @@ function applyDrRes(m){
 
 SCREENS.army=function(){
   const st=myStat(), t=T(), me=isLordMe(), mine=(t.riot||{})[myKey()];
-  let h=`<div class="c"><big>傭兵所</big></div>
+  let h=`<div class="c"><big>傭兵所</big></div>${balForecastHtml()}
   ${talk('kaoarmy','傭兵隊長', rebelSum(t)>0?'反乱が起きているぞ！ 兵を率いて加勢するなら今だ！':'ここでは兵士を雇ったり，戦い方の訓練ができる。雇った兵士で反乱を起こせば，領主の座を奪うこともできるぞ。')}
   <div class="tbl"><table class="t">
     <tr><th>雇っている兵士</th><td class="r"><b>${S.soldiers||0}人</b></td><td><small>給料 1人¥20/日</small></td></tr>
@@ -3090,7 +3118,7 @@ function tradeBuy(id){
   const x=tradeDeals().buy.find(y=>y.id===id); if(!x||S.trade.done[id]) return;
   if(S.money<x.price){ setFlash('資金が足りません',1); render(); return; }
   if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; }
-  S.money-=x.price; S.trade.done[id]=1; S.imports.push({no:x.no,n:x.n,at:S.clock+360});
+  S.money-=x.price; addPay(x.price); S.trade.done[id]=1; S.imports.push({no:x.no,n:x.n,at:S.clock+360});
   setFlash(`${x.town}から${ITEMS[x.no].name}×${x.n}を${yen(x.price)}で買い付けました（6時間後に到着）`); save(); render();
 }
 function tradeSell(id){
@@ -3101,7 +3129,7 @@ function tradeSell(id){
   S.imports.push({money:pay,at:S.clock+360,town:x.town,no:x.no,n});
   setFlash(`${x.town}へ${ITEMS[x.no].name}×${n}を輸出しました（代金${yen(pay)}は6時間後に届きます）`); save(); render();
 }
-function orderImport(){ const no=+$('#imNo').value, n=clamp(parseInt($('#imN').value)||1,1,500); const c=Math.round(ITEMS[no].price*1.5)*n; if(S.money<c){ setFlash('資金が足りません',1); render(); return; } if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; } S.money-=c; S.imports.push({no,n,at:S.clock+480}); setFlash(`${ITEMS[no].name}×${n}を${yen(c)}で注文しました`); save(); render(); }
+function orderImport(){ const no=+$('#imNo').value, n=clamp(parseInt($('#imN').value)||1,1,500); const c=Math.round(ITEMS[no].price*1.5)*n; if(S.money<c){ setFlash('資金が足りません',1); render(); return; } if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; } S.money-=c; addPay(c); S.imports.push({no,n,at:S.clock+480}); setFlash(`${ITEMS[no].name}×${n}を${yen(c)}で注文しました`); save(); render(); }
 function sendDwarf(){
   const r=recip($('#dwTo').value), no=+$('#dwNo').value, n=Math.min(S.stock[no]||0,Math.max(1,parseInt($('#dwN').value)||1)); if(!n) return;
   if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; }
