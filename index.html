@@ -1229,7 +1229,7 @@ function refreshAuction(){
    ============================================================ */
 const MENU=[
   ['自店',[['店内','main'],['ステータス','status'],['倉庫','stock'],['お掃除','sweep'],['収支','balance'],['手続','other']]],
-  ['取引',[['市場','market'],['商店通り','street'],['求人','work'],['依頼所','req'],['競売所','auc'],['交換市','exch'],['質屋','pawn'],['宮殿','palace']]],
+  ['取引',[['市場','market'],['商店通り','street'],['求人','work'],['依頼所','req'],['競売所','auc'],['交換市','exch'],['貿易','trade'],['質屋','pawn'],['宮殿','palace']]],
   ['情報',[['ランキング','rank'],['爵位名鑑','dignity'],['風景','town'],['新聞','log'],['図書館','library']]],
   ['施設',[['領主邸','lord'],['傭兵所','army'],['荘園','manor'],['ギルド','guild'],['競技場','slime'],['住宅地','hometown'],['銀行','bank']]],
   ['交流',[['郵便局','letter'],['宅配便','dwarf'],['掲示板','bbs']]],
@@ -1405,7 +1405,7 @@ SCREENS.town=function(){
     <div class="town-grid">
       ${townCell('荘園','manor',im('housez','bld'))}
       ${townCell('競売所','auc',im('church','bld','style="max-height:92px"'))}
-      ${townCell('宅配便','dwarf',im('dwfsign1','','width=32 height=32')+im('house2b','bld','style="max-height:70px"'))}
+      ${townCell('貿易・宅配便','trade',im('dwfsign1','','width=32 height=32')+im('house2b','bld','style="max-height:70px"'))}
       ${townCell('住宅地','hometown',im(HOUSES[S.house].img,'bld'))}
     </div>
     <div class="street"></div>
@@ -2062,7 +2062,7 @@ SCREENS.market=function(){
   ${nos.map(n=>{ const it=ITEMS[n], st=S.market[n]||0; return `<tr><td class="nm">${iname(n)}<br><small>${esc(it.info)}</small>${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}<br><small class="note">維持費 ${upkeepStr(it)}</small></td><td class="r nw">${yen(it.price)}</td><td class="r">${st}</td><td class="r">${S.stock[n]||0}</td>
      <td class="c">${st?`<input type="number" id="mq${n}" value="1" min="1" max="${st}" style="width:52px"><button onclick="buyMarket(${n})">買う</button>`:'<small>品切れ</small>'}</td></tr>`; }).join('')||'<tr><td colspan=5 class="c">この種類は市場に入荷しません</td></tr>'}
   </table></div>
-  <div class="c note">原料や上級の装備は市場に入荷しません。地図や本を使って自分で調達・製作しましょう。</div>`;
+  <div class="c note">原料や上級の装備は市場に入荷しません。地図や本を使って自分で調達・製作するか，<a onclick="go('trade')">貿易</a>で遠くの街から買い付けましょう。</div>`;
 };
 function buyMarket(n){
   const it=ITEMS[n]; const q=Math.min(S.market[n]||0,Math.max(1,parseInt($('#mq'+n).value)||1));
@@ -2491,7 +2491,7 @@ SCREENS.lord=function(){
   let face='kaominister';
   if(L){ if(L.key==='bal') face='kaobal'; else if(me) face='kao'+S.kao; else if(L.key.startsWith('npc:')&&S.npcs[+L.key.slice(4)]) face='kao'+S.npcs[+L.key.slice(4)].kao; else if(NET.shops[L.key]) face='kao'+(NET.shops[L.key].kao||1); }
   const tax=townVal(t,'tax',5), dev=townVal(t,'develop',50), saf=townVal(t,'safety',80);
-  const shops=NET.online? ranking() : allShops();
+  const shops=lordShops();
   const byMode=m=>shops.filter(r=>(t.taxmode||{})[r.key]===m).map(r=>esc(r.shop)).join('，')||'なし';
   const nPl=NET.online?playerShops().length+1:S.npcs.length+1;
   const people=Math.round(5000+dev*300+saf*100+nPl*500);
@@ -2523,7 +2523,7 @@ SCREENS.lord=function(){
   return h;
 };
 function lordOffice(t,shops){
-  const opts=shops.filter(r=>!r.me||true).map(r=>`<option value="${R(r.key)}">${esc(r.shop)}（${taxModeName(r.key)}）</option>`).join('');
+  const opts=shops.map(r=>`<option value="${R(r.key)}">${esc(r.shop)}${r.npc?'［NPC］':''}（${taxModeName(r.key)}）</option>`).join('');
   const fundOK=(t.fund||0)>=1000000, guardOK=(t.guard||0)>=200;
   return `<hr><div class="c"><big>政務室</big></div>
   ${talk('kaominister','大臣','これはこれは領主様。ご機嫌うるわしゅうございます。政治のことなど大臣にお任せくださればいいのに，ご熱心ですな。ふん。')}
@@ -2555,6 +2555,7 @@ function lordOffice(t,shops){
   <div class="c">${(t.payDay===day())?'<small class="note">今日の報酬は受け取り済みです</small>':`<button onclick="lordPay()">今日の報酬を受け取る（街資金の5%・最大¥300,000）</button>`}</div>`;
 }
 function lordNews(m){ news(m); }
+function lordShops(){ return NET.online? ranking() : allShops(); }
 function lordMsg(){ const msg=$('#lMsg').value.trim(); townTx(t=>{ t.msg=msg; }).then(()=>{ setFlash(msg?'告知を変更しました':'告知を撤回しました'); render(); }); }
 function lordInside(){
   const tax=+$('#lTax').value, dev=clamp(parseInt($('#lDev').value)||0,0,500000), saf=clamp(parseInt($('#lSaf').value)||0,0,500000);
@@ -2562,14 +2563,14 @@ function lordInside(){
   townTx(t=>{ t.tax=tax; t.devem=dev; t.safem=saf; }).then(()=>{ if(tax!==old) lordNews(`領主${S.owner}は街の税率を${tax}%に${tax>old?'引き上げ':'引き下げ'}ました`); setFlash('街の内政方針を変更しました'); render(); });
 }
 function lordTaxSide(){
-  const key=REFS[+$('#lTg').value], md=$('#lMd').value; const r=townCands().find(x=>x.key===key); if(!r) return;
+  const key=REFS[+$('#lTg').value], md=$('#lMd').value; const r=lordShops().find(x=>x.key===key); if(!r){ setFlash('お店が見つかりませんでした',1); render(); return; }
   townTx(t=>{ t.taxmode=t.taxmode||{}; if(md==='normal') delete t.taxmode[key]; else t.taxmode[key]=md; }).then(()=>{
     lordNews(md==='free'?`領主${S.owner}は${r.shop}の税を免除しました`:md==='double'?`領主${S.owner}は${r.shop}の税率を倍にしました`:`領主${S.owner}は${r.shop}の税を通常に戻しました`);
     setFlash(`${esc(r.shop)}の税を${{normal:'通常',free:'免除',double:'２倍'}[md]}にしました`); render(); });
 }
 function lordTaxReset(){ townTx(t=>{ t.taxmode={}; }).then(()=>{ lordNews(`領主${S.owner}は倍税や免税をすべて取りやめました`); setFlash('すべての店の税を通常に戻しました'); render(); }); }
 function lordExpose(){
-  const key=REFS[+$('#lEx').value]; const r=townCands().find(x=>x.key===key); if(!r) return;
+  const key=REFS[+$('#lEx').value]; const r=lordShops().find(x=>x.key===key); if(!r){ setFlash('お店が見つかりませんでした',1); render(); return; }
   confirmBox(`${esc(r.shop)}を軍隊で取り締まりますか？（街資金¥1,000,000）`,()=>{
     townTx(t=>{ if((t.fund||0)<1000000||(t.guard||0)<200||rebelSum(t)>0) return 'ng'; t.fund-=1000000; t.safety=clamp(townVal(t,'safety',80)+5,0,100); return 'ok'; }).then(res=>{
       if(res!=='ok'){ setFlash('取り締まりできませんでした',1); render(); return; }
@@ -3206,9 +3207,14 @@ function sendLetter(){
   if(n.friend>=5 && Math.random()<0.3){ const g=pick(n.pool); add(g,1); letter(n.owner,'kao'+n.kao,`いつも仲良くしてくれるお礼に，${ITEMS[g].name}を贈ります！`); n.friend=0; }
   setFlash('手紙を送りました'); save(); render();
 }
+SCREENS.trade=function(){
+  return `<div class="c"><big>貿易</big></div>${talk('kaodwarf','住み込みドワーフ','ワシの船便で，遠くの街と品物を売り買いできるぞい。品ぞろえは毎日変わるから，こまめにのぞくのじゃ。')}${tradeHtml()}
+  <div class="c note">注文した品や代金の届き具合は，[宅配便]の「輸入予約」で確認できます。</div>`;
+};
 SCREENS.dwarf=function(){
   const tab=sub.t||0;
-  const tabs=`<div class="tabs">${['輸入予約','宅配便を出す','送金','貿易'].map((t,i)=>`<span class="${tab===i?'on':''}" onclick="sub.t=${i};render()">${t}</span>`).join('')}</div>`;
+  if(sub.t===3){ sub.t=0; }
+  const tabs=`<div class="tabs">${['輸入予約','宅配便を出す','送金'].map((t,i)=>`<span class="${tab===i?'on':''}" onclick="sub.t=${i};render()">${t}</span>`).join('')}</div>`;
   let h=`<div class="c"><big>宅配便</big></div>${talk('kaodwarf','住み込みドワーフ','ドワーフ宅配便は由緒ある組織じゃ。ワシに頼んでくれれば，いつでも商品を送り届けるぞい。')}${tabs}`;
   if(tab===0){
     const pool=ITEMLIST.filter(it=>it.price>0&&it.price<=20000&&['原料','薬','剣','鎧','盾','杖','アクセサリ'].includes(it.type));
@@ -3240,7 +3246,7 @@ function tradeDeals(){
 function rr0(r,a,b){ return a+r()*(b-a); }
 function tradeHtml(){
   const T0=tradeDeals(); S.trade=S.trade&&S.trade.d===T0.d?S.trade:{d:T0.d,done:{}};
-  return `<div class="c note">遠くの街とドワーフの船便で貿易するぞい。品ぞろえは毎日入れ替わるから，こまめに見るのじゃ。</div>
+  return `
   <div class="c"><big>貿易品リスト（他の街から買う）</big></div>
   <div class="tbl"><table class="t" style="width:100%"><tr><th>品物</th><th>街</th><th>値段</th><th></th></tr>
   ${T0.buy.map(x=>`<tr><td>${iname(x.no)}×${x.n}<br><small>標準計${yen(ITEMS[x.no].price*x.n)}</small></td><td><small>${x.town}</small></td><td class="r nw">${yen(x.price)}</td><td>${S.trade.done[x.id]?'<small class="note">売約済</small>':`<button onclick="tradeBuy('${x.id}')">買う</button>`}</td></tr>`).join('')}
