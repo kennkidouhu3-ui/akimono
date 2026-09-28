@@ -543,34 +543,87 @@ function day(){ return Math.floor(S.clock/1440)+1; }
 /* ---------- 山賊バルバロス襲来（レイドバトル）：3日ごと，21時（日本時間）から2時間 ---------- */
 const RAID_LEN=1*3600000, RAID_CD=3*60000;
 function next21(from){ const d=new Date(from); let c=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate(),12,0,0); while(c<from) c+=86400000; return c; }
+function dragonActive(t){ t=t||T(); const d=t.dragonEv; return !!(d&&Date.now()>=d.start&&Date.now()<d.end); }
+function next19(from){ const d=new Date(from); let c=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate(),10,0,0); while(c<from) c+=86400000; return c; }
+// 街のイベント：約2日ごとに，下のどれかがランダムにやって来る（同じものが続きにくい）
+const EVENTS={
+  raid:{n:'山賊バルバロス襲来',hour:21,len:1,w:3,icon:'kaobal',desc:'みんなで撃退するレイドバトル（傭兵所）'},
+  dragon:{n:'幸運のドラゴン来訪',hour:19,len:3,w:3,icon:'dragon11',desc:'開拓+20・どの店の品も3倍売れる'},
+  meteor:{n:'流星群の夜',hour:22,len:2,w:2,icon:'dragonw1',desc:'戦闘の経験値2倍・はぎ取り素材2倍・落とし物が出やすい'},
+  caravan:{n:'旅の大商隊',hour:12,len:2,w:2,icon:'kaoamza',desc:'市場が品であふれ，仕入れが30%引き'},
+  festival:{n:'収穫祭',hour:18,len:3,w:2,icon:'kaokeeper',desc:'人気+5・荘園の収穫がもう1回届く・売れ行き1.5倍'},
+};
+function nextAtHour(from,h){ const d=new Date(from); let c=Date.UTC(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate(),(h-9+24)%24,0,0); while(c<from) c+=86400000; return c; }
+function evActive(type,t){ t=t||T(); const e=t.ev; return !!(e&&e.type===type&&Date.now()>=e.start&&Date.now()<e.end); }
+function anyEventActive(t){ t=t||T(); return raidActive(t)||dragonActive(t)||!!(t.ev&&Date.now()<t.ev.end); }
+function pickEventType(last){ const ks=Object.keys(EVENTS).filter(k=>k!==last); const tot=ks.reduce((a,k)=>a+EVENTS[k].w,0); let r=Math.random()*tot; for(const k of ks){ r-=EVENTS[k].w; if(r<=0) return k; } return ks[0]; }
+async function checkEvents(){
+  const t0=T(), now=Date.now(), en=t0.evNext;
+  const need=!en || now>=en.at || (!t0.evWarned&&en&&en.at-now<=24*3600000) || (t0.dragonEv&&!t0.dragonEv.done&&now>=t0.dragonEv.end) || (t0.ev&&!t0.ev.done&&now>=t0.ev.end) || t0.raidNext || t0.dragonNext;
+  if(need){
+    const logs=await townTx(t=>{
+      const now=Date.now(), L=[];
+      // 旧方式の予定を引き継ぐ
+      if(!t.evNext&&(t.raidNext||t.dragonNext)){ const r=t.raidNext||Infinity, d=t.dragonNext||Infinity; t.evNext=r<=d?{type:'raid',at:r}:{type:'dragon',at:d}; }
+      t.raidNext=0; t.dragonNext=0;
+      if(t.dragonEv&&!t.dragonEv.done&&now>=t.dragonEv.end){ t.dragonEv.done=true; t.evLastEnd=t.dragonEv.end; L.push('幸運のドラゴンは空へ帰っていった。街はまだ熱気に包まれている…'); }
+      if(t.ev&&!t.ev.done&&now>=t.ev.end){ t.ev.done=true; t.evLastEnd=t.ev.end; L.push(`「${EVENTS[t.ev.type].n}」が終わった。`); }
+      // 始まる
+      if(t.evNext&&now>=t.evNext.at&&!anyEventActive(t)){
+        const E=t.evNext, X=EVENTS[E.type], st=E.at, end=E.at+X.len*3600000;
+        t.evLast=E.type; t.evNext=null; t.evWarned=false;
+        if(E.type==='raid'){ const act=Math.max(1,(NET.online?playerShops().filter(p=>!p.idle).length+1:1)); const hp=Math.max(40000,25000*act);
+          t.raid={id:st,start:st,end,hp,max:hp,buff:0,dmg:{},done:false}; L.push(`【襲来】山賊バルバロスが攻めてきた！ ${fmtReal(end)}までに撃退せよ！ 傭兵所で討伐・応援ができます`); }
+        else if(E.type==='dragon'){ t.dragonEv={start:st,end,done:false}; t.develop=clamp(townVal(t,'develop',50)+20,0,100); t.safety=clamp(townVal(t,'safety',80)+5,0,100);
+          L.push(`【ドラゴン来訪】幸運のドラゴンが街に舞い降りた！ 街の活気が一気に上がり（開拓+20），これから${X.len}時間はどの店の品も飛ぶように売れる！`); }
+        else { t.ev={type:E.type,start:st,end,done:false}; L.push(`【イベント】「${X.n}」が始まった！ ${fmtReal(end)}まで：${X.desc}`); }
+      }
+      // 次の予定を決める
+      if(!t.evNext&&!anyEventActive(t)){ const type=pickEventType(t.evLast); const from=Math.max(now,t.evLastEnd||0)+40*3600000; t.evNext={type,at:nextAtHour(from,EVENTS[type].hour)}; t.evWarned=false;
+        L.push(`【うわさ】次の街のイベントは「${EVENTS[type].n}」らしい。${fmtReal(t.evNext.at)}ごろ！`); }
+      if(t.evNext&&!t.evWarned&&t.evNext.at-now<=24*3600000){ t.evWarned=true; L.push(`【予告】${fmtReal(t.evNext.at)}から「${EVENTS[t.evNext.type].n}」！ ${EVENTS[t.evNext.type].desc}`); }
+      return L;
+    });
+    if(logs&&logs.length){ logs.forEach(m=>{ S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); }); softRender(); }
+  }
+  // 各自に1回だけ届く効果（大商隊・収穫祭）
+  const e=T().ev;
+  if(e&&Date.now()>=e.start&&Date.now()<e.end&&S.evSeen!==e.start){
+    S.evSeen=e.start;
+    if(e.type==='caravan'){ ITEMLIST.forEach(it=>{ if(it.plus>0&&it.price>0){ const cap=Math.max(3,Math.round(1440/it.plus*2)); S.market[it.no]=Math.max(S.market[it.no]||0,cap*2); } }); letter('市場の案内係','kaoguide','旅の大商隊がやって来ました！ 市場に品がどっさり入荷し，いまだけ30%引きでお求めいただけます。'); }
+    if(e.type==='festival'){ S.pop=clamp(S.pop+5,0,100); const mo=[]; MANOR.forEach(m=>{ const n=S.manor[m.id]||0; if(n>0) m.out.forEach(([no,q])=>{ add(no,q*n); mo.push(ITEMS[no].name+'×'+q*n); }); }); letter('荘園の管理人','kaokeeper',`収穫祭です！ お店の人気が5上がりました。${mo.length?'お祝いに荘園からもう一度収穫をお届けします：'+mo.join('，'):''}`); }
+    save();
+  }
+}
+function dragonHtml(){
+  const t=T();
+  if(dragonActive(t)) return `<div class="flash" style="text-align:center;background:#fff4d6;border-color:#e0a000">${im('dragon11','','width=32 height=32')} <b>幸運のドラゴン来訪中！</b> 残り${Math.floor((t.dragonEv.end-Date.now())/60000)}分<br><small>どの店の品も<b>いつもの3倍</b>売れています。棚を空にしないように！</small></div>`;
+  return '';
+}
+function eventHtml(){
+  const t=T(); let h='';
+  const e=t.ev; if(e&&Date.now()>=e.start&&Date.now()<e.end){ const X=EVENTS[e.type]; h+=`<div class="flash" style="text-align:center;background:#eef6ff;border-color:#69c">${im(X.icon,'','width=32 height=32')} <b>「${X.n}」開催中！</b> 残り${Math.floor((e.end-Date.now())/60000)}分<br><small>${X.desc}</small></div>`; }
+  const n=t.evNext; if(n&&!anyEventActive(t)){ const X=EVENTS[n.type], left=n.at-Date.now(); if(left>0){ const hh=Math.floor(left/3600000), soon=left<=24*3600000;
+    h+=`<div class="flash ${soon&&n.type==='raid'?'err':''}" style="text-align:center">${im(X.icon,'','width=32 height=32')} ${soon?'<b>【予告】</b>':'次のイベント：'}<b>${X.n}</b><br><b>${fmtReal(n.at)}</b>〜${X.len}時間<small>（あと約${hh>=24?Math.floor(hh/24)+'日'+(hh%24)+'時間':hh+'時間'}）</small><br><small>${X.desc}</small></div>`; } }
+  return h;
+}
 function raidActive(t){ t=t||T(); const r=t.raid; return !!(r&&!r.done&&Date.now()>=r.start&&Date.now()<r.end&&r.hp>0); }
 let raidChecking=false;
 async function checkRaid(){
   if(!S||raidChecking) return; raidChecking=true;
   try{
     const now=Date.now(), t0=T();
-    const needSched=!t0.raidNext;
-    const needStart=t0.raidNext&&now>=t0.raidNext&&!(t0.raid&&!t0.raid.done);
+    const needSched=false, needStart=false;
     const needEnd=t0.raid&&!t0.raid.done&&(now>=t0.raid.end||t0.raid.hp<=0);
     if(needSched||needStart||needEnd){
       const out=await townTx(t=>{
         const now=Date.now(), logs=[]; let rew=null;
-        if(!t.raidNext){ t.raidNext=next21(now+24*3600000); logs.push(`山賊バルバロスが${fmtReal(t.raidNext)}ごろ，街を襲うらしい…`); }
         if(t.raid&&!t.raid.done&&(now>=t.raid.end||t.raid.hp<=0)){
           const r=t.raid; r.done=true; r.result=r.hp<=0?'win':'lose';
           if(r.result==='win'){ t.safety=clamp(townVal(t,'safety',80)+15,0,100); rew={r:JSON.parse(JSON.stringify(r))}; logs.push(`山賊バルバロスを撃退した！ 街に平和が戻った（参加${Object.keys(r.dmg||{}).length}店）`); }
           else { const lost=Math.round((t.fund||0)*0.3); t.fund=(t.fund||0)-lost; t.safety=clamp(townVal(t,'safety',80)-20,0,100); t.raidPenalty=r.id; logs.push(`山賊バルバロスに街を荒らされた…（街資金 −${yen(lost)}・全店の人気が下がった）`); }
-          t.raidNext=next21(r.end+48*3600000);
-          logs.push(`次の襲来は${fmtReal(t.raidNext)}ごろと噂されている`);
+          t.evLastEnd=r.end;
         }
-        if(t.raidNext&&now>=t.raidNext&&!(t.raid&&!t.raid.done)){
-          const act=Math.max(1,(NET.online?playerShops().filter(p=>!p.idle).length+1:1));
-          const hp=Math.max(40000,25000*act);
-          t.raid={id:t.raidNext,start:t.raidNext,end:t.raidNext+RAID_LEN,hp,max:hp,buff:0,dmg:{},done:false};
-          t.raidNext=0; t.raidWarned=false;
-          logs.push(`【襲来】山賊バルバロスが攻めてきた！ ${fmtReal(t.raid.end)}までに撃退せよ！ 傭兵所で討伐・応援ができます`);
-        }
-        if(t.raidNext&&!t.raidWarned&&t.raidNext-now<=24*3600000){ t.raidWarned=true; logs.push(`【警報】山賊バルバロスの襲来は${fmtReal(t.raidNext)}！ みんなで迎え撃つ準備を！`); }
         return {logs,rew};
       });
       if(out){ (out.logs||[]).forEach(m=>{ S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); });
@@ -585,6 +638,7 @@ async function checkRaid(){
       if(res){ const m=res.first?`豪将リキーヤが加勢に駆けつけた！「山賊どもめ，俺が相手だ！」 ${res.d.toLocaleString()}のダメージ！`:`豪将リキーヤの一撃！ バルバロスに${res.d.toLocaleString()}のダメージ！`; S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); softRender(); }
     }
     await checkNiku();
+    await checkEvents();
     applyNikuResult();
     // 負けたときの罰（各自1回だけ）
     const tp=T().raidPenalty; if(tp&&S.raidPen!==tp){ S.raidPen=tp; if((S.createdAt||0)<tp){ S.pop=clamp(S.pop-10,0,100); letter('大臣','kaominister','山賊バルバロスに街を荒らされ，お店の人気が下がってしまいました…。次こそ撃退しましょう。'); } save(); }
@@ -628,7 +682,7 @@ function applyNikuResult(){
   const L=T().nikuLast; if(!L||S.nikuSeen===L.id) return;
   S.nikuSeen=L.id;
   if(L.target.key===myKey()){
-    if(L.win){ S.pop=clamp(S.pop+3,0,100); S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.8)); add(151,3); letter('傭兵隊長','kaoarmy',`${NIKU}の襲撃を見事に撃退しました！ 人気+3。兵士の2割が負傷しました。現場に「呪いの骨片」が3つ残されていました……。`); }
+    if(L.win){ S.pop=clamp(S.pop+3,0,100); S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.8)); add(151,1); letter('傭兵隊長','kaoarmy',`${NIKU}の襲撃を見事に撃退しました！ 人気+3。兵士の2割が負傷しました。現場に「呪いの骨片」が1つ残されていました……。`); }
     else { S.pop=clamp(S.pop-12,0,100); S.trash+=80; S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.5)); letter('傭兵隊長','kaoarmy',`${NIKU}にお店を襲われてしまいました…。人気−12・店内が荒らされました。`); }
   } else if(String(L.target.key).startsWith('npc:')&&!NET.online){ const x=S.npcs[+String(L.target.key).slice(4)]; if(x&&!L.win) x.pop=clamp(x.pop-12,5,100); }
   save();
@@ -644,7 +698,7 @@ function raidRewards(r){
   const total=ents.reduce((a,[k,v])=>a+v.dmg,0)||1, pool=1000000+500000*ents.length;
   const top=ents.slice().sort((a,b)=>b[1].dmg-a[1].dmg)[0][0];
   const order=ents.slice().sort((a,b)=>b[1].dmg-a[1].dmg).map(e=>e[0]);
-  ents.forEach(([k,v])=>{ const rk=order.indexOf(k); const money=Math.round(pool*v.dmg/total)+(k===top?200000:0); const m={kind:'raidrew',money,exp:300,dig:k===top?2:1,mvp:k===top,dmg:v.dmg,dia:rk===0?3:rk<3?2:1}; if(k===myKey()) applyRaidRew(m); else sendMail(k,m); });
+  ents.forEach(([k,v])=>{ const rk=order.indexOf(k); const money=Math.round(pool*v.dmg/total)+(k===top?200000:0); const m={kind:'raidrew',money,exp:300,dig:k===top?2:1,mvp:k===top,dmg:v.dmg,dia:k===top?3:1}; if(k===myKey()) applyRaidRew(m); else sendMail(k,m); });
   news(`レイドのMVPは ${r.dmg[top].shop} ！`);
 }
 function applyRaidRew(m){ S.money+=m.money; addIncome(m.money); if(m.dia) add(81,m.dia); S.bexp=(S.bexp||0)+(m.exp||0); S.dig+=m.dig||0; letter('大臣','kaominister',`山賊バルバロス撃退の報奨です。${m.mvp?'<MVP>':''}貢献 ${Math.round(m.dmg).toLocaleString()} により，賞金${yen(m.money)}・経験値${m.exp}・爵位ポイント+${m.dig}${m.dia?`・ダイヤモンド原石×${m.dia}`:''}を授けます。`.replace('<MVP>','最も活躍した店として，')); save(); }
@@ -680,7 +734,7 @@ function raidPanel(){
   if(!raidActive(t)){
     let h='';
     if(r&&r.done&&Date.now()-r.end<12*3600000) h+=`<div class="flash ${r.result==='win'?'':'err'}">前回の襲来：<b>${r.result==='win'?'撃退成功！':'撃退失敗…'}</b>${raidTopHtml(r)}</div>`;
-    return h+`<div class="c note">山賊バルバロスは約3日ごと，<b>21時（日本時間）</b>に攻めてきて，1時間街に居座ります。みんなで力を合わせて撃退しましょう。</div>`;
+    return h+`<div class="c note">山賊バルバロスは，街のイベントとして<b>21時（日本時間）</b>に攻めてきて，1時間街に居座ります（ほかのイベントとランダムに順番にやって来ます）。みんなで力を合わせて撃退しましょう。</div>`;
   }
   const left=r.end-Date.now(), mine=(r.dmg||{})[myKey()], cd=Math.max(0,(S.raidCd||0)-Date.now());
   return `<div class="tbl"><table class="t" style="width:100%">
@@ -692,7 +746,7 @@ function raidPanel(){
   <div class="c"><big>応援する</big></div>
   <div class="c toolbar"><button onclick="raidCheer('money')">声援（¥30,000）<br><small>攻撃力+5%</small></button> <button onclick="raidCheer('potion')">差し入れ（ポーション20）<br><small>攻撃力+3%</small></button></div>
   <div class="c"><input type="number" id="rsN" value="${Math.min(50,S.soldiers||0)||10}" min="1" style="width:70px">人 <button onclick="raidSoldiers(false)">兵士を出す（1人60）</button>${isLordMe()?` <button onclick="raidSoldiers(true)">護衛軍を出す</button>`:''}</div>
-  <div class="c note">${im('kaoriki','','width=24 height=24')} 豪将リキーヤが5分ごとに加勢してくれます（応援で攻撃力が上がると，リキーヤも強くなります）。<br>戦うのが苦手でも，応援や兵士で参加できます。撃退すると，貢献に応じて賞金・経験値・爵位ポイント，そして<b>ダイヤモンド原石</b>がもらえます（MVPは3個，2・3位は2個）。撃退できないと，街資金が奪われ全店の人気が下がります。</div>
+  <div class="c note">${im('kaoriki','','width=24 height=24')} 豪将リキーヤが5分ごとに加勢してくれます（応援で攻撃力が上がると，リキーヤも強くなります）。<br>戦うのが苦手でも，応援や兵士で参加できます。撃退すると，貢献に応じて賞金・経験値・爵位ポイント，そして<b>ダイヤモンド原石</b>（MVPは3個・ほかは1個）がもらえます。撃退できないと，街資金が奪われ全店の人気が下がります。</div>
   ${raidTopHtml(r)}`;
 }
 function raidTopHtml(r){ const e=Object.values(r.dmg||{}).sort((a,b)=>b.dmg-a.dmg).slice(0,5); return e.length?`<div class="c"><small>貢献ランキング：${e.map((x,i)=>`${i+1}位 ${esc(x.shop)}（${Math.round(x.dmg).toLocaleString()}）`).join('・')}</small></div>`:''; }
@@ -700,10 +754,7 @@ function fmtReal(ms){ const d=new Date(ms+9*3600000); return `${d.getUTCMonth()+
 function balForecastHtml(){
   const t=T(), r=t.raid;
   if(raidActive(t)) return `<div class="flash err" style="text-align:center">${im('kaobal','','width=32 height=32')} <b>山賊バルバロス襲来中！</b> HP ${Math.round(r.hp/r.max*100)}%・残り${Math.floor((r.end-Date.now())/60000)}分<br><small><a onclick="go('army')">傭兵所で討伐・応援に参加する</a></small></div>`;
-  if(!t.raidNext) return '';
-  const left=t.raidNext-Date.now(); if(left<=0) return '';
-  const h=Math.floor(left/3600000), soon=left<=24*3600000;
-  return `<div class="flash ${soon?'err':''}" style="text-align:center">${im('kaobal','','width=32 height=32')} ${soon?'<b>【警報】</b>':''}山賊バルバロスの襲来予定：<b>${fmtReal(t.raidNext)}</b>〜1時間<br><small>あと約${h>=24?Math.floor(h/24)+'日'+(h%24)+'時間':h+'時間'}・みんなで迎え撃とう</small></div>`;
+  return '';
 }
 function fmtDay(d){ if(d==null) return ''; d=Math.max(1,d)-1; const y=Math.floor(d/360)+1, mo=Math.floor(d%360/30)+1, dd=d%30+1; return `商暦${y}年${mo}月${dd}日`; }
 function clockStr(){ return `${fmtDay(day())} ${hms(S.clock%1440)}`; }
@@ -717,7 +768,7 @@ function digLevel(p){ let l=0; DIG_POINT.forEach((v,i)=>{ if((p||0)>=v) l=i; });
 const DIG_ICON=['dig0','medal1','medal2','medal3','medal4','medal5','medal6','dig7'];   // 士爵〜公爵は元の商人物語のメダル
 function digIcon(p){ return im(DIG_ICON[digLevel(p)],'i16','title="'+DIGNITY[digLevel(p)]+'"'); }
 function digHtml(p){ const l=digLevel(p); return `${digIcon(p)}<span${l>=7?' style="color:#b8860b;font-weight:bold"':''}>${DIGNITY[l]}</span>`; }
-function myDisc(){ if(!S) return 0; const gd=myGuildDoc(); return DIG_DISC[digLevel(S.dig)]+(gd&&gActive(gd.bulk)?10:0); }
+function myDisc(){ if(!S) return 0; const gd=myGuildDoc(); return Math.min(60,DIG_DISC[digLevel(S.dig)]+(gd&&gActive(gd.bulk)?10:0)+(evActive('caravan')?30:0)); }
 function totalStat(st,eq){
   const r={...st};
   if(eq) for(const k in eq){ const it=ITEMS[eq[k]]; if(it){ ['life','attack','defence','tech'].forEach(a=>{ if(it[a]) r[a]+=it[a]; }); } }
@@ -791,7 +842,7 @@ function npcOnline(atDay){
     const pop=d.strong? clamp(Math.round(d.popBase+10*s1+4*s2),50,99) : clamp(Math.round(48+22*s1+8*s2),5,95);
     const wins=Math.floor(dd/(20+i*6));
     const profit3=Math.max(0,Math.round(60000+50000*s3+25000*s2));
-    const today=Math.max(0,Math.round(15000+12000*s1));
+    const today=Math.max(0,Math.round((15000+12000*s1)*(dragonActive()?3:1)));
     const loc=S&&S.npcs&&S.npcs[i];
     return {me:false,npc:true,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop,wins,
       dig:Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))),money:Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3),
@@ -1280,7 +1331,7 @@ function simulate(dt){
   S.clock+=dt;
   S.time=Math.min(maxTime(),S.time+dt);
   // 自店の売上
-  const gi0=guildInfo(S.guild); const gb = (gi0? 1+gi0.bonus*0.03 : 1)*townMult()*(1+(skillFx().sales||0));
+  const gi0=guildInfo(S.guild); const dragonX=(dragonActive()?3:1)*(evActive('festival')?1.5:1); const gb = (gi0? 1+gi0.bonus*0.03 : 1)*townMult()*(1+(skillFx().sales||0))*dragonX;
   const trashF = S.trash>100?0.6:S.trash>50?0.85:1;
   S.cases.forEach((c,idx)=>{
     if(!c || !has(c.no)) return;
@@ -1303,7 +1354,7 @@ function simulate(dt){
   S.npcs.forEach(n=>{
     n.cases.forEach(nc=>{
       if(!nc||nc.stock<=0) return;
-      const k=Math.min(nc.stock,poisson(saleRate(ITEMS[nc.no],nc.price,n.pop,1)*dt*0.9*(n.mult||1)));
+      const k=Math.min(nc.stock,poisson(saleRate(ITEMS[nc.no],nc.price,n.pop,1)*dt*0.9*(n.mult||1)*dragonX));
       if(k>0){ nc.stock-=k; const g=nc.price*k; const tax = NET.online?0:Math.round(g*taxRateFor('npc:'+n.id)/100); n.money+=g-tax; n.today+=g; if(tax) S.today.npctax=(S.today.npctax||0)+tax; }
     });
   });
@@ -1568,7 +1619,7 @@ function resultsHtml(){
   const md=['🥇','🥈','🥉'], pz=['爵位+1pt',yen(PRIZE[1]),yen(PRIZE[2])];
   return `<div class="flash" style="text-align:center"><b>${periodLabel(r.d)}の表彰</b><br>${r.top.map((x,i)=>`${md[i]} ${esc(x.shop)}${x.npc?' <span class="npctag">NPC</span>':''} <small>${(x.point||0).toLocaleString()}点・${pz[i]}</small>`).join('<br>')}</div>`;
 }
-function noticeHtml(){ const n=T().notice, dk=T().duke; const bf=balForecastHtml()+nikuHtml(); const dh=dk&&dk.msg?`<div class="flash" style="border-color:#b8860b;background:#fffbe6">${im('dig7','i16')}<b>大公 ${esc(dk.name)}</b>のお言葉：${esc(dk.msg)}</div>`:''; return bf+dh+(n?`<div class="flash" style="border-color:#d0402a;background:#fff4ee"><b>お知らせ</b>：${esc(n).replace(/\n/g,'<br>')}</div>`:''); }
+function noticeHtml(){ const n=T().notice, dk=T().duke; const bf=dragonHtml()+balForecastHtml()+eventHtml()+nikuHtml(); const dh=dk&&dk.msg?`<div class="flash" style="border-color:#b8860b;background:#fffbe6">${im('dig7','i16')}<b>大公 ${esc(dk.name)}</b>のお言葉：${esc(dk.msg)}</div>`:''; return bf+dh+(n?`<div class="flash" style="border-color:#d0402a;background:#fff4ee"><b>お知らせ</b>：${esc(n).replace(/\n/g,'<br>')}</div>`:''); }
 function ago(t){ const s=(Date.now()-t)/1000; if(s<120) return '営業中'; if(s<3600) return Math.round(s/60)+'分前に営業'; if(s<86400) return Math.round(s/3600)+'時間前に営業'; return Math.round(s/86400)+'日前に営業'; }
 function openShop(k){ const key=REFS[k]; if(key==null) return; if(String(key).startsWith('npc:')) go('street',{id:+String(key).slice(4)}); else go('street',{uid:key}); }
 function titleScreen(){
@@ -1962,7 +2013,8 @@ function specialDesc(no,i){
   if(no===80) return ['他店主と決闘','魔物退治（低）','魔物退治（中）','魔物退治（上）','最上級の魔物（勝てば賞金）'][i];
   if(no===78) return JOBS[JOBCHANGE[i]].name+'になる';
   if(no===25) return i===0?'ミノ牛乳×10':'ミノ牛乳×20〜40';
-  if([26,35,36,27,28,29].includes(no)&&i===0) return '持ち時間が回復';
+  if([26,35,36].includes(no)&&i===0) return {26:'HP+2（ときどき能力+1）・ずっと',35:'HP+12・能力+2・ずっと',36:'HP+25・攻撃/防御/技量+2・ずっと'}[no];
+  if([27,28,29,195,200].includes(no)&&i===0) return '持ち時間が回復';
   if(no===77) return '人気・爵位アップ';
   return '';
 }
@@ -1998,7 +2050,7 @@ function useN(no,i){
 }
 function execUseMulti(no,i,times){
   const it=ITEMS[no], u=it.uses[i];
-  const m0=S.money, p0=S.pop, gets={}, extra={};
+  const m0=S.money, p0=S.pop, gets={}, extra={}, st0={...S.st};
   let done=0, fails=0, totalT=0, lost=0;
   for(let k=0;k<times;k++){
     if(!u.use.every(([n,x])=>has(x,n))) break;
@@ -2024,7 +2076,8 @@ function execUseMulti(no,i,times){
   if(fails) lines.push(`<small class="note">うち${fails}回は失敗…</small>`);
   const dm=S.money-m0; if(dm) lines.push(`資金 ${dm>0?'+':''}${yen(dm)}`);
   const dp=Math.round(S.pop-p0); if(dp) lines.push(`人気 ${dp>0?'+':''}${dp}`);
-  Object.keys(extra).slice(0,3).forEach(k=>{ if(!/稼いだ|人気/.test(k)) lines.push(`<small>${k}${extra[k]>1?`（×${extra[k]}）`:''}</small>`); });
+  const sd=['life','attack','defence','tech'].filter(k=>S.st[k]!==st0[k]).map(k=>`${STATNAME[k]}+${S.st[k]-st0[k]}`); if(sd.length) lines.push(`<b class="blue">能力がずっと上がった：${sd.join('・')}</b>`);
+  Object.keys(extra).slice(0,3).forEach(k=>{ if(!/稼いだ|人気|ずっと/.test(k)) lines.push(`<small>${k}${extra[k]>1?`（×${extra[k]}）`:''}</small>`); });
   if(lost) lines.push(`<span class="red">${esc(it.name)}が${lost}回ボロボロになってしまった…</span>`);
   if(done<times) lines.push(`<small class="note">材料か持ち時間がなくなったので，${done}回で終わりました。</small>`);
   setFlash(lines.join('<br>'));
@@ -2074,7 +2127,13 @@ function special(no,i,target,msgs){
   else if(no===80){ startBattle(i,target); return 'battle'; }
   else if(no===78){ S.job=JOBCHANGE[i]; const g=JOBGIFT[i]; if(g){ add(g,1); msgs.push(`転職祝いに${iname(g)}をもらった`); } msgs.push(`${JOBS[S.job].name}になった！`); }
   else if(no===25){ const k=i===0?10:20+rnd(21); add(26,k); msgs.push(`ミノ牛乳×${k}を搾った`); if(i===1&&Math.random()<0.2){ add(25,-1); msgs.push('<span class="red">ミノタウロスが怒って逃げてしまった！</span>'); } }
-  else if([26,35,36,27,28,29,195,200].includes(no)&&i===0){ const g={26:30,35:180,36:300,27:600,28:600,29:480,195:180,200:360}[no]; S.time=Math.min(maxTime(),S.time+g); msgs.push(`元気が出た！持ち時間が${hm(g)}回復した`); if(no===29) add(29,1); }
+  else if([26,35,36].includes(no)&&i===0){
+    const ks=['attack','defence','tech'], pk=()=>ks[Math.floor(Math.random()*3)];
+    if(no===26){ S.st.life+=2; let m='HPが2上がった'; if(Math.random()<0.2){ const k=pk(); S.st[k]+=1; m+=`・${STATNAME[k]}が1上がった`; } msgs.push(`ミノ牛乳を飲んだ！ ${m}（ずっと）`); }
+    if(no===35){ S.st.life+=12; const k=pk(); S.st[k]+=2; msgs.push(`ミノヨーグルトを食べた！ HPが12・${STATNAME[k]}が2上がった（ずっと）`); }
+    if(no===36){ S.st.life+=25; ks.forEach(k=>S.st[k]+=2); msgs.push('ミノチーズを食べた！ HPが25・攻撃/防御/技量が2ずつ上がった（ずっと）'); }
+  }
+  else if([27,28,29,195,200].includes(no)&&i===0){ const g={27:600,28:600,29:480,195:180,200:360}[no]; S.time=Math.min(maxTime(),S.time+g); msgs.push(`元気が出た！持ち時間が${hm(g)}回復した`); if(no===29) add(29,1); }
   else if(no===77){ S.pop=clamp(S.pop+30,0,100); S.dig+=1; msgs.push('盛大なお祝いパーティを開いた！人気と爵位ポイントが上がった'); news(`${S.shop}で盛大なパーティが開かれた`); }
   return null;
 }
@@ -2177,15 +2236,25 @@ function finishBattle(){
   } else if(b.win){
     S.bwin++;
     res.push(`<b class="blue">${esc(b.me.name)}は${esc(b.foe.name)}に勝利した！！</b>`);
-    const fx0=skillFx(); const e = Math.round((b.mon? b.mon.exp : (b.npc&&b.npc.strong?120:40))*(1+(fx0.exp||0)));
+    const fx0=skillFx(); const e = Math.round((b.mon? b.mon.exp : (b.npc&&b.npc.strong?120:40))*(1+(fx0.exp||0))*(evActive('meteor')?2:1));
     S.bexp=(S.bexp||0)+e;
     res.push(`${im('ability-no-0','i16')}経験値を <b>${e}</b> 手に入れた（いま${S.bexp}）。<a onclick="go('status')">ステータスで能力を強化できます</a>`);
-    if(b.mon && Math.random()*100<b.mon.dropP+(skillFx().drop||0)){ add(b.mon.drop,b.mon.dropN); res.push(`${iname(b.mon.drop)}×${b.mon.dropN}を手に入れた！`); }
+    if(b.mon && Math.random()*100<b.mon.dropP+(skillFx().drop||0)+(evActive('meteor')?20:0)){ add(b.mon.drop,b.mon.dropN); res.push(`${iname(b.mon.drop)}×${b.mon.dropN}を手に入れた！`); }
     S.today.gpx=(S.today.gpx||0)+(b.foe.top?5:1);
-    if(b.mon){ const mi=b.foe.top? 146+TOP_MONS.indexOf(b.mon) : 101+MONS.indexOf(b.mon); if(ITEMS[mi]){ const fx1=skillFx(); let k=(b.foe.top?1:1+rnd(2))+(fx1.mat||0); if(fx1.hunter) k*=2; add(mi,k); res.push(`はぎ取り！ ${iname(mi)}×${k}を手に入れた`); } }
+    if(b.mon){ const mi=b.foe.top? 146+TOP_MONS.indexOf(b.mon) : 101+MONS.indexOf(b.mon); if(ITEMS[mi]){ const fx1=skillFx(); let k=(b.foe.top?1:1+rnd(2))+(fx1.mat||0); if(fx1.hunter) k*=2; if(evActive('meteor')) k*=2; add(mi,k); res.push(`はぎ取り！ ${iname(mi)}×${k}を手に入れた`); } }
     if(b.foe.top){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0))); S.money+=pz; addIncome(pz); S.pop=clamp(S.pop+3,0,100); res.push(`<b class="red">最上級の魔物を討ち取った！ 賞金${yen(Math.round(b.mon.prize*(1+(skillFx().prize||0))))}を得た！ 人気+3</b>`); news(`${S.owner}（${S.shop}）が最上級の魔物「${b.mon.name}」を討ち取った！`); }
-    if(b.npc){ const up=(b.npc.strong||b.npc.warrior||b.npc.tyrant)?4:2; S.pop=clamp(S.pop+up,0,100); b.npc.pop=clamp(b.npc.pop-1,b.npc.popBase?b.npc.popBase-15:0,100); res.push(`<span class="blue">勝利で人気+${up}</span>／${esc(b.npc.shop)}の人気-1`); if(b.npc.tyrant){ S.money+=1000000; addIncome(1000000); S.dig+=2; add(151,5); res.push(`${iname(151)}×5を手に入れた……`); res.push('<b class="red">にくべんき藩を打ち倒した！ 街の英雄だ！ 賞金¥1,000,000と爵位ポイント+2を得た！</b>'); news(`${S.owner}（${S.shop}）がにくべんき藩を打ち倒した！`); }
-    else if(b.npc.strong||b.npc.warrior){ S.money+=b.npc.warrior?500000:300000; addIncome(b.npc.warrior?500000:300000); S.dig+=1; res.push(b.npc.warrior?'<b class="red">豪将リキーヤを打ち破った！ 賞金¥500,000と爵位ポイント+1を得た！</b>':'<b class="red">強豪を打ち破った！ 賞金¥300,000と爵位ポイント+1を得た！</b>'); } news(`${S.owner}が${b.npc.owner}に決闘を挑み，勝利しました`); }
+    if(b.npc){ const up=(b.npc.strong||b.npc.warrior||b.npc.tyrant)?4:2; S.pop=clamp(S.pop+up,0,100); b.npc.pop=clamp(b.npc.pop-1,b.npc.popBase?b.npc.popBase-15:0,100); res.push(`<span class="blue">勝利で人気+${up}</span>／${esc(b.npc.shop)}の人気-1`); if(b.npc.tyrant||b.npc.strong||b.npc.warrior){
+      // 賞金は相手との力の差に比例（自分がずっと強ければ少なめ）。点数への反映はごく少なめ
+      const pw=s=>s.life/5+s.attack+s.defence+s.tech, mine=pw(myStat()), foe=pw(b.npc.st||{life:0,attack:0,defence:0,tech:0});
+      const ratio=clamp(foe/Math.max(1,mine),0.05,1.5), f=Math.pow(Math.min(1,ratio),1.5);
+      const base=b.npc.tyrant?500000:b.npc.warrior?250000:150000;
+      const prize=Math.max(5000,Math.round(base*f*(1+(skillFx().prize||0))/1000)*1000);
+      const dg=0;
+      S.money+=prize; addIncome(Math.round(prize*0.1)); S.dig+=dg;
+      const who=b.npc.tyrant?'にくべんき藩':b.npc.warrior?'豪将リキーヤ':'強豪';
+      if(b.npc.tyrant){ if(Math.random()<0.15){ add(151,1); res.push(`${iname(151)}を1つ手に入れた……`); } news(`${S.owner}（${S.shop}）がにくべんき藩を打ち倒した！`); }
+      res.push(`<b class="red">${who}を打ち破った！ 賞金${yen(prize)}${dg?`と爵位ポイント+${dg}`:''}を得た！</b><br><small class="note">相手の強さ（あなたを100%として）：${Math.round(ratio*100)}%（相手が強いほど賞金が多くなります）</small>`);
+    } news(`${S.owner}が${b.npc.owner}に決闘を挑み，勝利しました`); }
     if(b.puid){ S.pop=clamp(S.pop+2,0,100); sendMail(b.puid,{kind:'duel',win:true}); res.push('<span class="blue">勝利で人気+2</span>／相手の人気-1'); news(`${S.owner}（${S.shop}）が${b.foe.name}に決闘を挑み，勝利しました`); }
   } else {
     S.blose++;
@@ -2693,11 +2762,13 @@ const GUIDE=[
  ['戦闘',`「<b>バトルチケット</b>」（市場で買えます）を使うと，魔物退治や決闘ができます。<br>
   勝つと<b>経験値</b>が入り，【自店】→[ステータス]の「修練」で<b>体力・攻撃・防御・技量</b>を好きに強化できます。装備（剣・鎧・盾・装飾）もステータス画面で変えられます。<br>
   「最上級の魔物」はとても強いですが，勝てば大きな賞金がもらえます。`],
- ['山賊バルバロスの襲来（レイド）',`約3日ごとに，<b>日本時間の21時から1時間</b>，山賊バルバロスが街を襲います。予定日時はランキング画面の上に出ます。<br>
+ ['山賊バルバロスの襲来（レイド）',`街のイベントとして，<b>日本時間の21時から1時間</b>，山賊バルバロスが街を襲います。予定日時はランキング画面の上に出ます。<br>
   【施設】→[傭兵所]から<b>討伐</b>に行くか，<b>声援・差し入れ・兵士</b>で応援しましょう。撃退すると賞金や，ここでしか手に入らない<b>ダイヤモンド原石</b>がもらえます。`],
  ['狩りと鍛冶（素材で装備を作る）',`バトルチケットで魔物を倒すと，その魔物ならではの<b>素材</b>を「はぎ取り」で手に入れられます。<br>素材を集めて【施設】→[<b>鍛冶工房</b>]に持っていくと，店では買えない<b>強い装備</b>（獣牙→魔獣→幻獣→覇竜）を作れます。<br>暴君にくべんき藩を退けると手に入る「呪いの骨片」からは，とても強いけれど<b>毎日人気が下がる呪われた装備</b>が作れます。`],
  ['装備のスキルとシリーズ',`鍛冶工房やダイヤ・海竜などの装備には，それぞれ<b>スキル</b>（攻撃UP・ガード・幸運・商才など）がついています。<br>同じシリーズの装備をそろえると<b>シリーズスキル</b>が発動します（獣牙・魔獣・幻獣・覇竜・ダイヤ・呪いは4つ，海竜は2つ）。発動中のスキルは[ステータス]で確認できます。`],
  ['船で島へ探索',`市場で買える本「<b>造船術</b>」で船を造り，【取引】→[<b>港</b>]から島へ探索に出発できます。現実の時間で1〜6時間たつと戻ってきて，<b>島でしか手に入らない品</b>（真珠・赤珊瑚・南国の果実・海竜の鱗・人魚の涙など）を持ち帰ります。<br>島の品からは，妙薬ネクター・真珠の首飾り・人魚のティアラ・海竜の剣と鎧などを，今ある本で作れます。遠い海ほど良い品がとれますが，難破の危険もあります。`],
+ ['街のイベント',`約2日ごとに，次のイベントのどれかがランダムにやって来ます（同じものは続けて来にくい）。予定はランキング画面の上に出ます。<br>・<b>山賊バルバロス襲来</b>（21時〜1時間）：みんなで撃退するレイドバトル<br>・<b>幸運のドラゴン来訪</b>（19時〜3時間）：開拓+20・品が3倍売れる<br>・<b>流星群の夜</b>（22時〜2時間）：戦闘の経験値2倍・はぎ取り素材2倍<br>・<b>旅の大商隊</b>（12時〜2時間）：市場が品であふれ，仕入れ30%引き<br>・<b>収穫祭</b>（18時〜3時間）：人気+5・荘園の収穫がもう1回・売れ行き1.5倍`],
+ ['幸運のドラゴン来訪',`街のイベントとして<b>日本時間の19時から3時間</b>，幸運のドラゴンが街にやって来ます（予定はランキング画面の上に出ます）。<br>来るとすぐに<b>街の開拓が+20</b>され，来訪中の3時間は<b>プレイヤーもNPCも，どの店の品も3倍売れます</b>。棚に品をたっぷり並べて待ちましょう！`],
  ['暴君「にくべんき藩」の襲撃',`街で最強の武力をもつNPC「にくべんき藩」が，ときどきお店（プレイヤーやNPC）を襲います。襲う日時と店は<b>前もって予告</b>され，ランキング画面の上と新聞に出ます。<br>狙われたら[傭兵所]で<b>兵士を雇って守りを固めましょう</b>（防衛力＝兵士1人10＋能力）。撃退できないと人気が大きく下がります。`],
  ['ギルド',`仲間と一緒にギルドに入ると，人気や売れ行きにボーナスがつきます。<b>ギルドポイント（GP）</b>を貯めて，広告・看板商品・共同仕入れ・クエストなどに使えます。ギルドを作るには男爵（爵位ポイント3）以上が必要です。`],
  ['NPCのギルド',`街には「黄金の天秤」「銀の月商会」「鉄槌同盟」など，NPCが作ったギルドもあります。だれでも自由に加盟でき，加盟したプレイヤーはギルドポイントの使い道も決められます。`],
@@ -2832,7 +2903,7 @@ SCREENS.lord=function(){
   const people=Math.round(5000+dev*300+saf*100+nPl*500);
   const purpose= tax<3?'人民解放':((t.guard||0)*20*2>(t.devem||0)+(t.safem||0))?'軍事重視':'内政重視';
   const bar=(v,col)=>`<div class="hpbar" style="width:120px;display:inline-block"><div style="width:${v}%;background:${col}"></div></div> ${Math.round(v)}`;
-  let h=`<div class="c"><big>領主邸</big></div>${balForecastHtml()}`;
+  let h=`<div class="c"><big>領主邸</big></div>${balForecastHtml()}${eventHtml()}`;
   h+= L? talk(face,'領主 '+L.name,`わしが領主の${esc(L.name)}（${esc(L.shop)}）じゃ。${L.key==='bal'?'この街はオレの物だ。ぐわっはっは！':''}${t.msg?'<br>告知：'+esc(t.msg):''}`) : talk('kaominister','大臣','現在，領主の座は空位です。次の決算で，爵位が最も高い商人が領主に選ばれます。');
   h+=`<div class="c"><big>内政状況</big></div>
   <div class="tbl"><table class="t" style="width:100%">
@@ -3468,7 +3539,7 @@ function forgeMake(no){
 }
 SCREENS.army=function(){
   const st=myStat(), t=T(), me=isLordMe(), mine=(t.riot||{})[myKey()];
-  let h=`<div class="c"><big>傭兵所</big></div>${balForecastHtml()}${nikuHtml()}
+  let h=`<div class="c"><big>傭兵所</big></div>${balForecastHtml()}${eventHtml()}${nikuHtml()}
   ${talk('kaoarmy','傭兵隊長', raidActive(t)?'山賊バルバロスが来たぞ！ 腕に覚えのある者は討伐へ，そうでない者は応援を頼む！':rebelSum(t)>0?'反乱が起きているぞ！ 兵を率いて加勢するなら今だ！':'ここでは兵士を雇ったり，戦い方の訓練ができる。雇った兵士で反乱を起こせば，領主の座を奪うこともできるぞ。')}
   ${raidActive(t)?'<div class="c"><big>山賊バルバロス襲来（レイド）</big></div>'+raidPanel()+'<hr>':''}
   <div class="tbl"><table class="t">
