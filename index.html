@@ -2186,19 +2186,44 @@ function equipSlot(s,no){
 /* ============================================================
    自店：倉庫・使用
    ============================================================ */
+// 倉庫の分類（種類のほかに，魔物の素材・島の品・食べもの・装備品など）
+const STOCK_CATS=[
+  {k:'all',n:'すべて',f:()=>true},
+  {k:'use',n:'使える品',f:it=>it.uses.length>0},
+  {k:'equip',n:'装備品',f:it=>!!it.soubi},
+  {k:'eqon',n:'装備中',f:it=>[1,2,3,4].some(s=>S.eq[s]===it.no)},
+  {k:'mat',n:'原料',f:it=>it.type==='原料'&&!it.fromMon&&!it.island},
+  {k:'mon',n:'魔物の素材',f:it=>!!it.fromMon},
+  {k:'isle',n:'島・町の品',f:it=>!!it.island},
+  {k:'food',n:'食べもの',f:it=>!!it.food},
+  {k:'drug',n:'薬',f:it=>it.type==='薬'&&!it.food},
+  {k:'book',n:'本',f:it=>it.type==='本'},
+  {k:'map',n:'地図・道具',f:it=>['地図','道具'].includes(it.type)&&!SHIPS[it.no]},
+  {k:'ship',n:'船',f:it=>!!SHIPS[it.no]},
+  {k:'rare',n:'イベント品',f:it=>!!it.eventOnly},
+  {k:'sell',n:'売れる品',f:it=>it.pop>0&&!it.noshow},
+];
 SCREENS.stock=function(){
-  const tf=sub.type||0;
-  const nos=Object.keys(S.stock).map(Number).filter(n=>ITEMS[n]&&(!tf||typeIdx(ITEMS[n].type)===tf)).sort((a,b)=>typeIdx(ITEMS[a].type)-typeIdx(ITEMS[b].type)||a-b);
-  const tabs=`<div class="tabs">${TYPES.map((t,i)=>`<span class="${tf===i?'on':''}" onclick="sub.type=${i};render()">${i?im('item-type'+i,'i16'):''}${t}</span>`).join('')}</div>`;
+  const ck=sub.cat||'all', C=STOCK_CATS.find(c=>c.k===ck)||STOCK_CATS[0];
+  const q=(sub.q||'').trim(), sort=sub.sort||'type';
+  const owned=Object.keys(S.stock).map(Number).filter(n=>ITEMS[n]&&S.stock[n]>0);
+  const cnt=c=>owned.filter(n=>c.f(ITEMS[n])).length;
+  let nos=owned.filter(n=>C.f(ITEMS[n])&&(!q||ITEMS[n].name.includes(q)));
+  const sorter={type:(a,b)=>typeIdx(ITEMS[a].type)-typeIdx(ITEMS[b].type)||a-b, name:(a,b)=>ITEMS[a].name.localeCompare(ITEMS[b].name,'ja'), many:(a,b)=>S.stock[b]-S.stock[a], value:(a,b)=>ITEMS[b].price*S.stock[b]-ITEMS[a].price*S.stock[a], price:(a,b)=>ITEMS[b].price-ITEMS[a].price};
+  nos.sort(sorter[sort]||sorter.type);
+  const tabs=`<div class="tabs">${STOCK_CATS.map(c=>{ const n=cnt(c); return (n||c.k==='all')?`<span class="${ck===c.k?'on':''}" onclick="sub.cat='${c.k}';render()">${c.n}<small>(${n})</small></span>`:''; }).join('')}</div>`;
+  const tools=`<div class="c"><input id="stQ" value="${esc(q)}" placeholder="名前でさがす" style="width:45%" onkeydown="if(event.key==='Enter'&&!event.isComposing){sub.q=this.value;sub.cat='all';render();}"> <button onclick="sub.q=$('#stQ').value;sub.cat='all';render()">さがす</button>${q?` <button onclick="sub.q='';render()">×</button>`:''}
+    <select onchange="sub.sort=this.value;render()">${[['type','種類順'],['name','名前順'],['many','数が多い順'],['value','合計の値打ち順'],['price','値段が高い順']].map(([v,l])=>`<option value="${v}" ${sort===v?'selected':''}>${l}</option>`).join('')}</select></div>`;
   let rows=nos.map(n=>{
     const it=ITEMS[n];
     const eq=it.soubi? (S.eq[it.soubi]===n?'<small class="blue">装備中</small>':`<button onclick="equip(${n})">装備</button>`):'';
-    return `<tr><td>${im('item-typesign'+Math.max(1,typeIdx(it.type)),'i32')}<br>${iname(n)}${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}${it.skill?`<br><small>${sk(it.skill)}</small>`:''}<br><small class="note">維持費 ${upkeepStr(it)}</small></td><td class="r nw">${S.stock[n]}${it.scale}</td>
+    const tag=it.fromMon?'<span class="npctag">素材</span>':it.island?'<span class="npctag">島</span>':it.food?'<span class="npctag">食</span>':it.eventOnly?'<span class="npctag strong">レア</span>':'';
+    return `<tr><td>${iname(n)} ${tag}${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}${it.skill?`<br><small>${sk(it.skill)}</small>`:''}<br><small class="note">${it.type}・維持費 ${upkeepStr(it)}</small></td><td class="r nw">${S.stock[n]}${it.scale}</td>
       <td class="nw">${it.uses.length?`<button onclick="go('use',{no:${n}})">使う</button>`:''} ${eq} <button onclick="discard(${n})">捨てる</button></td></tr>`;
   }).join('');
-  return `<div class="c"><big>倉庫</big></div>${tabs}
-  <div class="tbl"><table class="t" style="width:100%"><tr><th>商品</th><th>数量</th><th>操作</th></tr>${rows||'<tr><td colspan=3 class="c">何もありません</td></tr>'}</table></div>
-  <div class="c note">アイテム名を押すと，くわしい説明（維持費・装備したときの能力など）が見られます。<br>倉庫の品には，決算ごとに維持費がかかります（いま合計 ${yen(Math.round(Object.keys(S.stock).reduce((a,no)=>a+(ITEMS[no]?upkeep(ITEMS[no]):0)*S.stock[no],0)))}/日）。</div>`;
+  return `<div class="c"><big>倉庫</big> <small>（${owned.length}種類）</small></div>${tabs}${tools}
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>商品</th><th>数量</th><th>操作</th></tr>${rows||`<tr><td colspan=3 class="c">${q?'見つかりません':'何もありません'}</td></tr>`}</table></div>
+  <div class="c note">アイテム名を押すと，くわしい説明（維持費・装備したときの能力など）が見られます。<br>倉庫の品には，決算ごとに維持費がかかります（いま合計 ${yen(Math.round(Object.keys(S.stock).reduce((a,no)=>a+(ITEMS[no]?upkeep(ITEMS[no]):0)*S.stock[no],0)))}/回）。</div>`;
 };
 function discard(n){
   const it=ITEMS[n];
