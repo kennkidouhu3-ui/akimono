@@ -1283,7 +1283,7 @@ async function initNet(){
     db.collection('bbs').orderBy('t','desc').limit(40).onSnapshot(s=>{ NET.bbs=s.docs.map(d=>d.data()); softRender(); },netErr);
     db.collection('news').orderBy('t','desc').limit(60).onSnapshot(s=>{ NET.news=s.docs.map(d=>d.data()); softRender(); },netErr);
     db.collection('auc').onSnapshot(s=>{ NET.auc=s.docs.map(d=>({id:d.id,...d.data()})); softRender(); },netErr);
-    db.collection('guilds').onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]=d.data()); NET.guilds=o; syncGuild(); ensureNpcGuilds(); applyFixedIcons(); softRender(); },netErr);
+    db.collection('guilds').onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]=d.data()); NET.guilds=o; registerGuildIcons(); syncGuild(); ensureNpcGuilds(); applyFixedIcons(); softRender(); },netErr);
     db.collection('jobs').onSnapshot(s=>{ NET.jobs=s.docs.map(d=>({id:d.id,...d.data()})); softRender(); },netErr);
   }catch(e){ if(e) console.warn(e); NET.online=false; }
   NET.ready=true;
@@ -3376,9 +3376,34 @@ function guildDetail(k){
 }
 // 指定のギルドに専用の紋章をつける
 const GUILD_FIXED_ICON={'大政翼賛会':'guild-taisei'};
+// アップロードした画像を32×32の紋章にする
+let NEW_GICON=null;
+function readIconFile(input,cb){
+  const f=input.files&&input.files[0]; if(!f) return;
+  if(!/^image\//.test(f.type)){ setFlash('画像ファイルを選んでください',1); render(); return; }
+  const r=new FileReader();
+  r.onload=()=>{ const img=new Image(); img.onload=()=>{
+      const S2=32, c=document.createElement('canvas'); c.width=S2; c.height=S2; const x=c.getContext('2d');
+      const sc=Math.min(S2/img.width,S2/img.height), w=Math.round(img.width*sc), h=Math.round(img.height*sc);
+      x.imageSmoothingEnabled=true; x.imageSmoothingQuality='high'; x.drawImage(img,(S2-w)/2,(S2-h)/2,w,h);
+      cb(c.toDataURL('image/png')); };
+    img.onerror=()=>{ setFlash('画像を読み込めませんでした',1); render(); };
+    img.src=r.result; };
+  r.readAsDataURL(f);
+}
+// ギルドの画像の紋章を IMG に登録（どの画面でも同じように表示）
+function registerGuildIcons(){ Object.entries(NET.guilds||{}).forEach(([id,g])=>{ if(g.iconData) IMG['gicon-'+id]=g.iconData; }); }
+function uploadGuildIcon(input){
+  readIconFile(input,data=>{
+    const g=myGuildDoc(); if(!g||!canManage(g)) return;
+    const id=S.guild; IMG['gicon-'+id]=data;
+    guildTx(id,x=>{ x.iconData=data; x.icon='gicon-'+id; }).then(()=>{ setFlash('ギルドの紋章を新しい画像にしました'); render(); });
+  });
+}
+function pickNewGuildIcon(input){ readIconFile(input,data=>{ NEW_GICON=data; IMG['gicon-new']=data; const el=$('#gIconPrev'); if(el) el.innerHTML=`<img src="${data}" width="32" height="32"> <small>この画像を紋章にします</small>`; const rd=document.querySelector('input[name=gIcon][value="__upload"]'); if(rd) rd.checked=true; }); }
 function applyFixedIcons(){
   if(!NET.online) return;
-  Object.entries(NET.guilds||{}).forEach(([id,g])=>{ const ic=GUILD_FIXED_ICON[g.name]; if(ic&&g.icon!==ic) guildTx(id,x=>{ if(x.icon===ic) return 'nochange'; x.icon=ic; }); });
+  Object.entries(NET.guilds||{}).forEach(([id,g])=>{ const ic=GUILD_FIXED_ICON[g.name]; if(ic&&!g.iconData&&g.icon!==ic) guildTx(id,x=>{ if(x.icon===ic) return 'nochange'; x.icon=ic; }); });
 }
 function ensureNpcGuilds(){
   if(!NET.online||npcGuildChecked) return; npcGuildChecked=true;
@@ -3475,7 +3500,8 @@ function guildOnline(){
     <div class="tbl"><table class="t">
       <tr><th>会費</th><td><select id="gsFee">${[0,1,2,3,4,5,6,7,8,9,10].map(v=>`<option ${v===my.fee?'selected':''}>${v}</option>`).join('')}</select> %</td></tr>
       <tr><th>加盟</th><td><select id="gsOpen"><option value="0" ${my.open?'':'selected'}>承認制</option><option value="1" ${my.open?'selected':''}>自由加盟</option></select></td></tr>
-      <tr><th>紋章</th><td>${GUILD_ICONS.map(ic=>`<label style="display:inline-block;margin:3px"><input type="radio" name="gsIcon" value="${ic}" ${ic===(my.icon||'guildprize')?'checked':''}>${im(ic,'i16')}</label>`).join('')}</td></tr>
+      <tr><th>紋章</th><td>${my.iconData?`<label style="display:inline-block;margin:3px"><input type="radio" name="gsIcon" value="gicon-${S.guild}" ${my.icon==='gicon-'+S.guild?'checked':''}><img src="${my.iconData}" width="20" height="20"><small>画像</small></label>`:''}${GUILD_ICONS.map(ic=>`<label style="display:inline-block;margin:3px"><input type="radio" name="gsIcon" value="${ic}" ${ic===(my.icon||'guildprize')?'checked':''}>${im(ic,'i16')}</label>`).join('')}
+      <div style="margin-top:6px"><label class="btn" style="display:inline-block;border:1px solid #999;border-radius:5px;padding:6px 10px;background:#fff;cursor:pointer">📷 画像をアップロード<input type="file" accept="image/*" style="display:none" onchange="uploadGuildIcon(this)"></label><br><small class="note">選んだ画像は小さな紋章（32×32）になり，すぐに反映されます。</small></div></td></tr>
       <tr><th>告知</th><td><input id="gsMsg" maxlength="60" value="${esc(my.msg||'')}" style="width:100%"></td></tr>
     </table></div>
     <div class="c"><button onclick="guildSettings()">設定を保存</button></div>
@@ -3512,7 +3538,9 @@ function guildOnline(){
       <tr><th>ギルド名</th><td><input id="gName" maxlength="12"></td></tr>
       <tr><th>会費</th><td><select id="gFee">${[0,1,2,3,4,5,6,7,8,9,10].map(v=>`<option ${v===3?'selected':''}>${v}</option>`).join('')}</select> %</td></tr>
       <tr><th>加盟</th><td><select id="gOpen"><option value="1">自由加盟</option><option value="0">承認制</option></select></td></tr>
-      <tr><th>紋章</th><td>${GUILD_ICONS.map((ic,i)=>`<label style="display:inline-block;margin:3px"><input type="radio" name="gIcon" value="${ic}" ${i===0?'checked':''}>${im(ic,'i16')}</label>`).join('')}</td></tr>
+      <tr><th>紋章</th><td>${GUILD_ICONS.map((ic,i)=>`<label style="display:inline-block;margin:3px"><input type="radio" name="gIcon" value="${ic}" ${i===0&&!NEW_GICON?'checked':''}>${im(ic,'i16')}</label>`).join('')}
+      <label style="display:inline-block;margin:3px"><input type="radio" name="gIcon" value="__upload" ${NEW_GICON?'checked':''}><small>画像</small></label>
+      <div style="margin-top:6px"><label style="display:inline-block;border:1px solid #999;border-radius:5px;padding:6px 10px;background:#fff;cursor:pointer">📷 画像をアップロード<input type="file" accept="image/*" style="display:none" onchange="pickNewGuildIcon(this)"></label> <span id="gIconPrev">${NEW_GICON?`<img src="${NEW_GICON}" width="32" height="32">`:''}</span></div></td></tr>
     </table></div><div class="c"><button onclick="guildCreate()">結成する（${yen(GUILD_COST)}）</button></div>` : `<div class="c note">ギルドの結成には爵位ポイント${GUILD_DIG}以上（${DIGNITY[digLevel(GUILD_DIG)]}）が必要です（現在${S.dig}pt）。<br>ランキング1位や王様の依頼で爵位ポイントを集めましょう。</div>`;
   }
   return h;
@@ -3563,11 +3591,12 @@ async function guildCreate(){
   const name=$('#gName').value.trim(); if(!name){ setFlash('ギルド名を入れてください',1); render(); return; }
   if(Object.values(NET.guilds).some(g=>g.name===name)){ setFlash('同じ名前のギルドがあります',1); render(); return; }
   if(S.money<GUILD_COST){ setFlash('資金が足りません',1); render(); return; }
-  const ic=(document.querySelector('input[name=gIcon]:checked')||{}).value||'guildprize';
+  let ic=(document.querySelector('input[name=gIcon]:checked')||{}).value||'guildprize'; const up=ic==='__upload'&&NEW_GICON?NEW_GICON:null; if(ic==='__upload'&&!up) ic='guildprize';
   S.money-=GUILD_COST; save();
   try{
     const ref=await NET.db.collection('guilds').add({name,leader:NET.uid,leaderName:S.owner,fee:+$('#gFee').value,open:$('#gOpen').value==='1',icon:ic,msg:'',fund:0,exp:0,members:{[NET.uid]:me4g()},reqs:{},board:[],t:Date.now()});
-    S.guild=ref.id; gTab=1; news(`${S.owner}（${S.shop}）がギルド「${name}」を結成した！`); setFlash(`ギルド「${esc(name)}」を結成しました！`);
+    S.guild=ref.id; if(up){ IMG['gicon-'+ref.id]=up; await guildTx(ref.id,x=>{ x.iconData=up; x.icon='gicon-'+ref.id; }); NEW_GICON=null; }
+    gTab=1; news(`${S.owner}（${S.shop}）がギルド「${name}」を結成した！`); setFlash(`ギルド「${esc(name)}」を結成しました！`);
   }catch(e){ netErr(e); S.money+=GUILD_COST; setFlash('結成に失敗しました',1); }
   save(); render();
 }
