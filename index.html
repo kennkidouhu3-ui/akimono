@@ -428,13 +428,17 @@ const SERIES={kiba:{n:'獣牙',need:4,sk:'s_kiba'},majyu:{n:'魔獣',need:4,sk:'
 const ITEMS = {}; DATA.items.forEach(it=>{ if(it.no===80 && !it.uses.some(u=>u.top)) it.uses.push({name:'最上級の魔物に挑む',time:120,action:'戦闘開始',info:'とてつもなく強い魔物に挑みます。勝てば賞金！',exp:1,use:[[1,80]],get:[],func:'_local_',top:1}); it.info=(it.info||'').replace(/<[^>]+>/g,''); ITEMS[it.no]=it; });
 const ITEMLIST = DATA.items;
 const MONS = DATA.monsters;
+// 魔物の賞金：レベル（低・中・上）ごとに，強さに応じて少しずつ
+(function(){ const RANGE=[[300,2000],[2000,8000],[8000,30000]];
+  for(let tier=0;tier<3;tier++){ const g=MONS.slice(tier*15,tier*15+15); const pw=m=>m.atk+m.def+m.tech+m.hp/4; const lo=Math.min(...g.map(pw)), hi=Math.max(...g.map(pw));
+    g.forEach(m=>{ const r=hi>lo?(pw(m)-lo)/(hi-lo):0.5; m.prize=Math.round((RANGE[tier][0]+(RANGE[tier][1]-RANGE[tier][0])*r)/100)*100; }); } })();
 // 最上級の魔物（勝つと賞金）
 const TOP_MONS=[
-  {name:'深淵のクラーケン',img:33,hp:320,atk:560,def:380,tech:420,btype:5,exp:900,prize:800000,drop:7,dropN:5,dropP:40,fx:'filter:hue-rotate(180deg) brightness(.8)'},
-  {name:'地獄の番犬ケルベロス・ロード',img:42,hp:300,atk:650,def:300,tech:600,btype:2,exp:1000,prize:900000,drop:8,dropN:20,dropP:40,fx:'filter:hue-rotate(300deg) saturate(2)'},
-  {name:'熾天使セラフィム',img:34,hp:800,atk:480,def:200,tech:260,btype:6,exp:1100,prize:1000000,drop:70,dropN:1,dropP:20,fx:'filter:brightness(1.2) saturate(1.5)'},
-  {name:'覇王竜ヴァルドラ',img:44,hp:450,atk:800,def:420,tech:320,btype:10,exp:1500,prize:1500000,drop:44,dropN:1,dropP:25,fx:'filter:hue-rotate(40deg) saturate(2.5) contrast(1.2)'},
-  {name:'魔王アイム',img:41,hp:400,atk:760,def:650,tech:700,btype:8,exp:2000,prize:2000000,drop:69,dropN:1,dropP:30,fx:'filter:invert(.15) saturate(2) hue-rotate(250deg)'},
+  {name:'深淵のクラーケン',img:33,hp:320,atk:560,def:380,tech:420,btype:5,exp:900,prize:150000,drop:7,dropN:5,dropP:40,fx:'filter:hue-rotate(180deg) brightness(.8)'},
+  {name:'地獄の番犬ケルベロス・ロード',img:42,hp:300,atk:650,def:300,tech:600,btype:2,exp:1000,prize:180000,drop:8,dropN:20,dropP:40,fx:'filter:hue-rotate(300deg) saturate(2)'},
+  {name:'熾天使セラフィム',img:34,hp:800,atk:480,def:200,tech:260,btype:6,exp:1100,prize:220000,drop:70,dropN:1,dropP:20,fx:'filter:brightness(1.2) saturate(1.5)'},
+  {name:'覇王竜ヴァルドラ',img:44,hp:450,atk:800,def:420,tech:320,btype:10,exp:1500,prize:300000,drop:44,dropN:1,dropP:25,fx:'filter:hue-rotate(40deg) saturate(2.5) contrast(1.2)'},
+  {name:'魔王アイム',img:41,hp:400,atk:760,def:650,tech:700,btype:8,exp:2000,prize:400000,drop:69,dropN:1,dropP:30,fx:'filter:invert(.15) saturate(2) hue-rotate(250deg)'},
 ];
 const TYPES = ['全','原料','本','薬','剣','鎧','盾','杖','アクセサリ','地図','道具'];
 const typeIdx = t => Math.max(0,TYPES.indexOf(t));
@@ -2244,7 +2248,7 @@ function chooseMonster(mode,t){
   const ms=myStat();
   const rows=list.map(({m,k,top})=>{ const mat=top?146+k:101+k; const hp=Math.round(ms.life*m.hp/100);
     const pw=m.atk+m.def+m.tech, mine=ms.attack+ms.defence+ms.tech, lv=pw>mine*1.3?'<span class="red">とても強い</span>':pw>mine*0.9?'<span class="red">強い</span>':pw>mine*0.6?'互角':'<span class="blue">楽勝</span>';
-    return `<tr><td>${im('no-'+m.img,'','width=36 height=46'+(m.fx?` style="${m.fx}"`:''))}</td><td><b>${esc(m.name)}</b><br><small>HP${hp} 攻${m.atk} 防${m.def} 技${m.tech}<br>手ごたえ：${lv}${ITEMS[mat]?`<br>はぎ取り：${esc(ITEMS[mat].name)}`:''}${top?`<br>賞金${yen(m.prize)}`:''}</small></td><td><button onclick="pickMonster(${mode},${k},${t})">選ぶ</button></td></tr>`; }).join('');
+    return `<tr><td>${im('no-'+m.img,'','width=36 height=46'+(m.fx?` style="${m.fx}"`:''))}</td><td><b>${esc(m.name)}</b><br><small>HP${hp} 攻${m.atk} 防${m.def} 技${m.tech}<br>手ごたえ：${lv}${ITEMS[mat]?`<br>はぎ取り：${esc(ITEMS[mat].name)}`:''}<br>賞金${yen(m.prize||0)}</small></td><td><button onclick="pickMonster(${mode},${k},${t})">選ぶ</button></td></tr>`; }).join('');
   modal(`<div class="c"><big>戦う魔物を選ぶ</big></div><div class="c note">持ち時間 ${hm(t)}・バトルチケット1枚</div><div class="tbl"><table class="t" style="width:100%">${rows}</table></div><div class="c"><button onclick="closeModal()">やめる</button></div>`);
 }
 function pickMonster(mode,k,t){
@@ -2472,7 +2476,8 @@ function finishBattle(){
     if(b.mon && Math.random()*100<b.mon.dropP+(skillFx().drop||0)+(evActive('meteor')?20:0)){ add(b.mon.drop,b.mon.dropN); res.push(`${iname(b.mon.drop)}×${b.mon.dropN}を手に入れた！`); }
     S.today.gpx=(S.today.gpx||0)+(b.foe.top?5:1);
     if(b.mon){ const mi=b.foe.top? 146+TOP_MONS.indexOf(b.mon) : 101+MONS.indexOf(b.mon); if(ITEMS[mi]){ const fx1=skillFx(); let k=(b.foe.top?1:1+rnd(2))+(fx1.mat||0); if(fx1.hunter) k*=2; if(evActive('meteor')) k*=2; add(mi,k); res.push(`はぎ取り！ ${iname(mi)}×${k}を手に入れた`); } }
-    if(b.foe.top){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0))); S.money+=pz; addIncome(pz); S.pop=clamp(S.pop+3,0,100); res.push(`<b class="red">最上級の魔物を討ち取った！ 賞金${yen(Math.round(b.mon.prize*(1+(skillFx().prize||0))))}を得た！ 人気+3</b>`); news(`${S.owner}（${S.shop}）が最上級の魔物「${b.mon.name}」を討ち取った！`); }
+    if(b.mon&&!b.foe.top&&b.mon.prize){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0))); S.money+=pz; addIncome(Math.round(pz*0.1)); res.push(`賞金 ${yen(pz)} を手に入れた`); }
+    if(b.foe.top){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0))); S.money+=pz; addIncome(Math.round(pz*0.1)); S.pop=clamp(S.pop+3,0,100); res.push(`<b class="red">最上級の魔物を討ち取った！ 賞金${yen(Math.round(b.mon.prize*(1+(skillFx().prize||0))))}を得た！ 人気+3</b>`); news(`${S.owner}（${S.shop}）が最上級の魔物「${b.mon.name}」を討ち取った！`); }
     if(b.npc){ const up=(b.npc.strong||b.npc.warrior||b.npc.tyrant)?4:2; S.pop=clamp(S.pop+up,0,100); b.npc.pop=clamp(b.npc.pop-1,b.npc.popBase?b.npc.popBase-15:0,100); res.push(`<span class="blue">勝利で人気+${up}</span>／${esc(b.npc.shop)}の人気-1`); if(b.npc.tyrant||b.npc.strong||b.npc.warrior){
       // 賞金は相手との力の差に比例（自分がずっと強ければ少なめ）。点数への反映はごく少なめ
       const pw=s=>s.life/5+s.attack+s.defence+s.tech, mine=pw(myStat()), foe=pw(b.npc.st||{life:0,attack:0,defence:0,tech:0});
@@ -3097,7 +3102,7 @@ SCREENS.library=function(){
   if(tab===2){
     return `<div class="c"><big>図書館</big></div>${tabs}
     <div class="tbl"><table class="t"><tr><th></th><th>魔物</th><th>強さ</th><th>落とす物</th></tr>
-    ${MONS.map((m,i)=>`<tr><td>${im('no-'+m.img,'','width=37 height=47')}</td><td>${esc(m.name)}<br><small>${['低','中','上'][Math.floor(i/15)]}レベル</small></td><td><small>HP${m.hp}% 攻${m.atk} 防${m.def} 技${m.tech}<br>${BTYPES[m.btype]}</small></td><td><small>${iname(m.drop)}×${m.dropN}(${m.dropP}%)<br>はぎ取り：${iname(101+i)}</small></td></tr>`).join('')}
+    ${MONS.map((m,i)=>`<tr><td>${im('no-'+m.img,'','width=37 height=47')}</td><td>${esc(m.name)}<br><small>${['低','中','上'][Math.floor(i/15)]}レベル</small></td><td><small>HP${m.hp}% 攻${m.atk} 防${m.def} 技${m.tech}<br>${BTYPES[m.btype]}</small></td><td><small>${iname(m.drop)}×${m.dropN}(${m.dropP}%)<br>はぎ取り：${iname(101+i)}<br>賞金：${yen(m.prize||0)}</small></td></tr>`).join('')}
     </table></div>`;
   }
   return `<div class="c"><big>図書館</big></div>${tabs}
