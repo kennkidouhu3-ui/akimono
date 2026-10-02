@@ -1022,9 +1022,10 @@ function npcOnline(atDay){
     const profit3=Math.max(0,Math.round((600000+350000*s3+150000*s2)*(d.strong?1.3:1)));
     const today=Math.max(0,Math.round((120000+80000*s1)*(dragonActive()?3:1)));
     const loc=S&&S.npcs&&S.npcs[i];
-    return {me:false,npc:true,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop,wins,
+    const ex=((T().exposed||{})['npc:'+i]||0)>Date.now()?0.5:1;
+    return {me:false,npc:true,exposed:ex<1,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop:Math.round(pop*ex),wins,
       dig:Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))),money:Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3),
-      point:Math.round(calcPoint(pop,wins,profit3,today)*(d.mult||1)),sale:Math.round(today*(d.mult||1)),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
+      point:Math.round(calcPoint(pop*ex,wins,profit3*ex,today*ex)*(d.mult||1)),sale:Math.round(today*(d.mult||1)*ex),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
       st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
   });
 }
@@ -1046,7 +1047,7 @@ function ranking(){
 function rankingAt(d){
   // 表彰用：その日の終わりの点数で全員をそろえて比べる
   const a=playerShops().filter(r=>!r.idle).map(r=>{ const s=NET.shops[r.uid]||{}; return {...r,point:(s.ptEnd&&s.ptEnd.d===d)?s.ptEnd.v:r.point}; });
-  a.push(...npcOnline(d));
+  a.push(...npcOnline());
   if(S){ const me=mySummaryRow(); me.point=(S.ptEnd&&S.ptEnd.d===d)?S.ptEnd.v:me.point; a.push(me); }
   return a.sort((x,y)=>(y.point-x.point)||(y.money-x.money));
 }
@@ -1131,7 +1132,7 @@ function processMail(){
         if(m.rank===1){ S.wins++; const bd=digLevel(S.dig); S.dig+=1; letter('大臣','kaominister',`${periodLabel(m.day)}の商人ランキング1位おめでとうございます！（${(m.point||0).toLocaleString()}点）褒美として爵位ポイント1を授けます（現在${S.dig}pt）。`+(digLevel(S.dig)>bd?`${DIGNITY[digLevel(S.dig)]}に叙爵されました！`:'')); if(digLevel(S.dig)>bd) news(`${S.owner}（${S.shop}）が${DIGNITY[digLevel(S.dig)]}に叙爵された`); }
         else { const g=PRIZE[m.rank-1]||0, gt=GIFT_PRIZE[m.rank]||0; S.money+=g; if(gt) add(79,gt); letter('大臣','kaominister',`${periodLabel(m.day)}の商人ランキング${m.rank}位おめでとうございます！ ${[g?`賞金${yen(g)}`:'',gt?`ギフト券${gt}枚`:''].filter(Boolean).join('と')}を授けます。`); }
       }
-      else if(m.kind==='expose'){ S.pop=Math.round(S.pop/2); letter('大臣','kaominister','領主の命令で，お店に軍隊の取り締まりが入りました…。人気が大きく下がってしまいました。'); }
+      else if(m.kind==='expose'){ S.pop=Math.round(S.pop/2); S.exposedUntil=Date.now()+24*3600000; letter('大臣','kaominister','領主の命令で，お店に軍隊の取り締まりが入りました…。人気が半分になり，これから1日はお客さんが半分しか来ません。'); }
       else if(m.kind==='drres'){ applyDrRes(m); }
       else if(m.kind==='raidrew'){ applyRaidRew(m); }
       else if(m.kind==='admin'){ applyAdmin(m); }
@@ -1405,7 +1406,7 @@ function townDaily(d){
     // NPCの店からも税をとる（オンライン。オフラインは売れるたびに計算済み）
     if(NET.online){
       const rateOf=k=>{ const m=(t.taxmode||{})[k], b=townVal(t,'tax',5); return m==='free'?0:m==='double'?b*2:b; };
-      const npcTax=npcOnline(d).reduce((a,n)=>a+Math.round(n.sale*rateOf(n.key)/100),0);
+      const npcTax=npcOnline().reduce((a,n)=>a+Math.round(n.sale*rateOf(n.key)/100),0);
       t.npcTaxPrev=npcTax;
       if(npcTax>0){ t.fund=(t.fund||0)+npcTax; t.inPrev=(t.inPrev||0)+npcTax; }
     }
@@ -1515,7 +1516,7 @@ function simulate(dt){
   S.clock+=dt;
   S.time=Math.min(maxTime(),S.time+dt);
   // 自店の売上
-  const gi0=guildInfo(S.guild); const dragonX=(dragonActive()?3:1)*(evActive('festival')?1.5:1); const gb = (gi0? 1+gi0.bonus*0.03 : 1)*townMult()*(1+(skillFx().sales||0))*dragonX;
+  const gi0=guildInfo(S.guild); const dragonX=(dragonActive()?3:1)*(evActive('festival')?1.5:1); const exposedX=(S.exposedUntil&&Date.now()<S.exposedUntil)?0.5:1; const gb = (gi0? 1+gi0.bonus*0.03 : 1)*townMult()*(1+(skillFx().sales||0))*dragonX*exposedX;
   const trashF = S.trash>100?0.6:S.trash>50?0.85:1;
   S.cases.forEach((c,idx)=>{
     if(!c || !has(c.no)) return;
@@ -1538,7 +1539,7 @@ function simulate(dt){
   S.npcs.forEach(n=>{
     n.cases.forEach(nc=>{
       if(!nc||nc.stock<=0) return;
-      const k=Math.min(nc.stock,poisson(saleRate(ITEMS[nc.no],nc.price,n.pop,1)*dt*0.9*(n.mult||1)*dragonX*(ITEMS[nc.no].food?2:1)));
+      const k=Math.min(nc.stock,poisson(saleRate(ITEMS[nc.no],nc.price,n.pop,1)*dt*0.9*(n.mult||1)*dragonX*(ITEMS[nc.no].food?2:1)*(((T().exposed||{})['npc:'+n.id]||0)>Date.now()?0.5:1)));
       if(k>0){ nc.stock-=k; const g=nc.price*k; const tax = NET.online?0:Math.round(g*taxRateFor('npc:'+n.id)/100); n.money+=g-tax; n.today+=g; if(tax) S.today.npctax=(S.today.npctax||0)+tax; }
     });
   });
@@ -1795,7 +1796,7 @@ function rankTable(limit){
     return `<tr ${r.me?'style="font-weight:bold"':''}>
     <td class="r nw"><b>No.${off+i+1}</b>${off+i<6?im('rank'+(off+i+1),'i16'):''}<br>${updown(r,off+i)}<br><b class="red">${(r.point||0).toLocaleString()}</b>点</td>
     <td class="c">${kao(r.kao)}<br>${im((JOBS[r.job]||JOBS['']).img,'','width=20 height=30')}</td>
-    <td>${guildIcon(r.guild)}${r.me?'<span class="span">'+esc(r.shop)+'</span>':(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${r.npc?' <span class="npctag">NPC</span>':''}${r.strong?' <span class="npctag strong">強豪</span>':''}${r.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${r.tyrant?' <span class=\"npctag strong\" style=\"background:#3a1010;border-color:#300;color:#fff\">暴君</span>':''}${L&&L.key===r.key?' <small class="red">[領主]</small>':''} ${winIcons(r.wins)}
+    <td>${guildIcon(r.guild)}${r.me?'<span class="span">'+esc(r.shop)+'</span>':(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${r.npc?' <span class="npctag">NPC</span>':''}${r.strong?' <span class="npctag strong">強豪</span>':''}${r.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${r.tyrant?' <span class=\"npctag strong\" style=\"background:#3a1010;border-color:#300;color:#fff\">暴君</span>':''}${((T().exposed||{})[r.key]||0)>Date.now()?' <span class="npctag" style="background:#fdd;border-color:#c33;color:#c33">取締中</span>':''}${L&&L.key===r.key?' <small class="red">[領主]</small>':''} ${winIcons(r.wins)}
       <br><small>${esc(r.name)}・${(JOBS[r.job]||JOBS['']).name}・${digHtml(r.dig)}${r.soldiers?'・兵'+r.soldiers:''}</small>
       <br><small>人気 ${popStars(r.pop)}</small>
       ${cs.length?`<br><small>${cs.map(c=>ii(c.no)).join('')} ${esc(ITEMS[first.no].name)} ${yen(first.price)}</small>`:''}
@@ -3244,7 +3245,7 @@ function lordOffice(t,shops){
   <div class="c"><select id="lTg">${opts}</select> の税を <select id="lMd"><option value="normal">通常</option><option value="free">免除</option><option value="double">２倍</option></select> <button onclick="lordTaxSide()">設定する</button></div>
   <div class="c"><button onclick="lordTaxReset()">すべての店の税を通常に戻す</button></div>
   <div class="c"><big>店舗取り締まり</big></div>
-  ${rebelSum(t)>0?'<div class="c note">反乱中のため実行できません</div>':!guardOK?'<div class="c note">取り締まりには護衛軍が200人以上必要です</div>':!fundOK?'<div class="c note">費用（街資金¥1,000,000）が足りません</div>':`<div class="c"><select id="lEx">${opts}</select> を <button onclick="lordExpose()">軍隊で取り締まる</button></div><div class="c note">費用¥1,000,000。取り締まられた店は人気が半分に下がり，街の治安が上がります。</div>`}
+  ${rebelSum(t)>0?'<div class="c note">反乱中のため実行できません</div>':!guardOK?'<div class="c note">取り締まりには護衛軍が200人以上必要です</div>':!fundOK?'<div class="c note">費用（街資金¥1,000,000）が足りません</div>':`<div class="c"><select id="lEx">${opts}</select> を <button onclick="lordExpose()">軍隊で取り締まる</button></div><div class="c note">費用¥1,000,000。取り締まられた店は人気が半分になり，1日（決算2回）のあいだお客さんも半分になります。街の治安も上がります。</div>`}
   <div class="c"><big>軍事設定</big></div>
   <div class="c">護衛軍 ${t.guard||0}人　<input type="number" id="lArm" value="100" min="1" style="width:80px">人 <button onclick="lordArmy(1)">増強（1人¥1,200）</button> <button onclick="lordArmy(-1)">削減</button></div>
   <div class="c"><big>荘園の方針</big></div>
@@ -3255,7 +3256,7 @@ function lordOffice(t,shops){
   </table></div>
   <div class="c"><button onclick="lordManor()">荘園の方針を決定</button></div>
   <div class="c"><big>領主報酬</big></div>
-  <div class="c">${(t.payDay===day())?'<small class="note">今日の報酬は受け取り済みです</small>':`<button onclick="lordPay()">今日の報酬を受け取る（街資金の5%・最大¥300,000）</button>`}</div>`;
+  <div class="c">${(t.payDay===curPeriod())?'<small class="note">今回（次の決算まで）の報酬は受け取り済みです</small>':`<button onclick="lordPay()">報酬を受け取る（決算ごとに1回・街資金の5%・最大¥300,000）</button>`}</div>`;
 }
 function lordNews(m){ news(m); }
 function lordShops(){ return NET.online? ranking() : allShops(); }
@@ -3275,9 +3276,9 @@ function lordTaxReset(){ townTx(t=>{ t.taxmode={}; }).then(()=>{ lordNews(`領�
 function lordExpose(){
   const key=REFS[+$('#lEx').value]; const r=lordShops().find(x=>x.key===key); if(!r){ setFlash('お店が見つかりませんでした',1); render(); return; }
   confirmBox(`${esc(r.shop)}を軍隊で取り締まりますか？（街資金¥1,000,000）`,()=>{
-    townTx(t=>{ if((t.fund||0)<1000000||(t.guard||0)<200||rebelSum(t)>0) return 'ng'; t.fund-=1000000; t.safety=clamp(townVal(t,'safety',80)+5,0,100); return 'ok'; }).then(res=>{
+    townTx(t=>{ if((t.fund||0)<1000000||(t.guard||0)<200||rebelSum(t)>0) return 'ng'; t.fund-=1000000; t.safety=clamp(townVal(t,'safety',80)+5,0,100); t.exposed=t.exposed||{}; Object.keys(t.exposed).forEach(k=>{ if(t.exposed[k]<Date.now()) delete t.exposed[k]; }); t.exposed[key]=Date.now()+24*3600000; return 'ok'; }).then(res=>{
       if(res!=='ok'){ setFlash('取り締まりできませんでした',1); render(); return; }
-      if(r.me) S.pop=Math.round(S.pop/2);
+      if(r.me){ S.pop=Math.round(S.pop/2); S.exposedUntil=Date.now()+24*3600000; }
       else if(String(key).startsWith('npc:')){ const n=S.npcs[+String(key).slice(4)]; if(n) n.pop=Math.round(n.pop/2); }
       else sendMail(key,{kind:'expose'});
       lordNews(`領主${S.owner}は${r.shop}に対して取り締まりを行いました`); setFlash(`${esc(r.shop)}を取り締まりました`); save(); render();
@@ -3295,7 +3296,7 @@ function lordManor(){
 }
 function lordManorOpen(){ townTx(t=>{ if((t.fund||0)<1000000) return 'poor'; t.fund-=1000000; t.manorMax=Math.min(10,townVal(t,'manorMax',5)+1); return 'ok'; }).then(r=>{ setFlash(r==='ok'?'荘園を開墾しました。1人あたりの区画の上限が増えました':'街資金が足りません',r!=='ok'); if(r==='ok') lordNews(`領主${S.owner}が荘園を開墾しました`); render(); }); }
 function lordPay(){
-  townTx(t=>{ if(t.payDay===day()) return 0; const v=Math.min(300000,Math.floor(Math.max(0,t.fund||0)*0.05)); t.fund-=v; t.payDay=day(); return v; }).then(v=>{ if(v>0){ S.money+=v; addIncome(v); setFlash(`領主報酬 ${yen(v)} を受け取りました`); save(); } else setFlash('受け取れる報酬がありません',1); render(); });
+  townTx(t=>{ if(t.payDay===curPeriod()) return 0; const v=Math.min(300000,Math.floor(Math.max(0,t.fund||0)*0.05)); t.fund-=v; t.payDay=curPeriod(); return v; }).then(v=>{ if(v>0){ S.money+=v; addIncome(v); setFlash(`領主報酬 ${yen(v)} を受け取りました`); save(); } else setFlash('受け取れる報酬がありません',1); render(); });
 }
 function lordSupport(){
   const v=clamp(parseInt($('#lSup').value)||0,0,1000000); if(!v) return; if(S.money<=200000||S.money<v){ setFlash('資金が足りません',1); render(); return; }
