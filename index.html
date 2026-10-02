@@ -1079,12 +1079,13 @@ function shopSummary(){
     point:myPoint(),ptEnd:S.ptEnd||null,sale:S.today.sales,exps:Math.round(expSum()),found:S.createdAt||0,rkY:S.rankY||0};
 }
 let lastPub='', pubBusy=false;
+let lastPubT=0;
 async function publishShop(force){
   if(!NET.online||!S||pubBusy||NET.readonly||NET.kicked||NET.paused) return;
-  const d=shopSummary(); const k=JSON.stringify({...d,t:0,day:0});
-  if(!force && k===lastPub) return;
+  const d=shopSummary(); d.act=document.visibilityState!=='hidden'; const k=JSON.stringify({...d,t:0,day:0});
+  if(!force && k===lastPub && Date.now()-lastPubT<3*60000) return;
   pubBusy=true;
-  try{ await NET.db.doc('shops/'+NET.uid).set(d); lastPub=k; }catch(e){ netErr(e); }
+  try{ await NET.db.doc('shops/'+NET.uid).set(d); lastPub=k; lastPubT=Date.now(); }catch(e){ netErr(e); }
   pubBusy=false;
 }
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
@@ -1721,11 +1722,18 @@ const MENU=[
 let menuOpen=2;
 function menuGroupOf(r){ if(r==='use'||r==='battle') return 0; for(let i=0;i<MENU.length;i++){ if(MENU[i][1].some(x=>x[1]===r)) return i; } return 2; }
 function go(r,s){ route=r; sub=s||{}; menuOpen=menuGroupOf(r); render(); window.scrollTo(0,0); }
+function onlineNow(){
+  const now=Date.now();
+  const others=Object.values(NET.shops||{}).filter(s=>s&&s.uid&&s.uid!==NET.uid&&s.act!==false&&now-(s.t||0)<5*60000);
+  return (S?[{owner:S.owner,shop:S.shop,me:1}]:[]).concat(others);
+}
 function netBadge(){
   if(!NET.ready) return '<small class="note">● 接続中…</small>';
-  if(NET.online) return `<small class="blue">● オンライン（${playerShops().length+(S?1:0)}店が参加）</small>${NET.readonly?' <small class="red">閲覧のみ</small>':''}`;
+  if(NET.online){ const on=onlineNow(); const all=playerShops().length+(S?1:0);
+    return `<small class="blue"><a onclick="showOnline()" style="color:inherit">● オンライン：いま <b>${on.length}人</b>が遊んでいます</a>（登録${all}店）</small>${NET.readonly?' <small class="red">閲覧のみ</small>':''}`; }
   return '<small class="note">● オフライン（このブラウザのみ）</small>';
 }
+function showOnline(){ const on=onlineNow(); modal(`<div class="c"><big>いま遊んでいる人</big></div><table class="t" style="width:100%">${on.map(p=>`<tr><td>${esc(p.shop)}<br><small>${esc(p.owner)}${p.me?'（あなた）':''}</small></td></tr>`).join('')}</table><div class="c note">最近5分以内にゲームを開いていた人です。</div><div class="c"><button onclick="closeModal()">閉じる</button></div>`); }
 function header(){
   const unread=S.letters.filter(l=>!l.read).length;
   const job=JOBS[S.job]||JOBS[''];
@@ -4368,6 +4376,7 @@ function tick(){
   if(saveTick%60===45) checkMyJobs();
   if(saveTick%20===10) checkDragonRaces();
   if(saveTick%15===5) checkRaid();
+  if(saveTick%30===17&&NET.online) softRender();   // 「いま遊んでいる人」の数をこまめに更新
   if(saveTick%10===3) checkVoyages();
 }
 (function boot(){
@@ -4379,7 +4388,7 @@ function tick(){
   initNet();
   setInterval(tick,1000);
   window.addEventListener('beforeunload',()=>{ if(S) save(); });
-  document.addEventListener('visibilitychange',()=>{ if(!S) return; if(document.visibilityState==='hidden'){ if(!NET.kicked){ save(); saveRemote(true); publishShop(); } } else checkSession(); });
+  document.addEventListener('visibilitychange',()=>{ if(!S) return; if(document.visibilityState==='hidden'){ if(!NET.kicked){ save(); saveRemote(true); publishShop(true); } } else { checkSession(); publishShop(true); } });
   window.addEventListener('pagehide',()=>{ if(S&&!NET.kicked){ save(); saveRemote(true); } });
 })();
 </script>
