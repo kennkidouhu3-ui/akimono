@@ -322,6 +322,9 @@ const SKILLS={
 };
 const SERIES={kiba:{n:'獣牙',need:4,sk:'s_kiba'},majyu:{n:'魔獣',need:4,sk:'s_majyu'},genjyu:{n:'幻獣',need:4,sk:'s_genjyu'},haryu:{n:'覇竜',need:4,sk:'s_haryu'},
   dia:{n:'ダイヤ',need:4,sk:'s_dia'},north:{n:'北海',need:2,sk:'s_north'},curse:{n:'呪い',need:4,sk:'s_curse'},sea:{n:'海竜',need:2,sk:'s_sea'}};
+// イベントでしか手に入らない品は売り物にしない
+const EVENT_ONLY=[81,82,83,84,85,86,151,181,182,183,184];
+(function(){ EVENT_ONLY.forEach(no=>{ const it=DATA.items.find(x=>x.no===no); if(it){ it.noshow=1; it.eventOnly=1; } }); })();
 (function addSkills(){
   const set=(no,series,skill)=>{ const it=DATA.items.find(x=>x.no===no); if(it){ if(series) it.series=series; if(skill) it.skill=skill; } };
   const tiers=[['kiba',['atk1','hp1','guard1','luck']],['majyu',['atk2','hp2','evade','carve']],['genjyu',['crit','hp2','regen','tech2']],['haryu',['atk3','hp3','guard3','haki']]];
@@ -510,18 +513,24 @@ const NPCDEF = [
   {shop:'ミノ牧場直売所',owner:'マーサ',kao:17,job:'cow',pool:[26,35,36,30]},
   {shop:'流れの行商人カイ',owner:'カイ',kao:9,job:'peddle',pool:[11,67,68,69,27,29]},
   // ここから強豪NPC
-  {shop:'大商会ゴルド',owner:'ゴルド',kao:24,job:'peddle',pool:[44,56,61,50,69,70],strong:1,mult:1.5,popBase:82,digBase:60,money:30000000,
-   st:{life:900,attack:420,defence:380,tech:350},btype:10,comment:'商いは戦よ。わしに勝てる者はおらん。',dragon:{dname:'キングオブゴールド',color:0,st:{sp:88,gt:80,bu:82,pw:75,he:80,fx:70}}},
-  {shop:'豪商ヴァレンシア',owner:'ヴァレンシア',kao:16,job:'armor',pool:[56,50,55,49,54],strong:1,mult:2.05,popBase:76,digBase:30,money:12000000,
-   st:{life:650,attack:260,defence:330,tech:300},btype:1,comment:'気品ある品しか扱いませんの。',dragon:{dname:'ローズクイーン',color:3,st:{sp:82,gt:70,bu:86,pw:60,he:75,fx:78}}},
-  {shop:'武器商ドラクロワ',owner:'ドラクロワ',kao:11,job:'weapon',pool:[44,43,61,60],strong:1,mult:1.6,popBase:70,digBase:15,money:6000000,
-   st:{life:780,attack:480,defence:260,tech:320},btype:8,comment:'腕に覚えがあるなら，決闘を受けてやろう。',dragon:{dname:'ブラックファング',color:4,st:{sp:84,gt:86,bu:70,pw:88,he:70,fx:55}}},
+  {shop:'大商会ゴルド',owner:'ゴルド',kao:24,job:'peddle',pool:[44,56,61,50,69,70],strong:1,mult:1.9,popBase:88,digBase:70,money:50000000,
+   st:{life:1600,attack:700,defence:620,tech:560},btype:10,comment:'商いは戦よ。わしに勝てる者はおらん。',dragon:{dname:'キングオブゴールド',color:0,st:{sp:88,gt:80,bu:82,pw:75,he:80,fx:70}}},
+  {shop:'豪商ヴァレンシア',owner:'ヴァレンシア',kao:16,job:'armor',pool:[56,50,55,49,54],strong:1,mult:2.3,popBase:82,digBase:40,money:25000000,
+   st:{life:1200,attack:480,defence:560,tech:520},btype:1,comment:'気品ある品しか扱いませんの。',dragon:{dname:'ローズクイーン',color:3,st:{sp:82,gt:70,bu:86,pw:60,he:75,fx:78}}},
+  {shop:'武器商ドラクロワ',owner:'ドラクロワ',kao:11,job:'weapon',pool:[44,43,61,60],strong:1,mult:1.9,popBase:78,digBase:25,money:15000000,
+   st:{life:1400,attack:820,defence:450,tech:540},btype:8,comment:'腕に覚えがあるなら，決闘を受けてやろう。',dragon:{dname:'ブラックファング',color:4,st:{sp:84,gt:86,bu:70,pw:88,he:70,fx:55}}},
   // 武将NPC：商才はないが武力は街一番。レイドでは助っ人として戦う
   {shop:'リキーヤ道場',owner:'豪将リキーヤ',kao:'riki',job:'soldier',pool:[40,41,47,53],warrior:1,mult:0.35,popBase:35,digBase:8,money:800000,
-   st:{life:2600,attack:760,defence:520,tech:480},btype:10,comment:'商いはさっぱりだが，腕っぷしなら誰にも負けん！ 山賊が来たら俺に任せろ！'},
+   st:{life:9000,attack:2400,defence:1600,tech:1500},btype:10,comment:'商いはさっぱりだが，腕っぷしなら誰にも負けん！ 山賊が来たら俺に任せろ！'},
   // 暴君NPC：街で最強の武力。ときどき店を襲う（予告あり）
   {shop:'にくべんき藩の館',owner:'にくべんき藩',kao:'niku',job:'soldier',pool:[42,48,54],tyrant:1,mult:0.2,popBase:15,digBase:20,money:5000000,
-   st:{life:4200,attack:1150,defence:720,tech:650},btype:8,comment:'ぐははは！ 次はどの店を喰らってやろうか……'},
+   st:{life:15000,attack:3600,defence:2400,tech:2200},btype:8,comment:'ぐははは！ 次はどの店を喰らってやろうか……'},
+  // 新しいNPC
+  {shop:'ガルム精肉店',owner:'ガルム',kao:105,job:'meat',pool:[224,225,243,244,246,248],mult:1.2,comment:'うちの肉は街いちばんだ！'},
+  {shop:'ハンナの八百屋',owner:'ハンナ',kao:107,job:'veg',pool:[226,227,228,250,251,252,237],mult:1.2,comment:'とれたて野菜はいかが？'},
+  {shop:'海の幸ナギサ',owner:'ナギサ',kao:114,job:'fish',pool:[230,231,232,256,257,261],mult:1.2,comment:'今朝あがったばかりの魚だよ！'},
+  {shop:'キッチン・マルコ',owner:'マルコ',kao:108,job:'peddle',pool:[238,239,241,247,253,258],mult:1.3,comment:'できたての料理をどうぞ！'},
+  {shop:'船乗りジャック商会',owner:'ジャック',kao:110,job:'peddle',pool:[193,194,197,213,214,215],mult:1.3,comment:'海の向こうの珍品ならおまかせだ！'},
 ];
 const GUILDS = [
   {id:'a',name:'黄金の天秤',img:'guild-a',fee:3,bonus:1.0,desc:'古くからの商人たちの互助組合。会費は安め。'},
@@ -650,6 +659,12 @@ function migrate(s){
   if(!s.townLocal) s.townLocal=defaultTown();
   if(s.npcs&&s.npcs.length<NPCDEF.length){ for(let i=s.npcs.length;i<NPCDEF.length;i++) s.npcs.push(makeNpc(NPCDEF[i],i)); }
   if(!s.voyages) s.voyages=[];
+  if(!s.npcBoost3&&s.npcs){ s.npcs.forEach((n,i)=>{ const d=NPCDEF[i]; if(d&&(d.warrior||d.tyrant)) n.st={...d.st}; }); s.npcBoost3=1; }
+  if(s.npcs) s.npcs.forEach(n=>{ n.pool=(n.pool||[]).filter(no=>![81,82,83,84,85,86,151,181,182,183,184].includes(no)); n.cases=(n.cases||[]).map(c=>c&&[81,82,83,84,85,86,151,181,182,183,184].includes(c.no)?null:c); });
+  if(s.cases) s.cases=s.cases.map(c=>c&&[81,82,83,84,85,86,151,181,182,183,184].includes(c.no)?null:c);
+  if(!s.npcBoost2&&s.npcs){ s.npcs.forEach((n,i)=>{ const d=NPCDEF[i]; if(!d) return;
+      if(d.st) n.st={...d.st}; else ['life','attack','defence','tech'].forEach(k=>n.st[k]=Math.round(n.st[k]*1.6));
+      n.mult=d.mult||1.3; if(d.popBase) n.popBase=d.popBase; if(d.pool) n.pool=d.pool.slice(); }); s.npcBoost2=1; }
   if(!s.dragons) s.dragons=[]; if(!s.dragonsRet) s.dragonsRet=[]; if(!s.draceLocal) s.draceLocal={};
   delete s.speed; delete s.lord; delete s.safety; delete s.rebel;
   if(!s.clock || s.clock<0) s.clock=nowClock();
@@ -796,7 +811,7 @@ async function checkRaid(){
     const rr0=T().raid;
     if(raidActive()&&Date.now()-(rr0.rikiLast||rr0.start)>=5*60000){
       const res=await townTx(t=>{ const r=t.raid; if(!r||r.done||r.hp<=0||Date.now()>=r.end) return null; if(Date.now()-(r.rikiLast||r.start)<5*60000) return null;
-        const first=!r.rikiLast; const d=Math.round(r.max*0.03*(1+(r.buff||0)/200)); r.hp=Math.max(0,r.hp-d); r.rikiLast=Date.now();
+        const first=!r.rikiLast; const d=Math.round(r.max*0.06*(1+(r.buff||0)/200)); r.hp=Math.max(0,r.hp-d); r.rikiLast=Date.now();
         r.dmg=r.dmg||{}; const x=r.dmg['npc:riki']||{name:'豪将リキーヤ',shop:'リキーヤ道場',dmg:0,npc:true}; x.dmg+=d; r.dmg['npc:riki']=x; return {d,first}; });
       if(res){ const m=res.first?`豪将リキーヤが加勢に駆けつけた！「山賊どもめ，俺が相手だ！」 ${res.d.toLocaleString()}のダメージ！`:`豪将リキーヤの一撃！ バルバロスに${res.d.toLocaleString()}のダメージ！`; S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); softRender(); }
     }
@@ -809,7 +824,7 @@ async function checkRaid(){
   raidChecking=false;
 }
 /* ---------- 暴君「にくべんき藩」の襲撃：ランダムな店を予告してから襲う ---------- */
-const NIKU='にくべんき藩', NIKU_POW=[3000,5000];
+const NIKU='にくべんき藩', NIKU_POW=[6000,10000];
 function nikuTargets(){ return (NET.online? ranking() : allShops()).filter(r=>!r.idle&&!r.tyrant&&!r.warrior); }
 function myDefense(){ const st=myStat(); return (S.soldiers||0)*10+Math.round((st.attack+st.defence+st.tech)/2); }
 async function checkNiku(){
@@ -909,7 +924,7 @@ function raidPanel(){
   <div class="c"><big>応援する</big></div>
   <div class="c toolbar"><button onclick="raidCheer('money')">声援（¥30,000）<br><small>攻撃力+5%</small></button> <button onclick="raidCheer('potion')">差し入れ（ポーション20）<br><small>攻撃力+3%</small></button></div>
   <div class="c"><input type="number" id="rsN" value="${Math.min(50,S.soldiers||0)||10}" min="1" style="width:70px">人 <button onclick="raidSoldiers(false)">兵士を出す（1人60）</button>${isLordMe()?` <button onclick="raidSoldiers(true)">護衛軍を出す</button>`:''}</div>
-  <div class="c note">${im('kaoriki','','width=24 height=24')} 豪将リキーヤが5分ごとに加勢してくれます（応援で攻撃力が上がると，リキーヤも強くなります）。<br>戦うのが苦手でも，応援や兵士で参加できます。撃退すると，貢献に応じて賞金・経験値・爵位ポイント，そして<b>ダイヤモンド原石</b>（MVPは3個・ほかは1個）がもらえます。撃退できないと，街資金が奪われ全店の人気が下がります。</div>
+  <div class="c note">${im('kaoriki','','width=24 height=24')} 豪将リキーヤが5分ごとに加勢してくれます（1回でボスのHPの約6%！ 応援で攻撃力が上がると，リキーヤも強くなります）。<br>戦うのが苦手でも，応援や兵士で参加できます。撃退すると，貢献に応じて賞金・経験値・爵位ポイント，そして<b>ダイヤモンド原石</b>（MVPは3個・ほかは1個）がもらえます。撃退できないと，街資金が奪われ全店の人気が下がります。</div>
   ${raidTopHtml(r)}`;
 }
 function raidTopHtml(r){ const e=Object.values(r.dmg||{}).sort((a,b)=>b.dmg-a.dmg).slice(0,5); return e.length?`<div class="c"><small>貢献ランキング：${e.map((x,i)=>`${i+1}位 ${esc(x.shop)}（${Math.round(x.dmg).toLocaleString()}）`).join('・')}</small></div>`:''; }
@@ -1002,15 +1017,15 @@ function npcOnline(atDay){
   const D=atDay||Math.floor(nowClock()/1440)+1, dd=Math.max(0,D-NPC_BASE_DAY);
   return NPCDEF.map((d,i)=>{
     const s1=Math.sin(D/6+i*1.9), s2=Math.sin(D/2.7+i*0.7), s3=Math.sin(D/17+i*2.3);
-    const pop=d.strong? clamp(Math.round(d.popBase+10*s1+4*s2),50,99) : clamp(Math.round(48+22*s1+8*s2),5,95);
+    const pop=d.strong? clamp(Math.round(d.popBase+8*s1+4*s2),60,99) : clamp(Math.round((d.popBase||55)+20*s1+8*s2),10,95);
     const wins=Math.floor(dd/(20+i*6));
-    const profit3=Math.max(0,Math.round(60000+50000*s3+25000*s2));
-    const today=Math.max(0,Math.round((15000+12000*s1)*(dragonActive()?3:1)));
+    const profit3=Math.max(0,Math.round((600000+350000*s3+150000*s2)*(d.strong?1.3:1)));
+    const today=Math.max(0,Math.round((120000+80000*s1)*(dragonActive()?3:1)));
     const loc=S&&S.npcs&&S.npcs[i];
     return {me:false,npc:true,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop,wins,
       dig:Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))),money:Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3),
-      point:Math.round(calcPoint(pop,wins,profit3,today)*0.75*(d.mult||1)),sale:Math.round(today*(d.mult||1)),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
-      st:d.st||{life:150+i*25,attack:40+i*9,defence:35+i*8,tech:40+i*7},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
+      point:Math.round(calcPoint(pop,wins,profit3,today)*(d.mult||1)),sale:Math.round(today*(d.mult||1)),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
+      st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
   });
 }
 function playerShops(){
@@ -1409,7 +1424,7 @@ function townDaily(d){
    ============================================================ */
 function makeNpc(d,i){
   const n={...d,id:i,money:d.money||150000+rnd(400000),pop:d.popBase||30+rnd(50),dig:d.digBase||rnd(4),today:0,friend:0,
-    st:d.st?{...d.st}:{life:120+rnd(200),attack:20+rnd(80),defence:20+rnd(80),tech:20+rnd(80)},btype:d.btype!=null?d.btype:rnd(11),cases:[],wins:0,guild:d.strong?null:pick([null,null,'a','b'])};
+    st:d.st?{...d.st}:{life:250+rnd(250),attack:60+rnd(120),defence:50+rnd(110),tech:60+rnd(110)},mult:d.mult||1.3,btype:d.btype!=null?d.btype:rnd(11),cases:[],wins:0,guild:d.strong?null:pick([null,null,'a','b'])};
   npcRestock(n,true); return n;
 }
 function npcRestock(n,init){
@@ -3293,9 +3308,9 @@ function gActive(x){ return x&&x.until>=curPeriod(); }
 function myGuildDoc(){ return NET.online&&S.guild&&NET.guilds[S.guild]?NET.guilds[S.guild]:null; }
 /* ---------- NPCのギルド（オンライン） ---------- */
 const NPC_GUILDS=[
-  {id:'npc-tenbin',name:'黄金の天秤',icon:'guildprize',leader:9,members:[9,8,5,6],fee:3,msg:'商いこそ力なり。儲け話は天秤にかけよ。',desc:'大商会ゴルドが率いる，街いちばんの商人ギルド。各地を渡り歩く行商人や山師，古書店まで，儲けに目ざとい者が集まっている。'},
-  {id:'npc-tsuki',name:'銀の月商会',icon:'guild-b',leader:10,members:[10,2,4,0,7],fee:4,msg:'上品な品を，上品な方へ。',desc:'豪商ヴァレンシアが率いる，品のよさを重んじる商会。防具・杖・薬・乳製品など，質の高い品を扱う店が名を連ねる。'},
-  {id:'npc-tettsui',name:'鉄槌同盟',icon:'guild-a',leader:11,members:[11,1,3,12],fee:2,msg:'腕っぷしと鉄の品なら任せておけ！',desc:'武器商ドラクロワが率いる，職人と武人の同盟。鍛冶屋や木工房に加え，豪将リキーヤも名を連ねる武闘派ギルド。'},
+  {id:'npc-tenbin',name:'黄金の天秤',icon:'guildprize',leader:9,members:[9,8,5,6,18],fee:3,msg:'商いこそ力なり。儲け話は天秤にかけよ。',desc:'大商会ゴルドが率いる，街いちばんの商人ギルド。各地を渡り歩く行商人や山師，古書店まで，儲けに目ざとい者が集まっている。'},
+  {id:'npc-tsuki',name:'銀の月商会',icon:'guild-b',leader:10,members:[10,2,4,0,7,15,17],fee:4,msg:'上品な品を，上品な方へ。',desc:'豪商ヴァレンシアが率いる，品のよさを重んじる商会。防具・杖・薬・乳製品など，質の高い品を扱う店が名を連ねる。'},
+  {id:'npc-tettsui',name:'鉄槌同盟',icon:'guild-a',leader:11,members:[11,1,3,12,14,16],fee:2,msg:'腕っぷしと鉄の品なら任せておけ！',desc:'武器商ドラクロワが率いる，職人と武人の同盟。鍛冶屋や木工房に加え，豪将リキーヤも名を連ねる武闘派ギルド。'},
 ];
 function npcGuildOf(i){ const g=NPC_GUILDS.find(x=>x.members.includes(i)); return g?g.id:null; }
 let npcGuildChecked=false;
@@ -3324,7 +3339,7 @@ function guildDetail(k){
 }
 function ensureNpcGuilds(){
   if(!NET.online||npcGuildChecked) return; npcGuildChecked=true;
-  NPC_GUILDS.forEach(G=>{ if(NET.guilds[G.id]) return;
+  NPC_GUILDS.forEach(G=>{ if(NET.guilds[G.id]){ const g=NET.guilds[G.id]; const miss=G.members.filter(i=>!(g.members||{})['npc:'+i]&&NPCDEF[i]); if(miss.length) guildTx(G.id,x=>{ miss.forEach(i=>{ const d=NPCDEF[i]; x.members['npc:'+i]={name:d.owner,shop:d.shop,kao:d.kao,npc:true,t:Date.now()}; }); }); return; }
     const mem={}; G.members.forEach(i=>{ const d=NPCDEF[i]; if(d) mem['npc:'+i]={name:d.owner,shop:d.shop,kao:d.kao,npc:true,t:Date.now()}; });
     dbTx('guilds/'+G.id,d=>d?{ret:'exists'}:{set:{name:G.name,leader:'npc:'+G.leader,leaderName:NPCDEF[G.leader].owner,fee:G.fee,open:true,icon:G.icon,msg:G.msg,fund:500000,exp:250000,gp:30,gpTotal:30,members:mem,reqs:{},board:[],npcGuild:true,t:Date.now()},ret:'made'}).catch(e=>netErr(e));
   });
