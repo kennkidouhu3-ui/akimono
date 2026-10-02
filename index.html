@@ -229,10 +229,10 @@ const FORGE=[];   // 鍛冶工房のレシピ
   });
   // 呪われた装備：とても強いが，デメリットつき
   const CURSED=[
-    {no:181,type:'剣',nm:'呪われた大剣',scale:'本',soubi:1,st:{attack:320,tech:-80},curse:'装備している間，毎日人気が1下がる'},
-    {no:182,type:'鎧',nm:'呪われた鎧',scale:'着',soubi:2,st:{defence:300,life:-400},curse:'装備している間，毎日人気が1下がる'},
-    {no:183,type:'盾',nm:'呪われた盾',scale:'枚',soubi:3,st:{defence:280,attack:-60},curse:'装備している間，毎日人気が1下がる'},
-    {no:184,type:'アクセサリ',nm:'呪われた首飾り',scale:'個',soubi:4,st:{attack:130,tech:190,life:-150},curse:'装備している間，毎日人気が1下がる'},
+    {no:181,type:'剣',nm:'呪われた大剣',scale:'本',soubi:1,st:{attack:320,tech:-80},curse:'装備している間，決算ごとに人気が1下がる'},
+    {no:182,type:'鎧',nm:'呪われた鎧',scale:'着',soubi:2,st:{defence:300,life:-400},curse:'装備している間，決算ごとに人気が1下がる'},
+    {no:183,type:'盾',nm:'呪われた盾',scale:'枚',soubi:3,st:{defence:280,attack:-60},curse:'装備している間，決算ごとに人気が1下がる'},
+    {no:184,type:'アクセサリ',nm:'呪われた首飾り',scale:'個',soubi:4,st:{attack:130,tech:190,life:-150},curse:'装備している間，決算ごとに人気が1下がる'},
   ];
   CURSED.forEach(c=>{ DATA.items.push({no:c.no,type:c.type,name:c.nm,info:`禍々しい力を宿した装備。とても強いが……（呪い：${c.curse}）`,price:150000,pop:0,noshow:1,plus:0,scale:c.scale,soubi:c.soubi,...c.st,curse:1,cost:300,uses:[]});
     FORGE.push({no:c.no,tier:4,mats:[[4,151]],gold:500000,time:360}); });
@@ -243,11 +243,11 @@ const FORGE=[];   // 鍛冶工房のレシピ
   const I=no=>DATA.items.find(x=>x.no===no);
   const R=(name,uses,get,n,need,time,act)=>({name,time,action:act||'作成する',exp:2,needexp:need,use:uses,get:[[n,get,100]]});
   DATA.items.push(
-    {no:190,type:'本',name:'造船術',info:'船の造り方が書かれた本。船があれば島へ探索に行ける',price:80000,pop:2880,plus:1440,scale:'冊',soubi:0,cost:500,uses:[
+    {no:190,type:'本',name:'造船術',info:'船の造り方が書かれた本。船があれば[港]から島や遠くの町へ探索に行ける',price:80000,pop:2880,plus:1440,scale:'冊',soubi:0,cost:500,uses:[
       R('小型帆船を造る',[[30,4],[20,5],[10,2]],191,1,0,480,'造船する'),
       R('大型帆船を造る',[[80,4],[40,5],[10,6],[20,2]],192,1,40,900,'造船する')]},
-    {no:191,type:'道具',name:'小型帆船',info:'近くの海へ出られる小さな船。[港]から探索に出発できる',price:60000,pop:0,noshow:1,plus:0,scale:'隻',soubi:0,cost:200,uses:[]},
-    {no:192,type:'道具',name:'大型帆船',info:'遠い海まで行ける大きな船。[港]から探索に出発できる',price:250000,pop:0,noshow:1,plus:0,scale:'隻',soubi:0,cost:800,uses:[]},
+    {no:191,type:'道具',name:'小型帆船',info:'近くの海（南の島・珊瑚の群島）へ出られる小さな船。[港]から探索に出発できる',price:60000,pop:0,noshow:1,plus:0,scale:'隻',soubi:0,cost:200,uses:[]},
+    {no:192,type:'道具',name:'大型帆船',info:'遠い海（サフラン・カシュバ・伝説の海域）まで行ける大きな船。積荷も少し多い',price:250000,pop:0,noshow:1,plus:0,scale:'隻',soubi:0,cost:800,uses:[]},
     {no:193,type:'原料',name:'真珠',info:'南の島の入り江でとれる美しい真珠（島でのみ入手）',price:6000,pop:4320,plus:0,scale:'粒',soubi:0,cost:0,uses:[],island:1},
     {no:194,type:'原料',name:'赤珊瑚',info:'群島の海に生える赤い珊瑚（島でのみ入手）',price:4000,pop:4320,plus:0,scale:'本',soubi:0,cost:0,uses:[],island:1},
     {no:195,type:'原料',name:'南国の果実',info:'甘くて元気の出る南国の果物（島でのみ入手）',price:800,pop:600,plus:0,scale:'個',soubi:0,cost:0,island:1,uses:[{name:'食べる',time:10,action:'食べる',use:[[1,195]],get:[]}]},
@@ -255,7 +255,7 @@ const FORGE=[];   // 鍛冶工房のレシピ
     {no:197,type:'原料',name:'古代の金貨',info:'沈んだ王国の金貨。好事家が高く買い取る（島でのみ入手）',price:40000,pop:2880,plus:0,scale:'枚',soubi:0,cost:0,uses:[],island:1},
     {no:198,type:'原料',name:'星の砂',info:'星の形をした不思議な砂（島でのみ入手）',price:5000,pop:4320,plus:0,scale:'袋',soubi:0,cost:0,uses:[],island:1},
     {no:199,type:'原料',name:'人魚の涙',info:'伝説の海域で見つかる青い宝石（島でのみ入手）',price:60000,pop:0,noshow:1,plus:0,scale:'粒',soubi:0,cost:0,uses:[],island:1},
-    {no:200,type:'薬',name:'妙薬ネクター',info:'南国の果実から作った妙薬。飲むと持ち時間が大きく回復する',price:4000,pop:180,plus:0,scale:'本',soubi:0,cost:20,uses:[{name:'飲む',time:1,action:'飲む',use:[[1,200]],get:[]}]},
+    {no:200,type:'薬',name:'妙薬ネクター',info:'南国の果実から作った妙薬。飲むとHPと技量がずっと上がる',price:4000,pop:180,plus:0,scale:'本',soubi:0,cost:20,uses:[{name:'飲む',time:1,action:'飲む',use:[[1,200]],get:[]}]},
     {no:201,type:'剣',name:'海竜の剣',info:'海竜の鱗で鍛えた青い剣',price:70000,pop:4320,plus:0,scale:'本',soubi:1,attack:150,uses:[],series:'sea',skill:'wave'},
     {no:202,type:'鎧',name:'海竜の鎧',info:'海竜の鱗を編んだ鎧',price:75000,pop:4320,plus:0,scale:'着',soubi:2,defence:150,uses:[],series:'sea',skill:'tide'},
     {no:203,type:'アクセサリ',name:'真珠の首飾り',info:'大粒の真珠をつないだ首飾り',price:40000,pop:2880,plus:0,scale:'個',soubi:4,defence:30,tech:60,uses:[],skill:'charm'},
@@ -279,7 +279,7 @@ const FORGE=[];   // 鍛冶工房のレシピ
     {no:214,type:'原料',name:'絹織物',info:'サフランの職人が織った美しい絹（サフランでのみ入手）',price:10000,pop:2880,plus:0,scale:'反',soubi:0,cost:0,uses:[],island:1},
     {no:215,type:'原料',name:'金砂',info:'砂漠の港カシュバの川でとれる金の砂（カシュバでのみ入手）',price:14000,pop:2880,plus:0,scale:'袋',soubi:0,cost:0,uses:[],island:1},
     {no:216,type:'原料',name:'幽霊船の財宝',info:'幽霊の海に沈む船から引き上げた財宝。とても高く売れる（幽霊の海でのみ入手）',price:120000,pop:2880,plus:0,scale:'箱',soubi:0,cost:0,uses:[],island:1},
-    {no:217,type:'薬',name:'香辛料カレー',info:'香辛料とミノ牛乳の特製カレー。食べると体がぽかぽか（HPがずっと上がり，持ち時間も回復）',price:3000,pop:240,plus:0,scale:'皿',soubi:0,cost:10,uses:[{name:'食べる',time:5,action:'食べる',use:[[1,217]],get:[]}]},
+    {no:217,type:'薬',name:'香辛料カレー',info:'香辛料とミノ牛乳の特製カレー。食べると体がぽかぽか（HPがずっと上がる）',price:3000,pop:240,plus:0,scale:'皿',soubi:0,cost:10,uses:[{name:'食べる',time:5,action:'食べる',use:[[1,217]],get:[]}]},
     {no:218,type:'剣',name:'火竜の剣',info:'火竜石を鍛えこんだ燃える剣',price:90000,pop:4320,plus:0,scale:'本',soubi:1,attack:170,uses:[],skill:'blaze'},
     {no:219,type:'鎧',name:'白熊の鎧',info:'白熊の毛皮で裏打ちした暖かい鎧',price:70000,pop:4320,plus:0,scale:'着',soubi:2,defence:145,life:100,uses:[],skill:'hp2',series:'north'},
     {no:220,type:'盾',name:'氷晶の盾',info:'溶けない氷晶をはめ込んだ盾',price:80000,pop:4320,plus:0,scale:'枚',soubi:3,defence:165,uses:[],skill:'guard2',series:'north'},
@@ -1508,7 +1508,7 @@ function simulate(dt){
       S.money+=c.price*k - tax;
       S.today.sales+=c.price*k; S.today.count+=k; S.today.tax=(S.today.tax||0)+tax;
       S.today.items[c.no]=(S.today.items[c.no]||0)+k;
-      S.trash+=k*0.25;
+      S.trash+=k*0.25*(has(64)?0.5:1);
       if(pendingCustomers.length<6) pendingCustomers.push(idx);
     }
   });
@@ -2036,10 +2036,11 @@ function itemInfo(no){
   ${eqh}
   ${it.skill||it.series?`<div style="margin-top:6px"><big>スキル</big><br>${skillHtml(it)}</div>`:''}
   ${uses?`<div style="margin-top:8px"><big>使い道</big><br><small>${uses}</small></div>`:''}
+  ${TALENT[no]?`<div class="flash" style="margin-top:6px">持っていると：${TALENT[no].d}</div>`:no===24?'<div class="flash" style="margin-top:6px">持っていると：市場での仕入れの時間が半分になる</div>':no===64?'<div class="flash" style="margin-top:6px">持っていると：お店にたまるごみが半分になる</div>':''}
   ${it.fromMon?`<div style="margin-top:6px"><big>手に入れ方</big><br><small>${esc(it.fromMon)}を倒すと手に入る（はぎ取り）</small></div>`:''}
   ${FORGE.some(f=>f.no===no)?`<div style="margin-top:6px"><big>手に入れ方</big><br><small>[鍛冶工房]で素材から作る</small></div>`:''}
   ${FORGE.some(f=>f.mats.some(m=>m[1]===no))?`<div style="margin-top:6px"><big>使い道</big><br><small>[鍛冶工房]：${FORGE.filter(f=>f.mats.some(m=>m[1]===no)).map(f=>esc(ITEMS[f.no].name)).join('，')}</small></div>`:''}
-  ${it.curse?'<div class="flash err" style="margin-top:6px">呪い：装備している間，毎日人気が1下がります。</div>':''}
+  ${it.curse?'<div class="flash err" style="margin-top:6px">呪い：装備している間，決算ごとに人気が1下がります。</div>':''}
   ${makers.length?`<div style="margin-top:6px"><big>手に入れ方</big><br><small>${makers.slice(0,8).join('<br>')}</small></div>`:''}
   <div class="c toolbar">${S&&have&&it.soubi&&S.eq[it.soubi]!==no?`<button onclick="closeModal();equip(${no})">装備する</button>`:''}${S&&have&&it.uses.length?`<button onclick="closeModal();go('use',{no:${no}})">使う</button>`:''}<button onclick="closeModal()">閉じる</button></div>`);
 }
@@ -2167,7 +2168,7 @@ SCREENS.stock=function(){
   }).join('');
   return `<div class="c"><big>倉庫</big></div>${tabs}
   <div class="tbl"><table class="t" style="width:100%"><tr><th>商品</th><th>数量</th><th>操作</th></tr>${rows||'<tr><td colspan=3 class="c">何もありません</td></tr>'}</table></div>
-  <div class="c note">アイテム名を押すと，くわしい説明（維持費・装備したときの能力など）が見られます。<br>倉庫の品には，毎日の決算で維持費がかかります（いま合計 ${yen(Math.round(Object.keys(S.stock).reduce((a,no)=>a+(ITEMS[no]?upkeep(ITEMS[no]):0)*S.stock[no],0)))}/日）。</div>`;
+  <div class="c note">アイテム名を押すと，くわしい説明（維持費・装備したときの能力など）が見られます。<br>倉庫の品には，決算ごとに維持費がかかります（いま合計 ${yen(Math.round(Object.keys(S.stock).reduce((a,no)=>a+(ITEMS[no]?upkeep(ITEMS[no]):0)*S.stock[no],0)))}/日）。</div>`;
 };
 function discard(n){
   const it=ITEMS[n];
@@ -2180,8 +2181,11 @@ function equip(n){
   const it=ITEMS[n]; if(!it||!it.soubi) return;
   S.eq[it.soubi]=n; setFlash(`${it.name}を${SOUBI[it.soubi]}として装備しました`); save(); render();
 }
+// 修行で覚える品：持っていると関係する作業が早くなる
+const TALENT={18:{books:[20,21,22],x:0.75,d:'剣・盾・鎧づくりが25%早くなる'},19:{books:[23,15],x:0.75,d:'杖づくり・薬の調合が25%早くなる'},38:{books:[39],x:0.5,d:'解体・梱包が半分の時間になる'}};
 function useTime(u,itemNo){
   let t=u.time;
+  for(const k in TALENT){ if(has(+k)&&TALENT[k].books.includes(itemNo)) t*=TALENT[k].x; }
   const ex=S.exp[itemNo]||0;
   if(u.exptime!=null && u.exptime<t) t = t - (t-u.exptime)*Math.min(100,ex)/100;
   if(u.job && JOBS[S.job] && JOBS[S.job].name===u.job) t=t/1.5;
@@ -2216,7 +2220,7 @@ function specialDesc(no,i){
   if(no===65) return ['他店の人気ダウン','他店の商品を盗む','同業種の人気ダウン'][i];
   if(no===80) return ['他店主と決闘','魔物退治（低）','魔物退治（中）','魔物退治（上）','最上級の魔物（勝てば賞金）'][i];
   if(no===78) return JOBS[JOBCHANGE[i]].name+'になる';
-  if(no===25) return i===0?'ミノ牛乳×10':'ミノ牛乳×20〜40';
+  if(no===25) return i===0?'ミノ牛乳×10':i===1?'ミノ牛乳×20〜40（逃げることも）':'';
   if(FOOD_EFFECT[no]&&it0(no,i)) return Object.entries(FOOD_EFFECT[no]).map(([k,v])=>`${STATNAME[k]}+${v}`).join('・')+'（ずっと）';
   if([26,35,36].includes(no)&&i===0) return {26:'HP+2（ときどき能力+1）・ずっと',35:'HP+12・能力+2・ずっと',36:'HP+25・攻撃/防御/技量+2・ずっと'}[no];
   if([27,28].includes(no)&&i===0) return '持ち時間が回復';
@@ -2630,7 +2634,7 @@ SCREENS.market=function(){
 };
 function buyMarket(n){
   const it=ITEMS[n]; const q=Math.min(S.market[n]||0,Math.max(1,parseInt($('#mq'+n).value)||1));
-  const t=Math.round(20+q/3), unit=Math.round(it.price*(100-myDisc())/100), c=unit*q;
+  const t=Math.round((20+q/3)*(has(24)?0.5:1)), unit=Math.round(it.price*(100-myDisc())/100), c=unit*q;
   if(S.money<c){ setFlash('資金が足りません',1); render(); return; }
   if(!spendTime(t)){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
   S.money-=c; addPay(c); S.market[n]-=q; add(n,q);
@@ -2976,7 +2980,7 @@ const GUIDE=[
   ・熟練度が上がると，<b>もっと高い品</b>（剣・鎧・杖など）を作れるようになります<br>
   ・[市場]では品物を仕入れられます。[港]からは船で島へ探索に行けます<br>
   ・【取引】→[商店通り]の「<b>相場を調査する</b>」で，売れ筋を調べられます`],
- ['人気について（大切！）',`お店の<b>人気</b>が高いほど，お客さんが来て売れやすくなります。ただし人気は<b>放っておくと毎日下がります</b>。<br>
+ ['人気について（大切！）',`お店の<b>人気</b>が高いほど，お客さんが来て売れやすくなります。ただし人気は<b>放っておくと決算ごとに下がります</b>。<br>
   ・<b>手に入りにくい品を，相場より少し安く</b>売ると上がる<br>
   ・<b>どこにでもある品を高く</b>売ると下がる<br>
   ・棚が空っぽ・ごみが溜まる（[お掃除]で片付け）と下がる<br>
@@ -2984,15 +2988,15 @@ const GUIDE=[
  ['ランキングの点数',`点数は「<b>人気 × 利益</b>」で決まります。利益＝売上＋そのほかの収入（依頼・賞金・レースなど）−税−経費−仕入れ。<br>
   <b>売れたり稼いだりすると点数はすぐ上がり</b>，仕入れや出費が多いと下がります。今の点数は画面上部に出ています。<br>
   決算ごと（1日2回）に<b>1位は爵位ポイント+1，2位は¥10万とギフト券5枚，3位は¥5万とギフト券3枚，4位はギフト券2枚，5位はギフト券1枚</b>がもらえます。`],
- ['爵位（しゃくい）',`爵位は，平民→士爵→男爵→子爵→伯爵→侯爵→公爵→大公 の順に上がります。上がるほど<b>毎日の年金</b>や<b>市場の割引</b>などの特典がつきます。<br>ランキング1位・王様の依頼（[宮殿]）・レイドの撃退などで爵位ポイントが増えます。【情報】→[爵位名鑑]で確認できます。`],
+ ['爵位（しゃくい）',`爵位は，平民→士爵→男爵→子爵→伯爵→侯爵→公爵→大公 の順に上がります。上がるほど<b>決算ごとの年金</b>や<b>市場の割引</b>などの特典がつきます。<br>ランキング1位・王様の依頼（[宮殿]）・レイドの撃退などで爵位ポイントが増えます。【情報】→[爵位名鑑]で確認できます。`],
  ['戦闘',`「<b>バトルチケット</b>」（市場で買えます）を使うと，魔物退治や決闘ができます。<br>
-  勝つと<b>経験値</b>が入り，【自店】→[ステータス]の「修練」で<b>体力・攻撃・防御・技量</b>を好きに強化できます。装備（剣・鎧・盾・装飾）もステータス画面で変えられます。<br>
+  勝つと<b>経験値</b>が入り，【自店】→[ステータス]の「修練」で<b>体力・攻撃・防御・技量</b>を好きに強化できます。能力は<b>リセットして振り分け直す</b>こともできます。装備（剣・鎧・盾・装飾）はステータス画面で変えられ，<b>マイセット（5つ）</b>に登録すると一瞬で着替えられます。<br>
   「最上級の魔物」はとても強いですが，勝てば大きな賞金がもらえます。`],
  ['山賊バルバロスの襲来（レイド）',`街のイベントとして，<b>日本時間の21時から1時間</b>，山賊バルバロスが街を襲います。予定日時はランキング画面の上に出ます。<br>
   【施設】→[傭兵所]から<b>討伐</b>に行くか，<b>声援・差し入れ・兵士</b>で応援しましょう。撃退すると賞金や，ここでしか手に入らない<b>ダイヤモンド原石</b>がもらえます。`],
- ['狩りと鍛冶（素材で装備を作る）',`バトルチケットで魔物を倒すと，その魔物ならではの<b>素材</b>を「はぎ取り」で手に入れられます。<br>素材を集めて【施設】→[<b>鍛冶工房</b>]に持っていくと，店では買えない<b>強い装備</b>（獣牙→魔獣→幻獣→覇竜）を作れます。<br>暴君にくべんき藩を退けると手に入る「呪いの骨片」からは，とても強いけれど<b>毎日人気が下がる呪われた装備</b>が作れます。`],
+ ['狩りと鍛冶（素材で装備を作る）',`バトルチケットで魔物を倒すと，その魔物ならではの<b>素材</b>を「はぎ取り」で手に入れられます。<br>素材を集めて【施設】→[<b>鍛冶工房</b>]に持っていくと，店では買えない<b>強い装備</b>（獣牙→魔獣→幻獣→覇竜）を作れます。<br>暴君にくべんき藩を退けると手に入る「呪いの骨片」からは，とても強いけれど<b>決算ごとに人気が下がる呪われた装備</b>が作れます。`],
  ['装備のスキルとシリーズ',`鍛冶工房やダイヤ・海竜などの装備には，それぞれ<b>スキル</b>（攻撃UP・ガード・幸運・商才など）がついています。<br>同じシリーズの装備をそろえると<b>シリーズスキル</b>が発動します（獣牙・魔獣・幻獣・覇竜・ダイヤ・呪いは4つ，海竜は2つ）。発動中のスキルは[ステータス]で確認できます。`],
- ['肉屋・八百屋・魚屋',`市場で「<b>郊外の農園への地図</b>」（野菜）・「<b>釣り竿</b>」（魚）が買えます。<b>ミノタウロス</b>は乳しぼりのほか，<b>解体して肉</b>にもできます。<br>とれた食材はそのまま店で売れ（よく売れる安い品），本「<b>家庭料理入門</b>」で野菜スープ・焼き魚定食・ミノステーキ・海鮮丼などの料理にすると，もっと高く売れます。<br>転職のススメで<b>肉屋・八百屋・魚屋</b>になると，それぞれの作業が早くなります。荘園の「野菜畑」「生け簀」からも毎回とれます。`],
+ ['肉屋・八百屋・魚屋',`市場で「<b>郊外の農園への地図</b>」（野菜・根菜・いちご）・「<b>釣り竿</b>」（魚・網漁でエビやイカ）・「<b>狩猟用の弓</b>」（鹿・猪・鳥）が買えます。<b>ミノタウロス</b>は乳しぼりのほか，<b>解体して肉</b>にもできます。<br>とれた食材はそのまま店で売れ（よく売れる安い品），本「<b>家庭料理入門</b>」で料理に，「<b>精肉・加工の手引き</b>」でソーセージ・ハム・干物などに加工すると，もっと高く売れます（食べものは売れ行き2倍）。<br>転職のススメで<b>肉屋・八百屋・魚屋</b>になると，それぞれの作業が早くなります。荘園の「野菜畑」「生け簀」「狩り場」からも決算ごとにとれます。`],
  ['船で島へ探索',`市場で買える本「<b>造船術</b>」で船を造り，【取引】→[<b>港</b>]から島へ探索に出発できます。現実の時間で1〜6時間たつと戻ってきて，<b>島でしか手に入らない品</b>（真珠・赤珊瑚・南国の果実・海竜の鱗・人魚の涙など）を持ち帰ります。<br>島の品からは，妙薬ネクター・真珠の首飾り・人魚のティアラ・海竜の剣と鎧などを，今ある本で作れます。遠い海ほど良い品がとれますが，難破の危険もあります。`],
  ['街のイベント',`<b>1日1回ほど</b>，次のイベントのどれかがランダムにやって来ます（同じものは続けて来にくい）。予定はランキング画面の上に出ます。<br>・<b>山賊バルバロス襲来</b>（21時〜1時間）：みんなで撃退するレイドバトル<br>・<b>幸運のドラゴン来訪</b>（19時〜3時間）：開拓+20・品が3倍売れる<br>・<b>流星群の夜</b>（22時〜2時間）：戦闘の経験値2倍・はぎ取り素材2倍<br>・<b>旅の大商隊</b>（12時〜2時間）：市場が品であふれ，仕入れ30%引き<br>・<b>収穫祭</b>（18時〜3時間）：人気+5・荘園の収穫がもう1回・売れ行き1.5倍<br>【情報】→[爵位名鑑]から，<b>爵位ポイントを使って好きなイベントを好きな時間に呼ぶ</b>こともできます（30〜50pt）。`],
  ['幸運のドラゴン来訪',`街のイベントとして<b>日本時間の19時から3時間</b>，幸運のドラゴンが街にやって来ます（予定はランキング画面の上に出ます）。<br>来るとすぐに<b>街の開拓が+20</b>され，来訪中の3時間は<b>プレイヤーもNPCも，どの店の品も3倍売れます</b>。棚に品をたっぷり並べて待ちましょう！`],
@@ -3003,7 +3007,7 @@ const GUIDE=[
  ['そのほかの楽しみ',`・[競技場]：スライムレース（賭け）・<b>ドラゴンレース</b>（ドラゴンを育てて賞金を狙う）<br>
   ・[依頼所]・[求人]：注文に応えて報酬をもらう<br>
   ・[質屋]：品物を売ってお金にする<br>
-  ・[荘園]：毎日原料が届く土地／[住宅地]：持ち時間の上限が増える家<br>
+  ・[荘園]：決算ごとに原料が届く土地／[住宅地]：持ち時間の上限が増える家<br>
   ・[郵便局]・[掲示板]：ほかのプレイヤーとの交流`],
  ['困ったときは',`・アイテムの名前を押すと，くわしい説明（使い道・装備の能力・維持費）が見られます<br>
   ・【情報】→[図書館]には，全アイテム・全魔物の図鑑があります<br>
@@ -3031,7 +3035,7 @@ SCREENS.rank=function(){
   ${useLogin()&&!S.loginName?`<div class="flash">ログイン用のパスワードがまだ設定されていません。<a onclick="go('other')">【自店】→[手続]</a>で設定すると，別の端末からも続きを遊べます。</div>`:''}
   ${noticeHtml()}
   ${L&&T().msg?`<div class="flash">領主${esc(L.name)}より告知：${esc(T().msg)}</div>`:''}
-  <div class="c"><big>商人ランキング</big> <small>（点数順・毎日の決算で表彰）</small></div>
+  <div class="c"><big>商人ランキング</big> <small>（点数順・決算ごとに表彰）</small></div>
   ${resultsHtml()}
   ${rankTable()}
   <div class="c note">決算ごとに，1位は<b>爵位ポイント+1</b>，2位は<b>¥100,000とギフト券5枚</b>，3位は<b>¥50,000とギフト券3枚</b>，4位は<b>ギフト券2枚</b>，5位は<b>ギフト券1枚</b>がもらえます。<br>現実の時間で1日半以上ゲームを開いていない店は「休業中」となり，表彰の対象外になって点数がゆっくり下がります。<br><a onclick="go('dignity')">爵位名鑑を見る</a></div>
@@ -3047,7 +3051,7 @@ SCREENS.dignity=function(){
   return `<div class="c"><big>爵位名鑑</big></div>
   ${talk('kaominister','大臣','わが国の商人たちの爵位を記した名鑑じゃ。爵位ポイントは，<b>ランキング1位</b>（+1pt），<b>王様の依頼の達成</b>（+2pt），<b>反乱の鎮圧</b>（+2pt），<b>立派な住宅</b>，<b>お祝いパーティ</b>などで得られる。<br>上の爵位ほど道のりは険しいが，そのぶん特典も大きいぞ。')}
   <div class="tbl"><table class="t" style="width:100%"><tr><th>爵位</th><th>必要</th><th>特典</th></tr>${steps}</table></div>
-  <div class="c note">年金は毎日の決算で届きます。特典は上の爵位ほど大きくなります。</div>
+  <div class="c note">年金は決算ごと（1日2回）に届きます。特典は上の爵位ほど大きくなります。</div>
   ${dk&&dk.msg?`<div class="flash" style="border-color:#b8860b;background:#fffbe6">${im('dig7','i16')}<b>大公 ${esc(dk.name)}</b>（${esc(dk.shop)}）のお言葉：${esc(dk.msg)}</div>`:''}
   ${iAmDuke&&NET.online?`<div class="c"><big>大公のお言葉を出す</big></div><div class="c"><input id="dkMsg" maxlength="60" value="${esc(dk&&dk.key===NET.uid?dk.msg:'')}" style="width:75%"> <button onclick="dukeSay()">出す</button></div><div class="c note">ランキング画面の一番上に，全員に向けて表示されます。</div>`:''}
   ${summonHtml()}
@@ -3099,21 +3103,22 @@ SCREENS.library=function(){
   return `<div class="c"><big>図書館</big></div>${tabs}
   ${talk('kaolib','司書','ようこそ図書館へ。商人物語の遊び方をご案内しますね。')}
   <div class="tbl"><table class="t"><tr><td style="line-height:1.8">
-  <b>◆持ち時間</b>　ほとんどの行動には「持ち時間」が必要です。持ち時間は時の流れとともに貯まっていきます（最大72時間，住宅で増加）。<br>
-  <b>◆仕入れと陳列</b>　[市場]や[商店通り]で商品を買い，[店内]の陳列棚に並べると，お客さんが時間とともに買っていきます。標準価格より安いほど売れやすく，1.4倍を超えると人気が下がります。<br>
-  <b>◆製作</b>　[倉庫]でアイテムを「使う」と製作や探索ができます。「近くの山への地図」で薬草を集め，「薬調合入門」でポーションを作る…というように，原料から商品を作って売るのが商人の腕の見せ所。使うほど熟練度が上がり，時間短縮や上級製作ができるようになります。<br>
-  <b>◆職業</b>　「転職のススメ」で職業に就くと，関係する作業が1.5倍速くなります。<br>
-  <b>◆決算</b>　1日（24時間）ごとに決算があり，陳列棚維持費・ギルド会費などが引かれ，人気が変動します。資金1位の店は「優勝」となります。<br>
-  <b>◆人気とごみ</b>　よく売れると人気が上がり，棚が空いていたりごみが溜まると下がります。[お掃除]を忘れずに。<br>
-  <b>◆戦闘</b>　「バトルチケット」で魔物退治や他店主との決闘ができます。装備は[倉庫]から。勝つと経験値が手に入り，[ステータス]の「修練」で体力・攻撃・防御・技量から選んで強化できます。魔物は珍しい品を落とします。戦法は[傭兵所]で変更できます。<br>
-  <b>◆爵位と領主</b>　[宮殿]で王様の依頼を果たすと爵位が上がります。最初の領主は爵位の高い商人から選ばれ，税率を決めたり告知を出せます。[傭兵所]で兵士を雇って反乱を起こし，護衛軍を打ち破れば領主の座を奪えます。税が高いと治安が悪化し，山賊バルバロスが反乱を起こすことも…。<br>
-  <b>◆領主の政治</b>　税は街資金に入り，領主が政務室で使い道を決めます。税率・開拓対策費（街の売れ行きが上がる）・治安対策費，店ごとの免税や２倍の税，軍隊による店舗の取り締まり，護衛軍の増強，荘園の特産品・地代・開墾，そして領主報酬の受け取りができます。だれでも街に資金援助できます。<br>
-  <b>◆ギルドポイント（GP）</b>　加盟店の売上・寄付・依頼や求人・戦闘の勝利・クエストでGPが貯まります。リーダーと副リーダーはGPで，ギルド広告・看板商品（売れ行き+30%）・共同仕入れ（市場10%引き）・倉庫の拡張・義勇兵の派遣ができます。ギルドクエストを達成すると報酬，7日ごとのギルド対抗戦で上位になるとGPと賞金がもらえます。<br>
-  <b>◆山賊バルバロス（レイド）</b>　約3日ごとに，日本時間の21時から1時間，山賊バルバロスが街を襲います（予定日時はランキング画面などで予告）。傭兵所から討伐に向かうほか，声援・差し入れ・兵士で応援できます。撃退すると貢献に応じて賞金・経験値・爵位ポイント・ダイヤモンド原石（ダイヤ装備の材料），失敗すると街資金が奪われ全店の人気が下がります。<br>
-  <b>◆最上級の魔物</b>　バトルチケットで「最上級の魔物」に挑めます。とても強いですが，勝てば賞金（¥80万〜¥200万）がもらえます。戦闘のあとは，その画面からすぐ次の戦いに進めます。<br>
-  <b>◆ドラゴンレース</b>　[競技場]の「ドラゴンレース」で，牧場でドラゴンを持ち（3頭まで），調教で能力を伸ばし，2日ごとの登竜レース・重賞レースに作戦を決めて出走させます。結果は能力と作戦で決まり，運は関係ありません。2勝以上して引退した竜は，仔竜を生めます。<br>
-  <b>◆オンライン</b>　ランキング・商店通り・競売所・掲示板・新聞・領主はほかのプレイヤーと共通です。プレイヤーのお店で買い物をしたり，決闘・手紙・送金・贈り物もできます。時間は現実の1秒＝ゲーム内1分で進みます。決算は現実の時刻で1日2回（日本時間の0時と12時）です。<br>
-  <b>◆そのほか</b>　[銀行]で預金・借金，[荘園]で原料の定期収穫，[競技場]でスライムレース，[質屋]での取引，[宅配便]での輸入や送金，[港]から船で探索にも行けます。
+  <b>◆持ち時間　ほとんどの行動には「持ち時間」を使います。時間とともに貯まります（最大72時間，住宅や爵位で増加）。ゲームの時間は現実の1秒＝1分で進みます。<br>
+  ◆決算　現実の時刻で1日2回（日本時間の0時と12時）に決算があり，陳列棚の維持費・倉庫の維持費・税・ギルド会費などが引かれ，人気が変わり，商人ランキングの表彰（1位：爵位ポイント，2〜5位：賞金やギフト券）があります。<br>
+  ◆仕入れと陳列　[市場]や[商店通り]で品を買い，[店内]の陳列棚に並べると，お客さんが買っていきます。値段は「相場」が目安。同じ品を売る店が多いほどお客さんを取り合います（[商店通り]の「相場を調査する」で確認）。食べものは売れ行きが2倍です。<br>
+  ◆製作　[倉庫]でアイテムを「使う」と，探索・製作・料理ができます。回数を入れるとまとめて実行できます。使うほど熟練度が上がり，時間が短くなったり上級の品が作れたりします。<br>
+  ◆職業　「転職のススメ」で職業に就くと，関係する作業が1.5倍速くなります（肉屋・八百屋・魚屋もあります）。<br>
+  ◆人気とごみ　手に入りにくい品を相場より少し安く売ると人気が上がり，どこにでもある品を高く売ると下がります。人気は決算ごとに自然に下がるので，こまめな商売が大切。棚が空いていたり，ごみが溜まると下がります（[お掃除]）。<br>
+  ◆点数とランキング　点数は「人気×利益（売上＋収入−税−経費−仕入れ）」で決まります。<br>
+  ◆戦闘　「バトルチケット」で，戦う魔物を選んで退治したり，決闘したりできます。勝つと経験値とはぎ取り素材が手に入ります。経験値は[ステータス]の「修練」で好きな能力に振り分けられ，リセットもできます。装備はマイセット（5つ）に登録して一瞬で着替えられます。<br>
+  ◆鍛冶とスキル　はぎ取り素材を[鍛冶工房]に持っていくと強い装備が作れます。装備にはスキルがあり，同じシリーズをそろえるとシリーズスキルが発動します（[図書館]の「スキル一覧」）。<br>
+  ◆爵位と領主　ランキング1位・王様の依頼（[宮殿]）・レイドの撃退などで爵位ポイントが貯まり，爵位が上がると年金などの特典がつきます。爵位のいちばん高い商人が領主になり，[領主邸]の政務室で税・開拓・治安・荘園の方針を決めます。領主は[傭兵所]での反乱で交代することもあります。<br>
+  ◆街のイベント　1日1回ほど，山賊バルバロス襲来（レイド）・幸運のドラゴン来訪・流星群の夜・旅の大商隊・収穫祭のどれかがやって来ます。予定はランキング画面の上に出ます。爵位ポイントで好きなイベントを呼ぶこともできます（[爵位名鑑]）。<br>
+  ◆暴君にくべんき藩　ときどきお店を襲います。予告が出たら兵士を雇って備えましょう。<br>
+  ◆港と船　「造船術」で船を造り，[港]から島や遠くの町へ探索に出かけると，そこでしか手に入らない品を持ち帰ります。<br>
+  ◆ギルド　加盟すると人気や売れ行きにボーナス。ギルドポイントで広告・看板商品・共同仕入れ・クエストなど。NPCのギルドもあります。<br>
+  ◆ドラゴンレース　[競技場]でドラゴンを育て，ゲーム内の2日ごと（現実で約48分ごと）のレースに出走させます。結果は能力と作戦で決まります。<br>
+  ◆オンライン　ランキング・商店通り・掲示板・新聞・領主・ギルド・イベントはほかのプレイヤーと共通です。決闘・手紙・送金・宅配便でやりとりもできます。
   </td></tr></table></div>`;
 };
 
@@ -3166,11 +3171,11 @@ function lordOffice(t,shops){
   <div class="c"><big>内政設定</big></div>
   <div class="tbl"><table class="t">
     <tr><th>税率</th><td><select id="lTax">${[0,1,2,3,4,5,6,7,8,9,10,12,15,20].map(v=>`<option ${v===townVal(t,'tax',5)?'selected':''}>${v}</option>`).join('')}</select> % <small>（標準5%）</small></td></tr>
-    <tr><th>開拓対策費</th><td><input type="number" id="lDev" value="${t.devem||0}" min="0" max="500000" style="width:110px"> 円/日 <small>（¥15,000で現状維持・¥100,000なら毎日約+6）</small></td></tr>
+    <tr><th>開拓対策費</th><td><input type="number" id="lDev" value="${t.devem||0}" min="0" max="500000" style="width:110px"> 円/日 <small>（¥15,000で現状維持・¥100,000なら決算ごとに約+6）</small></td></tr>
     <tr><th>治安対策費</th><td><input type="number" id="lSaf" value="${t.safem||0}" min="0" max="500000" style="width:110px"> 円/日 <small>（¥25,000で現状維持）</small></td></tr>
   </table></div>
   <div class="c"><button onclick="lordInside()">以上の内容で決定</button></div>
-  <div class="c note">対策費と護衛軍の維持費は，毎日街資金から払われます。街資金が足りないと兵士が逃げ出します。</div>
+  <div class="c note">対策費と護衛軍の維持費は，決算ごとに街資金から払われます。街資金が足りないと兵士が逃げ出します。</div>
   <div class="c"><big>賞罰（個別税率）</big></div>
   <div class="c"><select id="lTg">${opts}</select> の税を <select id="lMd"><option value="normal">通常</option><option value="free">免除</option><option value="double">２倍</option></select> <button onclick="lordTaxSide()">設定する</button></div>
   <div class="c"><button onclick="lordTaxReset()">すべての店の税を通常に戻す</button></div>
@@ -3237,11 +3242,11 @@ SCREENS.manor=function(){
   const tw=T(), mx=townVal(tw,'manorMax',5), rent=townVal(tw,'manorRent',0), f=tw.manorFocus||'';
   const plots=MANOR.reduce((a,m)=>a+(S.manor[m.id]||0),0);
   return `<div class="c"><big>荘園</big></div>
-  ${talk('kaokeeper','荘園の管理人',`土地を買えば，毎日の決算時に収穫物をお届けします。数を増やすほど収穫も増えますよ（各${mx}区画まで）。`)}
+  ${talk('kaokeeper','荘園の管理人',`土地を買えば，決算のたびに収穫物をお届けします。数を増やすほど収穫も増えますよ（各${mx}区画まで）。`)}
   <div class="tbl"><table class="t" style="width:100%">
     <tr><th>領主の方針</th><td>特産：<b>${f?MANOR.find(m=>m.id===f).name+'（収穫1.5倍）':'なし'}</b><br>地代：${rent?yen(rent)+'/区画/日（あなたは'+yen(rent*plots)+'/日）':'なし'}</td></tr>
   </table></div>
-  <div class="tbl"><table class="t" style="width:100%"><tr><th></th><th>土地</th><th>毎日の収穫（1区画）</th><th>所有</th><th></th></tr>
+  <div class="tbl"><table class="t" style="width:100%"><tr><th></th><th>土地</th><th>決算ごとの収穫（1区画）</th><th>所有</th><th></th></tr>
   ${MANOR.map((m,i)=>`<tr><td>${im(m.img,'','style="max-height:50px;max-width:70px"')}</td><td>${m.name}${f===m.id?' <small class="red">特産</small>':''}<br><small>${yen(m.price)}</small></td><td><small>${m.out.map(([x,n])=>iname(x)+'×'+(f===m.id?Math.round(n*1.5):n)).join('<br>')}</small></td><td class="r">${S.manor[m.id]||0}</td><td><button ${(S.manor[m.id]||0)>=mx?'disabled':''} onclick="buyManor(${i})">購入</button></td></tr>`).join('')}
   </table></div>
   <div class="c note">特産品・地代・区画の上限は，領主が領主邸の政務室で決めます。</div>`;
@@ -3251,7 +3256,7 @@ SCREENS.guild=function(){ return NET.online? guildOnline() : guildOffline(); };
 function guildOffline(){
   const g=guildInfo(S.guild);
   let h=`<div class="c"><big>ギルド</big></div>`;
-  h+=talk('kaoguild','ギルド受付', g?`あなたは「${esc(g.name)}」の一員です。売上の${g.fee}%を会費としていただき，その代わり毎日人気が上がりやすくなります。`:'ギルドに入ると会費がかかりますが，人気が上がりやすくなります。');
+  h+=talk('kaoguild','ギルド受付', g?`あなたは「${esc(g.name)}」の一員です。売上の${g.fee}%を会費としていただき，その代わり決算ごとに人気が上がりやすくなります。`:'ギルドに入ると会費がかかりますが，人気が上がりやすくなります。');
   h+=`<div class="tbl"><table class="t"><tr><th></th><th>ギルド</th><th>会費</th><th>加盟店</th><th></th></tr>
   ${GUILDS.map(x=>`<tr><td>${im('guild-'+x.id,'i16')}</td><td>${esc(x.name)}<br><small>${esc(x.desc)}</small></td><td class="r">${x.fee}%</td><td><small>${S.npcs.filter(n=>n.guild===x.id).map(n=>esc(n.shop)).join('<br>')||'-'}</small></td><td>${S.guild===x.id?`<button onclick="S.guild=null;save();setFlash('ギルドを脱退しました');render()">脱退</button>`:`<button onclick="joinGuild('${x.id}')">加盟</button>`}</td></tr>`).join('')}
   ${S.myguild?`<tr><td>${im('guildprize','i16')}</td><td>${esc(S.myguild.name)}<br><small>あなたのギルド</small></td><td class="r">${S.myguild.fee}%</td><td><small>${S.npcs.filter(n=>n.guild==='my').map(n=>esc(n.shop)).join('<br>')||'-'}</small></td><td>${S.guild==='my'?'<small class="blue">所属中</small>':`<button onclick="S.guild='my';save();render()">加盟</button>`}</td></tr>`:''}
@@ -3373,7 +3378,7 @@ function guildOnline(){
     <div class="c"><big>金庫に寄付する</big></div>
     <div class="c"><input type="number" id="gDon" value="10000" min="100" style="width:120px"> 円 <button onclick="guildDonate()">寄付する</button></div>
     <div class="c note">寄付や会費がギルドの経験になり，レベルが上がります。寄付¥10,000ごとに1GP入ります。</div>
-    <div class="c note"><b>GPのため方</b>：加盟店の売上¥20,000ごとに1GP（毎日の決算）・依頼の達成+3・求人の引き受け+2・決闘や魔物退治の勝利+1（最上級は+5）・クエスト達成・ギルド対抗戦</div>
+    <div class="c note"><b>GPのため方</b>：加盟店の売上¥20,000ごとに1GP（決算ごと）・依頼の達成+3・求人の引き受け+2・決闘や魔物退治の勝利+1（最上級は+5）・クエスト達成・ギルド対抗戦</div>
     <div class="c toolbar"><button onclick="guildLeave()">ギルドを抜ける</button></div>`;
   } else if(gTab===2 && my){
     h+=`<div class="c"><input id="gMsg" maxlength="60" placeholder="仲間へのメッセージ" style="width:70%"> <button onclick="guildPost()">書き込む</button></div>
@@ -3423,7 +3428,7 @@ function guildOnline(){
   } else if(gTab===6 && my){
     const q=my.quest, active=q&&!q.done&&q.until>=curPeriod();
     h+=`<div class="c"><big>ギルドクエスト</big></div>`;
-    if(active) h+=`<div class="tbl"><table class="t" style="width:100%"><tr><th>目標</th><td>${iname(q.no)}を加盟店みんなで<b>${q.target}個</b>売る</td></tr><tr><th>進み具合</th><td><div class="hpbar" style="width:160px;display:inline-block"><div style="width:${Math.min(100,(q.prog||0)/q.target*100)}%;background:#9c6"></div></div> ${q.prog||0}/${q.target}</td></tr><tr><th>期限</th><td>${periodLabel(q.until)}の決算まで</td></tr><tr><th>報酬</th><td>${q.gp}GP ＋ 加盟店に${yen(q.money)}ずつ</td></tr></table></div><div class="c note">売れた数は毎日の決算で加算されます。</div>`;
+    if(active) h+=`<div class="tbl"><table class="t" style="width:100%"><tr><th>目標</th><td>${iname(q.no)}を加盟店みんなで<b>${q.target}個</b>売る</td></tr><tr><th>進み具合</th><td><div class="hpbar" style="width:160px;display:inline-block"><div style="width:${Math.min(100,(q.prog||0)/q.target*100)}%;background:#9c6"></div></div> ${q.prog||0}/${q.target}</td></tr><tr><th>期限</th><td>${periodLabel(q.until)}の決算まで</td></tr><tr><th>報酬</th><td>${q.gp}GP ＋ 加盟店に${yen(q.money)}ずつ</td></tr></table></div><div class="c note">売れた数は決算ごとに加算されます。</div>`;
     else {
       if(q&&q.done) h+=`<div class="flash">前回のクエスト「${ITEMS[q.no]?esc(ITEMS[q.no].name):''}を${q.target}個」は<b>達成</b>しました！</div>`;
       else if(q) h+=`<div class="flash err">前回のクエストは期限切れでした…</div>`;
@@ -3618,7 +3623,7 @@ async function raceDocGet(id){ if(NET.online){ const s=await NET.db.doc('drace/'
 function dragonScreen(){
   const tab=sub.dt||0;
   const tabs=`<div class="tabs">${['牧場','レース','結果'].map((x,i)=>`<span class="${tab===i?'on':''}" onclick="go('slime',{dr:1,dt:${i}})">${x}</span>`).join('')}</div>`;
-  let h=talk('kaoslime3','竜舎の親方','ドラゴンレースへようこそ！ 牧場でドラゴンを持ち，調教して鍛え，レースで勝って賞金を稼ぐんだ。レースは2日ごと，<b>登竜レース</b>と<b>重賞レース</b>が行われるぞ。結果は実力と作戦で決まる。運じゃないぞ！')+tabs;
+  let h=talk('kaoslime3','竜舎の親方','ドラゴンレースへようこそ！ 牧場でドラゴンを持ち，調教して鍛え，レースで勝って賞金を稼ぐんだ。レースはゲーム内の2日ごと（現実で約48分ごと），<b>登竜レース</b>と<b>重賞レース</b>が行われるぞ。結果は実力と作戦で決まる。運じゃないぞ！')+tabs;
   if(tab===0){
     h+=`<div class="c"><big>わが牧場</big> <small>（${S.dragons.length}/3頭）</small></div>`;
     h+=S.dragons.map((g,i)=>`<div class="tbl"><table class="t" style="width:100%"><tr><td class="c" style="width:60px">${im('dragon1'+(g.color+1),'','width=40 height=40')}<br><b>${esc(g.name)}</b><br><small>${DR_COLORS[g.color]}竜・${drAge(g)}日</small></td>
@@ -3749,7 +3754,7 @@ SCREENS.forge=function(){
   ${tabs}
   <div class="tbl"><table class="t" style="width:100%"><tr><th>装備</th><th>必要な素材</th><th></th></tr>
   ${list.map(f=>{ const it=ITEMS[f.no], ok=f.mats.every(([n,x])=>has(x,n))&&S.money>=f.gold&&S.time>=f.time, c=cur(it.soubi);
-    return `<tr><td>${iname(f.no)}<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>${it.skill?`<br><small>スキル：<b>${sk(it.skill)}</b>${it.series?`／${SERIES[it.series].n}シリーズ`:''}</small>`:''}${it.curse?'<br><small class="red">呪い：毎日人気−1</small>':''}${c?`<br><small class="note">いま：${esc(c.name)}（${statStr(c)||'－'}）</small>`:''}</td>
+    return `<tr><td>${iname(f.no)}<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>${it.skill?`<br><small>スキル：<b>${sk(it.skill)}</b>${it.series?`／${SERIES[it.series].n}シリーズ`:''}</small>`:''}${it.curse?'<br><small class="red">呪い：決算ごとに人気−1</small>':''}${c?`<br><small class="note">いま：${esc(c.name)}（${statStr(c)||'－'}）</small>`:''}</td>
     <td><small>${f.mats.map(([n,x])=>`<span class="${has(x,n)?'':'red'}">${iname(x)}×${n}<span class="note">（${S.stock[x]||0}）</span></span>`).join('<br>')}<br>費用 ${yen(f.gold)}・${hm(f.time)}</small></td>
     <td><button ${ok?'':'disabled'} onclick="forgeMake(${f.no})">作る</button></td></tr>`; }).join('')}
   </table></div>
@@ -3781,7 +3786,7 @@ SCREENS.army=function(){
     ${me?`<button onclick="soldierTo('guard')">護衛軍に配属する</button>`:`<button onclick="soldierTo('riot')" ${S.soldiers>0?'':'disabled'}>${rebelSum(t)>0?'反乱に加わる':'反乱を起こす'}</button>`}
     ${rebelSum(t)>0&&(me||mine)?`<button onclick="assault()">総攻撃をかける（2時間）</button>`:''}
   </div>
-  <div class="c note">上の人数ぶんの兵士を送り出します。反乱軍と護衛軍は毎日の決算時にも衝突します。<br>護衛軍が全滅すると，最も多くの兵を出した反乱リーダーが新領主になります。</div>
+  <div class="c note">上の人数ぶんの兵士を送り出します。反乱軍と護衛軍は決算のたびにも衝突します。<br>護衛軍が全滅すると，最も多くの兵を出した反乱リーダーが新領主になります。</div>
   <hr>
   <div class="tbl"><table class="t">
     <tr><th>${im('ability-no-4','i16')}HP</th><td class="r">${st.life}</td><th>${im('ability-no-1','i16')}攻撃</th><td class="r">${st.attack}</td></tr>
@@ -3850,7 +3855,7 @@ SCREENS.bank=function(){
   const maxDep=Math.max(0,Math.floor(worth*0.7)-S.bank);
   const credit=(50+S.bwin*2+digLevel(S.dig)*50+S.wins*10+Math.round(S.pop));
   return `<div class="c"><big>銀行</big></div>
-  ${talk('kaofather','銀行員','預金には7日ごとに5%の利息がつきます（全資金の70%まで）。借入は借りた時に10%，その後は毎日5%の利息，14日以内にご返済ください。')}
+  ${talk('kaofather','銀行員','預金には決算7回ごと（約3日半）に5%の利息がつきます（全資金の70%まで）。借入は借りた時に10%，その後は決算ごとに5%の利息，決算14回（約1週間）以内にご返済ください。')}
   <div class="tbl"><table class="t">
     <tr><th>預金</th><td class="r">${yen(S.bank)}</td><td><input type="number" id="bkA" value="10000" style="width:100px"> <button onclick="bankOp(0)">預ける</button> <button onclick="bankOp(1)">引き出す</button></td></tr>
     <tr><th>借金</th><td class="r">${yen(S.debt)}${S.debt?`<br><small>${S.debtDays}日経過</small>`:''}</td><td><button onclick="bankOp(2)">借りる</button> <button onclick="bankOp(3)">返す</button><br><small>借入限度 ${yen(credit*1000)}</small></td></tr>
