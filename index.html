@@ -2608,7 +2608,15 @@ SCREENS.other=function(){
 function saveOther(){
   S.owner=$('#oOwner').value.trim()||S.owner; S.shop=$('#oShop').value.trim()||S.shop; S.comment=$('#oCom').value.trim();
   const k=document.querySelector('input[name=kao2]:checked'); if(k) S.kao=faceVal(k.value);
-  setFlash('手続きが完了しました'); save(); render();
+  setFlash('手続きが完了しました'); save(); publishShop(true); syncMyName(); render();
+}
+// 名前・店名・顔を変えたら，ギルドの加盟店一覧や領主の表示にもすぐ反映する
+function syncMyName(){
+  if(!NET.online||!S) return;
+  const g=S.guild&&NET.guilds[S.guild];
+  if(g){ const m=(g.members||{})[NET.uid]; if(m&&(m.name!==S.owner||m.shop!==S.shop||String(m.kao)!==String(S.kao)||(g.leader===NET.uid&&g.leaderName!==S.owner)))
+    guildTx(S.guild,x=>{ const mm=x.members[NET.uid]; if(!mm) return 'nochange'; mm.name=S.owner; mm.shop=S.shop; mm.kao=S.kao; if(x.leader===NET.uid) x.leaderName=S.owner; }); }
+  const L=T().lord; if(L&&L.key===myKey()&&(L.name!==S.owner||L.shop!==S.shop)) townTx(x=>{ if(x.lord&&x.lord.key===myKey()){ x.lord.name=S.owner; x.lord.shop=S.shop; } });
 }
 function closeShop(){ confirmBox('本当に閉店しますか？すべてのデータが消えます。',async()=>{
   NET.switching=true;
@@ -3333,6 +3341,7 @@ function guildTx(id,fn){
 }
 function syncGuild(){
   if(!S||!NET.online) return;
+  setTimeout(syncMyName,0);
   if(S.myguild){ S.money+=500000; letter('ギルド受付','kaoguild',`以前に作ったギルド「${S.myguild.name}」は，オンラインのギルドに作り直しになりました。結成費用¥500,000をお返しします。【施設】→[ギルド]から改めて結成してください。`); S.myguild=null; if(S.guild==='my') S.guild=null; save(); }
   if(['a','b','my'].includes(S.guild)){ S.guild=null; save(); }
   if(S.guild && !['a','b','my'].includes(S.guild)){
@@ -4114,47 +4123,145 @@ async function adminLogin(){
   render();
 }
 function adminPlayers(){
-  const a=S?[{me:true,key:myKey(),name:S.owner,shop:S.shop,money:S.money+S.bank-S.debt,dig:S.dig,kao:S.kao,t:Date.now()}]:[];
+  const a=S?[{me:true,key:myKey(),name:S.owner,shop:S.shop,money:S.money+S.bank-S.debt,dig:S.dig,kao:S.kao,t:Date.now(),point:myPoint(),guild:S.guild,pop:S.pop}]:[];
   if(NET.online) playerShops().forEach(p=>a.push(p));
   return a;
 }
+let ADTAB=0;
 SCREENS.admin=function(){
   if(!ADMIN) return `<div class="c"><big>管理者画面</big></div>
     ${talk('kaominister','大臣','管理者のパスワードを入れてください。<br><small>まだ設定されていない場合は，ここで入れたパスワードが管理者パスワードになります（最初の1回だけ）。</small>')}
     <div class="c"><input type="password" id="adPw" style="width:160px" onkeydown="if(event.key==='Enter'&&!event.isComposing)adminLogin()"> <button onclick="adminLogin()">ログイン</button></div>`;
-  const t=T();
-  const items=ITEMLIST.filter(it=>it.price>=0).map(it=>`<option value="${it.no}">${esc(it.name)}</option>`).join('');
-  return `<div class="c"><big>管理者画面</big> <small><a onclick="ADMIN=false;leaveAdmin()">ログアウト</a>　<a onclick="leaveAdmin()">ゲームに戻る</a></small></div>
-  <div class="c"><big>全体へのお知らせ</big></div>
-  <div class="c"><textarea id="adNotice" rows="3" style="width:95%" maxlength="200">${esc(t.notice||'')}</textarea><br><button onclick="adminNotice()">お知らせを出す</button> <button onclick="$('#adNotice').value='';adminNotice()">消す</button></div>
-  <div class="c note">ランキング画面やタイトル画面の一番上に表示されます。</div>
-  <hr>
-  <div class="c"><big>プレイヤーへの付与</big></div>
-  <div class="tbl"><table class="t"><tr><th></th><th>お店</th><th>資金</th><th>爵位</th><th></th></tr>
-  ${adminPlayers().map(p=>`<tr><td>${kao(p.kao)}</td><td>${esc(p.shop)}<br><small>${esc(p.name)}${p.me?'（あなた）':''}${p.t&&!p.me?'・'+ago(p.t):''}</small></td><td class="r nw">${yen(p.money)}</td><td class="nw"><small>${DIGNITY[digLevel(p.dig)]}<br>${p.dig}pt</small></td><td><button onclick="adminGiveBox(${R(p.key)})">付与</button>${p.me?'':`<br><button onclick="adminDelete(${R(p.key)})" class="red">削除</button>`}</td></tr>`).join('')}
-  </table></div>
-  <hr>
-  <div class="c"><big>街の管理</big></div>
-  <div class="tbl"><table class="t">
-    <tr><th>領主</th><td>${t.lord?esc(t.lord.name)+'（'+esc(t.lord.shop)+'）':'なし'}</td><td><button onclick="adminTown('lord')">解任する</button></td></tr>
-    <tr><th>反乱</th><td>${rebelSum(t)}人</td><td><button onclick="adminTown('rebel')">鎮める</button></td></tr>
-    <tr><th>治安</th><td>${Math.round(t.safety)}</td><td><button onclick="adminTown('safety')">100にする</button></td></tr>
-  </table></div>
-  ${NET.online?`<hr><div class="c"><big>データの掃除</big></div>
-  <div class="c toolbar"><button onclick="adminClear('bbs')">掲示板を全部消す</button> <button onclick="adminClear('news')">新聞を全部消す</button> <button onclick="adminClear('auc')">競売を全部消す</button></div>
-  <hr><div class="c"><button class="red" onclick="adminResetAll()">全店リセット（ゲームを最初から）</button></div>
-  <div class="c note">全店リセットをすると，すべてのプレイヤーのお店とセーブが消えます。元に戻せません。</div>`:''}
-  <hr><div class="c"><big>管理者パスワードの変更</big></div>
-  <div class="c"><input type="password" id="adNew" placeholder="新しいパスワード" style="width:160px"> <button onclick="adminChangePw()">変更</button></div>`;
+  const t=T(), TABS=['概要','プレイヤー','街','イベント','ギルド','データ・設定'];
+  let h=`<div class="c"><big>🛠 管理者画面</big> <small><a onclick="ADMIN=false;leaveAdmin()">ログアウト</a>　<a onclick="leaveAdmin()">ゲームに戻る</a></small></div>
+  <div class="tabs">${TABS.map((x,i)=>`<span class="${ADTAB===i?'on':''}" onclick="ADTAB=${i};render()">${x}</span>`).join('')}</div>`;
+  const ps=adminPlayers(); const now=Date.now();
+  if(ADTAB===0){
+    const act=ps.filter(p=>p.me||now-(p.t||0)<36*3600000).length;
+    const total=ps.reduce((a,p)=>a+(p.money||0),0);
+    const top=ranking()[0];
+    h+=`<div class="tbl"><table class="t" style="width:100%">
+      <tr><th>プレイヤー</th><td><b>${ps.length}</b>店（営業中 ${act}店）</td></tr>
+      <tr><th>資金の合計</th><td>${yen(total)}</td></tr>
+      <tr><th>ランキング1位</th><td>${top?esc(top.shop)+(top.npc?'（NPC）':'')+' '+(top.point||0).toLocaleString()+'点':'-'}</td></tr>
+      <tr><th>領主</th><td>${t.lord?esc(t.lord.name)+'（'+esc(t.lord.shop)+'）':'なし'}</td></tr>
+      <tr><th>街資金・治安・開拓</th><td>${yen(t.fund||0)}・${Math.round(townVal(t,'safety',80))}・${Math.round(townVal(t,'develop',50))}</td></tr>
+      <tr><th>次のイベント</th><td>${t.evNext?esc(EVENTS[t.evNext.type].n)+'　'+fmtReal(t.evNext.at):'未定'}${anyEventActive(t)?'<br><span class="red">開催中のイベントあり</span>':''}</td></tr>
+      <tr><th>ギルド</th><td>${Object.keys(NET.guilds||{}).length}個</td></tr>
+    </table></div>
+    <div class="c"><big>📢 全体へのお知らせ</big></div>
+    <div class="c"><textarea id="adNotice" rows="3" style="width:95%" maxlength="200">${esc(t.notice||'')}</textarea><br><button onclick="adminNotice()">お知らせを出す</button> <button onclick="$('#adNotice').value='';adminNotice()">消す</button></div>
+    <div class="c note">ランキング画面やタイトル画面の一番上に表示されます。</div>
+    <div class="c"><big>📰 新聞に記事をのせる</big></div>
+    <div class="c"><input id="adNews" maxlength="80" style="width:75%" placeholder="例：今週末は収穫祭を開きます！"> <button onclick="adminNews()">のせる</button></div>`;
+  } else if(ADTAB===1){
+    const q=(sub.q||'').toLowerCase();
+    const list=ps.filter(p=>!q||(p.shop+p.name).toLowerCase().includes(q)).sort((a,b)=>(b.point||0)-(a.point||0));
+    h+=`<div class="c"><input id="adQ" placeholder="店名・店主名でさがす" value="${esc(sub.q||'')}" style="width:60%"> <button onclick="sub.q=$('#adQ').value;render()">さがす</button></div>
+    <div class="c toolbar"><button onclick="adminGiveBox(${R('*all*')})" style="font-weight:bold">🎁 全員に配る</button></div>
+    <div class="tbl"><table class="t" style="width:100%"><tr><th></th><th>お店</th><th>状況</th><th></th></tr>
+    ${list.map(p=>{ const gi=p.guild&&guildInfo(p.guild); const idle=!p.me&&now-(p.t||0)>=36*3600000;
+      return `<tr><td>${kao(p.kao)}</td><td><b>${esc(p.shop)}</b><br><small>${esc(p.name)}${p.me?'（あなた）':''}<br>${digHtml(p.dig)} ${p.dig}pt${gi?'・'+esc(gi.name):''}</small></td>
+      <td class="nw"><small>点数 ${(p.point||0).toLocaleString()}<br>資金 ${yen(p.money||0)}<br>人気 ${Math.round(p.pop||0)}%<br>${p.me?'いま':idle?'<span class="red">休業中</span>':''}${p.me?'':ago(p.t||0)}</small></td>
+      <td class="nw"><button onclick="adminGiveBox(${R(p.key)})">付与</button><br><button onclick="adminMsgBox(${R(p.key)})">手紙</button>${p.me?'':`<br><button onclick="adminDelete(${R(p.key)})" class="red">削除</button>`}</td></tr>`; }).join('')||'<tr><td colspan="4" class="c">見つかりません</td></tr>'}
+    </table></div>`;
+  } else if(ADTAB===2){
+    const cands=ps.map(p=>`<option value="${R(p.key)}">${esc(p.shop)}（${esc(p.name)}）</option>`).join('');
+    h+=`<div class="c"><big>街の数値</big></div>
+    <div class="tbl"><table class="t" style="width:100%">
+      <tr><th>税率</th><td><input type="number" id="atTax" value="${townVal(t,'tax',5)}" min="0" max="20" style="width:70px"> %</td></tr>
+      <tr><th>街資金</th><td><input type="number" id="atFund" value="${t.fund||0}" style="width:130px"> 円</td></tr>
+      <tr><th>開拓</th><td><input type="number" id="atDev" value="${Math.round(townVal(t,'develop',50))}" min="0" max="100" style="width:70px"></td></tr>
+      <tr><th>治安</th><td><input type="number" id="atSaf" value="${Math.round(townVal(t,'safety',80))}" min="0" max="100" style="width:70px"></td></tr>
+      <tr><th>護衛軍</th><td><input type="number" id="atGuard" value="${t.guard||0}" min="0" style="width:90px"> 人</td></tr>
+    </table></div>
+    <div class="c"><button onclick="adminTownSave()">街の数値を保存</button></div>
+    <div class="c"><big>領主</big></div>
+    <div class="tbl"><table class="t" style="width:100%">
+      <tr><th>いまの領主</th><td>${t.lord?esc(t.lord.name)+'（'+esc(t.lord.shop)+'）':'なし'}</td><td><button onclick="adminTown('lord')">解任</button></td></tr>
+      <tr><th>任命する</th><td><select id="atLord">${cands}</select></td><td><button onclick="adminAppoint()">任命</button></td></tr>
+      <tr><th>反乱</th><td>${rebelSum(t)}人</td><td><button onclick="adminTown('rebel')">鎮める</button></td></tr>
+      <tr><th>個別税率</th><td>${Object.keys(t.taxmode||{}).length}店</td><td><button onclick="adminTown('taxmode')">全部通常に</button></td></tr>
+    </table></div>`;
+  } else if(ADTAB===3){
+    const e=t.ev, r=t.raid, dg=t.dragonEv, nk=t.niku;
+    const slots=[]; const base=Math.ceil((Date.now()+600000)/3600000)*3600000; for(let k=0;k<72;k++) slots.push(base+k*3600000);
+    h+=`<div class="c"><big>いまのイベント</big></div>
+    <div class="tbl"><table class="t" style="width:100%">
+      <tr><th>開催中</th><td>${raidActive(t)?`山賊バルバロス（HP ${r.hp.toLocaleString()}／${r.max.toLocaleString()}）`:dragonActive(t)?'幸運のドラゴン来訪':e&&Date.now()<e.end?esc(EVENTS[e.type].n):'なし'}</td>
+        <td>${anyEventActive(t)?`<button onclick="adminEvEnd(0)">終わらせる</button>${raidActive(t)?'<br><button onclick="adminEvEnd(1)">撃退扱いで終わらせる</button>':''}`:''}</td></tr>
+      <tr><th>次の予定</th><td>${t.evNext?esc(EVENTS[t.evNext.type].n)+'<br><small>'+fmtReal(t.evNext.at)+(t.evNext.by?'（'+esc(t.evNext.by)+'さんが呼んだ）':'')+'</small>':'未定'}</td><td>${t.evNext?'<button onclick="adminEvCancel()">取り消す</button>':''}</td></tr>
+    </table></div>
+    <div class="c"><big>イベントを起こす</big></div>
+    <div class="tbl"><table class="t" style="width:100%">
+      <tr><th>種類</th><td><select id="aeT">${Object.keys(EVENTS).map(k=>`<option value="${k}">${EVENTS[k].n}（${EVENTS[k].len}時間）</option>`).join('')}</select></td></tr>
+      <tr><th>時間</th><td><select id="aeA"><option value="now">いますぐ</option>${slots.map(ms=>`<option value="${ms}">${fmtReal(ms)}</option>`).join('')}</select></td></tr>
+    </table></div>
+    <div class="c"><button onclick="adminEvStart()">このイベントを起こす</button></div>
+    <div class="c note">いまのイベント中は起こせません（先に「終わらせる」）。次の予定は入れかわります。</div>
+    <div class="c"><big>にくべんき藩の襲撃</big></div>
+    <div class="tbl"><table class="t" style="width:100%"><tr><th>予定</th><td>${nk?esc(nk.target.shop)+'<br><small>'+fmtReal(nk.at)+'・襲撃'+nk.pow+'</small>':'なし'}</td><td>${nk?'<button onclick="adminNiku(0)">取り消す</button><br><button onclick="adminNiku(1)">いますぐ襲撃</button>':''}</td></tr></table></div>`;
+  } else if(ADTAB===4){
+    const gs=Object.entries(NET.guilds||{});
+    h+=`<div class="tbl"><table class="t" style="width:100%"><tr><th>ギルド</th><th>状況</th><th></th></tr>
+    ${gs.map(([id,g])=>`<tr><td>${im(g.icon||'guildprize','i16')} <b>${esc(g.name)}</b>${g.npcGuild?' <span class="npctag">NPC</span>':''}<br><small>リーダー ${esc(g.leaderName||'')}・${Object.keys(g.members||{}).length}店</small></td>
+      <td class="nw"><small>Lv${guildLv(g.exp)}・${(g.gp||0).toLocaleString()}GP<br>金庫 ${yen(g.fund||0)}</small></td>
+      <td class="nw"><button onclick="adminGuild(${R(id)},'gp')">GP+50</button><br><button onclick="adminGuild(${R(id)},'names')">名前を最新に</button>${g.npcGuild?'':`<br><button class="red" onclick="adminGuild(${R(id)},'del')">解散</button>`}</td></tr>`).join('')||'<tr><td colspan="3" class="c">ギルドはありません</td></tr>'}
+    </table></div>
+    <div class="c note">「名前を最新に」で，加盟店の名前・店名・顔をいまのランキングの情報に合わせます。</div>`;
+  } else {
+    h+=`${NET.online?`<div class="c"><big>データの掃除</big></div>
+    <div class="c toolbar"><button onclick="adminClear('bbs')">掲示板を全部消す</button> <button onclick="adminClear('news')">新聞を全部消す</button> <button onclick="adminClear('auc')">競売を全部消す</button></div>
+    <hr><div class="c"><button class="red" onclick="adminResetAll()">全店リセット（ゲームを最初から）</button></div>
+    <div class="c note">全店リセットをすると，すべてのプレイヤーのお店とセーブが消えます。元に戻せません。</div><hr>`:''}
+    <div class="c"><big>管理者パスワードの変更</big></div>
+    <div class="c"><input type="password" id="adNew" placeholder="新しいパスワード" style="width:160px"> <button onclick="adminChangePw()">変更</button></div>`;
+  }
+  return h;
 };
+function adminNews(){ const m=$('#adNews').value.trim(); if(!m) return; const s=`【お知らせ】${m}`; news(s); newsNet(s); setFlash('新聞にのせました'); render(); }
+function adminMsgBox(k){ modal(`<div><big>手紙を送る</big></div><textarea id="amB" rows="4" style="width:100%" maxlength="200"></textarea><div class="c"><button onclick="adminMsg(${k})">送る</button> <button onclick="closeModal()">やめる</button></div>`); }
+function adminMsg(k){ const key=REFS[k], body=$('#amB').value.trim(); closeModal(); if(!body) return; const m={kind:'admin',money:0,dig:0,no:0,n:0,body};
+  if(key===myKey()){ applyAdmin(m); save(); setFlash('送りました'); render(); return; } sendMail(key,m).then(ok=>{ setFlash(ok?'送りました':'送れませんでした',!ok); render(); }); }
+function adminTownSave(){
+  const v=id=>parseInt($(id).value)||0;
+  const tax=clamp(v('#atTax'),0,20), fund=v('#atFund'), dev=clamp(v('#atDev'),0,100), saf=clamp(v('#atSaf'),0,100), guard=Math.max(0,v('#atGuard'));
+  townTx(t=>{ t.tax=tax; t.fund=fund; t.develop=dev; t.safety=saf; t.guard=guard; }).then(()=>{ setFlash('街の数値を保存しました'); render(); });
+}
+function adminAppoint(){
+  const key=REFS[+$('#atLord').value]; const p=adminPlayers().find(x=>x.key===key); if(!p) return;
+  townTx(t=>{ t.lord={key:p.key,name:p.name,shop:p.shop}; }).then(()=>{ const m=`【お知らせ】${p.name}（${p.shop}）が領主に任命されました`; news(m); newsNet(m); setFlash('領主を任命しました'); render(); });
+}
+function adminEvStart(){
+  const type=$('#aeT').value, a=$('#aeA').value, at=a==='now'?Date.now()-1000:+a;
+  townTx(t=>{ if(anyEventActive(t)) return 'active'; t.evNext={type,at,by:'管理人'}; t.evWarned=false; return 'ok'; }).then(r=>{
+    if(r!=='ok'){ setFlash('いまイベント中です。先に終わらせてください',1); render(); return; }
+    setFlash(`「${EVENTS[type].n}」を${a==='now'?'いますぐ':fmtReal(at)+'に'}起こします`); checkEvents().then(()=>render()); render(); });
+}
+function adminEvEnd(win){
+  townTx(t=>{ const now=Date.now();
+    if(t.raid&&!t.raid.done){ if(win) t.raid.hp=0; t.raid.end=Math.min(t.raid.end,now-1); }
+    if(t.dragonEv&&!t.dragonEv.done) t.dragonEv.end=now-1;
+    if(t.ev&&!t.ev.done) t.ev.end=now-1; }).then(()=>checkRaid()).then(()=>{ setFlash('イベントを終わらせました'); render(); });
+}
+function adminEvCancel(){ townTx(t=>{ t.evNext=null; t.evWarned=false; }).then(()=>checkEvents()).then(()=>{ setFlash('次の予定を取り消しました（新しい予定がランダムで決まります）'); render(); }); }
+function adminNiku(now){ townTx(t=>{ if(!t.niku) return; if(now) t.niku.at=Date.now()-1000; else t.niku=null; }).then(()=>checkNiku()).then(()=>{ setFlash(now?'襲撃させました':'襲撃を取り消しました'); render(); }); }
+function adminGuild(k,what){
+  const id=REFS[k];
+  if(what==='del'){ confirmBox('このギルドを解散させますか？',()=>NET.db.doc('guilds/'+id).delete().then(()=>{ setFlash('解散させました'); render(); })); return; }
+  const rk={}; ranking().forEach(r=>rk[r.key]=r);
+  guildTx(id,g=>{ if(what==='gp'){ g.gp=(g.gp||0)+50; g.gpTotal=(g.gpTotal||0)+50; }
+    if(what==='names'){ Object.keys(g.members||{}).forEach(u=>{ const r=rk[u]; if(r){ g.members[u].name=r.name; g.members[u].shop=r.shop; g.members[u].kao=r.kao; if(g.leader===u) g.leaderName=r.name; } }); } })
+    .then(()=>{ setFlash(what==='gp'?'GPを50増やしました':'加盟店の名前を最新にしました'); render(); });
+}
 function adminGiveBox(k){
-  const key=REFS[k];
+  const key=REFS[k], all=key==='*all*';
   const items=ITEMLIST.map(it=>`<option value="${it.no}">${esc(it.name)}</option>`).join('');
-  modal(`<div><big>付与する</big></div>
+  modal(`<div><big>${all?'🎁 全員に配る':'付与する'}</big></div>
   <table class="t" style="width:100%">
   <tr><th>資金</th><td><input type="number" id="agM" value="0" style="width:120px"> 円 <small>（マイナスで減らす）</small></td></tr>
-  <tr><th>爵位pt</th><td><input type="number" id="agD" value="1" style="width:70px"> pt</td></tr>
-  <tr><th>アイテム</th><td><select id="agI"><option value="0">なし</option>${items}</select> ×<input type="number" id="agN" value="1" min="1" style="width:60px"></td></tr>
+  <tr><th>爵位pt</th><td><input type="number" id="agD" value="${all?0:1}" style="width:70px"> pt</td></tr>
+  <tr><th>アイテム</th><td><select id="agI"><option value="0">なし</option><option value="79">★ギフト券</option><option value="80">★バトルチケット</option>${items}</select> ×<input type="number" id="agN" value="1" min="1" style="width:60px"></td></tr>
   <tr><th>ひとこと</th><td><input id="agB" maxlength="60" style="width:100%" placeholder="例：ランキング1位おめでとう！"></td></tr>
   </table>
   <div class="c"><button onclick="adminGive(${R(key)})">送る</button> <button onclick="closeModal()">やめる</button></div>`);
@@ -4164,6 +4271,7 @@ function adminGive(k){
   const money=parseInt($('#agM').value)||0, dig=parseInt($('#agD').value)||0, no=+$('#agI').value, n=Math.max(1,parseInt($('#agN').value)||1), body=$('#agB').value.trim();
   closeModal();
   const m={kind:'admin',money,dig,no:no||0,n:no?n:0,body};
+  if(key==='*all*'){ const ps=adminPlayers(); ps.forEach(p=>{ if(p.me) applyAdmin(m); else sendMail(p.key,m); }); save(); const s=`【お知らせ】管理人から全員へプレゼントが届きました！`; news(s); newsNet(s); setFlash(`${ps.length}店に配りました（相手が次にゲームを開いたときに届きます）`); render(); return; }
   if(key===myKey()){ applyAdmin(m); setFlash('付与しました'); save(); render(); return; }
   sendMail(key,m).then(ok=>{ setFlash(ok?'付与しました（相手が次にゲームを開いたときに届きます）':'送れませんでした',!ok); render(); });
 }
@@ -4189,7 +4297,8 @@ function adminTown(what){
     if(what==='lord'){ t.lord=null; t.msg=''; }
     if(what==='rebel'){ t.riot={}; t.bal=null; }
     if(what==='safety'){ t.safety=100; }
-  }).then(()=>{ setFlash({lord:'領主を解任しました（次の決算で新しい領主が選ばれます）',rebel:'反乱を鎮めました',safety:'治安を100にしました'}[what]); render(); });
+    if(what==='taxmode'){ t.taxmode={}; }
+  }).then(()=>{ setFlash({lord:'領主を解任しました（次の決算で新しい領主が選ばれます）',rebel:'反乱を鎮めました',safety:'治安を100にしました',taxmode:'個別税率をすべて通常に戻しました'}[what]); render(); });
 }
 async function adminClear(col){
   confirmBox({bbs:'掲示板',news:'新聞',auc:'競売'}[col]+'を全部消しますか？',async()=>{
