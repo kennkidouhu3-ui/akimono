@@ -2085,11 +2085,13 @@ SCREENS.status=function(){
   </table></div>
   <div class="c"><big>修練（能力強化）</big>　<small>${im('ability-no-0','i16')}経験値 <b>${S.bexp||0}</b></small></div>
   <div class="tbl"><table class="t" style="width:100%"><tr><th>能力</th><th>必要値</th><th>強化</th><th></th></tr>
-  ${[['life',4],['attack',1],['defence',2],['tech',3]].map(([k,ic])=>`<tr><td class="nw">${im('ability-no-'+ic,'i16')}${STATNAME[k]}<br><small>いま${S.st[k]}</small></td><td class="r">${trainCost(k)}</td><td class="r">+${TRAIN_UP[k]}</td><td class="nw"><button ${(S.bexp||0)>=trainCost(k)?'':'disabled'} onclick="strengthen('${k}',1)">強化</button> <button ${(S.bexp||0)>=trainCost(k)*2?'':'disabled'} onclick="strengthen('${k}',99)">できるだけ</button></td></tr>`).join('')}
+  ${[['life',4],['attack',1],['defence',2],['tech',3]].map(([k,ic])=>`<tr><td class="nw">${im('ability-no-'+ic,'i16')}${STATNAME[k]}<br><small>いま${S.st[k]}</small></td><td class="r">${trainCost(k)}</td><td class="r">+${TRAIN_UP[k]}</td><td class="nw"><input type="number" id="trn_${k}" value="1" min="1" style="width:52px">回 <button ${(S.bexp||0)>=trainCost(k)?'':'disabled'} onclick="strengthenN('${k}')">強化</button><br><button ${(S.bexp||0)>=trainCost(k)*2?'':'disabled'} onclick="strengthen('${k}',999)">できるだけ</button></td></tr>`).join('')}
   </table></div>
+  <div class="c"><button onclick="resetStats()">能力をリセットして振り分け直す（${yen(30000)}）</button></div>
   <div class="c note">経験値は戦闘（決闘・魔物退治）で手に入ります。能力が高いほど，強化に必要な経験値も増えます。</div>
   <div class="c"><big>装備</big></div>
   <div class="tbl"><table class="t" style="width:100%">${[1,2,3,4].map(slotRow).join('')}</table></div>
+  ${eqSetsHtml()}
   <div class="c"><big>発動中のスキル</big></div>
   <div class="tbl"><table class="t" style="width:100%">${activeSkills().map(a=>`<tr><td class="nw">${a.series?'<span class="red">★</span>':''}<b>${sk(a.k)}</b></td><td><small>${SKILLS[a.k].d}<br><span class="note">${esc(a.src)}</span></small></td></tr>`).join('')||'<tr><td class="c note">スキルのある装備を身につけると発動します</td></tr>'}</table></div>
   ${Object.entries(seriesCount()).map(([se,c])=>{ const X=SERIES[se]; return X&&c<X.need?`<div class="c note">${X.n}シリーズ ${c}/${X.need}（あと${X.need-c}つで「${sk(X.sk)}」）</div>`:''; }).join('')}
@@ -2100,11 +2102,48 @@ SCREENS.status=function(){
 // 元の商人物語の「修練」：経験値を使って能力を強化する
 const TRAIN_UP={life:10,attack:3,defence:3,tech:3};
 function trainCost(k){ const v=S.st[k]; return k==='life'? 10+Math.floor(v/20) : 10+Math.floor(v/4); }
+const BASE_ST={life:150,attack:50,defence:40,tech:50};
+// いまの能力を，最初の値からの修練で積み上げたとみなして経験値に戻す
+function refundOf(k){
+  let v=BASE_ST[k], cur=S.st[k], ref=0; const up=TRAIN_UP[k];
+  const cost=x=>k==='life'?10+Math.floor(x/20):10+Math.floor(x/4);
+  while(v+up<=cur){ ref+=cost(v); v+=up; }
+  if(cur>v) ref+=Math.round(cost(v)*(cur-v)/up);
+  return Math.max(0,ref);
+}
+function resetStats(){
+  const total=['life','attack','defence','tech'].reduce((a,k)=>a+refundOf(k),0);
+  const fee=30000;
+  confirmBox(`能力をリセットしますか？<br><small>体力・攻撃・防御・技量を最初の値（HP150・攻50・防40・技50）に戻し，そのぶんを<b>経験値 ${total.toLocaleString()}</b>として返します。<br>あとから好きな能力に振り分けられます。費用：${yen(fee)}</small>`,()=>{
+    if(S.money<fee){ setFlash('費用が足りません',1); render(); return; }
+    S.money-=fee; addPay(fee); S.bexp=(S.bexp||0)+total; S.st={...BASE_ST};
+    setFlash(`能力をリセットしました。経験値 ${total.toLocaleString()} を好きな能力に振り分けてください。`); save(); render();
+  });
+}
+function strengthenN(k){ const n=Math.max(1,parseInt(($('#trn_'+k)||{}).value)||1); strengthen(k,n); }
 function strengthen(k,times){
   let n=0, used=0;
   for(let i=0;i<times;i++){ const c=trainCost(k); if((S.bexp||0)<c) break; S.bexp-=c; used+=c; S.st[k]+=TRAIN_UP[k]; n++; }
   if(!n){ setFlash(`${STATNAME[k]}を上げるのに必要な経験値が足りません`,1); render(); return; }
   setFlash(`${esc(S.owner)}の${STATNAME[k]}が ${TRAIN_UP[k]*n} 強化された！（経験値 −${used}）`); save(); render();
+}
+function eqSetSave(i){
+  S.eqSets=S.eqSets||[]; const name=(($('#eqn'+i)||{}).value||'').trim()||`マイセット${i+1}`;
+  S.eqSets[i]={name,eq:{...S.eq}}; setFlash(`いまの装備を「${esc(name)}」に登録しました`); save(); render();
+}
+function eqSetLoad(i){
+  const st=(S.eqSets||[])[i]; if(!st) return;
+  const miss=[];
+  [1,2,3,4].forEach(s=>{ const no=st.eq[s]||0; if(!no){ S.eq[s]=0; return; } if(has(no)) S.eq[s]=no; else miss.push(ITEMS[no]?ITEMS[no].name:'?'); });
+  setFlash(`「${esc(st.name)}」に着替えました${miss.length?`<br><small class="red">手元にない装備：${miss.map(esc).join('，')}</small>`:''}`); save(); render();
+}
+function eqSetsHtml(){
+  const sets=S.eqSets||[];
+  return `<div class="c"><big>マイセット装備</big></div>
+  <div class="tbl"><table class="t" style="width:100%">${[0,1,2,3,4].map(i=>{ const st=sets[i];
+    return `<tr><td style="width:40%"><input id="eqn${i}" maxlength="10" value="${esc(st?st.name:`マイセット${i+1}`)}" style="width:100%"><br><small>${st?[1,2,3,4].map(s=>st.eq[s]&&ITEMS[st.eq[s]]?ii(st.eq[s]):'<span class="note">－</span>').join(' '):'<span class="note">未登録</span>'}</small></td>
+    <td class="nw"><button onclick="eqSetSave(${i})">いまの装備を登録</button><br><button ${st?'':'disabled'} onclick="eqSetLoad(${i})" style="font-weight:bold">この装備に着替える</button></td></tr>`; }).join('')}</table></div>
+  <div class="c note">「いまの装備を登録」で，武器・鎧・盾・装飾の組み合わせを保存できます。名前も変えられます。</div>`;
 }
 function equipSlot(s,no){
   if(no<0) return;
@@ -2192,8 +2231,23 @@ function doUse(no,i){
   const t=useTime(u,no);
   // 特殊処理で対象選択が必要なもの
   if((no===80&&i===0)||(no===62&&i===1)||(no===65&&i<2)){ return chooseTarget(no,i,t); }
+  if(no===80&&i>=1&&i<=4){ return chooseMonster(i,t); }
   if(!spendTime(t)){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
   execUse(no,i,null);
+}
+function chooseMonster(mode,t){
+  const list=mode===4? TOP_MONS.map((m,k)=>({m,k,top:1})) : MONS.slice((mode-1)*15,(mode-1)*15+15).map((m,k)=>({m,k:(mode-1)*15+k}));
+  const ms=myStat();
+  const rows=list.map(({m,k,top})=>{ const mat=top?146+k:101+k; const hp=Math.round(ms.life*m.hp/100);
+    const pw=m.atk+m.def+m.tech, mine=ms.attack+ms.defence+ms.tech, lv=pw>mine*1.3?'<span class="red">とても強い</span>':pw>mine*0.9?'<span class="red">強い</span>':pw>mine*0.6?'互角':'<span class="blue">楽勝</span>';
+    return `<tr><td>${im('no-'+m.img,'','width=36 height=46'+(m.fx?` style="${m.fx}"`:''))}</td><td><b>${esc(m.name)}</b><br><small>HP${hp} 攻${m.atk} 防${m.def} 技${m.tech}<br>手ごたえ：${lv}${ITEMS[mat]?`<br>はぎ取り：${esc(ITEMS[mat].name)}`:''}${top?`<br>賞金${yen(m.prize)}`:''}</small></td><td><button onclick="pickMonster(${mode},${k},${t})">選ぶ</button></td></tr>`; }).join('');
+  modal(`<div class="c"><big>戦う魔物を選ぶ</big></div><div class="c note">持ち時間 ${hm(t)}・バトルチケット1枚</div><div class="tbl"><table class="t" style="width:100%">${rows}</table></div><div class="c"><button onclick="closeModal()">やめる</button></div>`);
+}
+function pickMonster(mode,k,t){
+  closeModal();
+  if(!has(80)){ setFlash('バトルチケットがありません',1); render(); return; }
+  if(!spendTime(t)){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
+  execUse(80,mode,k);
 }
 function chooseTarget(no,i,t){
   const rows=[];
@@ -2328,12 +2382,12 @@ function startBattle(mode,target){
   else if(mode===0){ npc=S.npcs[target]; foe=mkFighter(npc.owner,npc.st,npc.btype,'kao'+npc.kao,null); }
   else if(mode===9){ foe={name:'山賊バルバロス',img:'kaobal',btype:10,hp:5000,max:5000,atk:380,def:160,tech:200,avoidPlus:0}; }
   else if(mode===4){
-    mon=pick(TOP_MONS);
+    mon=(target!=null&&TOP_MONS[target])?TOP_MONS[target]:pick(TOP_MONS);
     foe={name:mon.name,img:'no-'+mon.img,fx:mon.fx,btype:mon.btype,hp:Math.max(10,Math.round(me.max*mon.hp/100)),atk:mon.atk,def:mon.def,tech:mon.tech,avoidPlus:0,top:1};
     foe.max=foe.hp;
   }
   else {
-    const lo=(mode-1)*15; mon=MONS[lo+rnd(15)];
+    const lo=(mode-1)*15; mon=(target!=null&&MONS[target]&&target>=lo&&target<lo+15)?MONS[target]:MONS[lo+rnd(15)];
     foe={name:mon.name,img:'no-'+mon.img,btype:mon.btype,hp:Math.max(10,Math.round(me.max*mon.hp/100)),atk:mon.atk,def:mon.def,tech:mon.tech,avoidPlus:0};
     foe.max=foe.hp;
   }
@@ -2345,7 +2399,7 @@ function startBattle(mode,target){
     act(foe,me,log,'red');
   }
   const win = foe.hp<=0 || (me.hp>0 && foe.hp>0 && me.hp/me.max > foe.hp/foe.max);
-  BT={me,foe,init,log,win,mode,mon,npc,puid,target,shown:0,done:false,result:''};
+  BT={me,foe,init,log,win,mode,mon,npc,puid,target:(mode>=1&&mode<=4&&mon)?(mode===4?TOP_MONS.indexOf(mon):MONS.indexOf(mon)):target,shown:0,done:false,result:''};
   finishBattle();
   go('battle');
 }
@@ -2387,14 +2441,16 @@ function battleMenu(b){
   <div class="c toolbar">${again}</div>
   <div class="c toolbar">${[0,1,2,3,4].map(m=>`<button ${tk?'':'disabled'} onclick="quickBattle(${m},false)">${['決闘','魔物（低）','魔物（中）','魔物（上）','<span class=red>最上級</span>'][m]}<br><small>${hm(useTime(u[m],80))}</small></button>`).join('')}</div>
   ${tk?'':`<div class="c"><a onclick="go('market',{type:10})">市場でバトルチケットを買う</a></div>`}
+  ${(S.eqSets||[]).some(Boolean)?`<div class="c"><small>マイセット：</small>${(S.eqSets||[]).map((st,i)=>st?`<button onclick="eqSetLoad(${i})">${esc(st.name)}</button>`:'').join('')}</div>`:''}
   <div class="c"><a onclick="go('status')">ステータス・装備を見る</a>　<a onclick="go('army')">傭兵所（訓練・戦法）</a></div>`;
 }
 function quickBattle(mode,same){
   if(!has(80)){ setFlash('バトルチケットがありません',1); render(); return; }
   const u=ITEMS[80].uses[mode], t=useTime(u,80);
   if(mode===0 && !(same&&BT&&BT.target!=null)){ return chooseTarget(80,0,t); }
+  if(mode>=1 && mode<=4 && !(same&&BT&&BT.target!=null&&BT.mode===mode)){ return chooseMonster(mode,t); }
   if(!spendTime(t)){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
-  execUse(80,mode,mode===0?BT.target:null);
+  execUse(80,mode,(same&&BT)?BT.target:null);
 }
 function finishBattle(){
   const b=BT; let res=[];
