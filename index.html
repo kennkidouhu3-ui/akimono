@@ -1401,10 +1401,12 @@ function townDaily(d){
     t.develop=clamp(townVal(t,'develop',50)+devem/15000-1,0,100);   // 開拓は上がりやすく
     t.safety=clamp(townVal(t,'safety',80)+safem/25000-1+(tax<=5?2:tax<=10?0:tax<=15?-3:-6)+rr(-2,2),0,100);
     t.inPrev=t.inToday||0; t.outPrev=out; t.inToday=0;
+    if(!NET.online){ t.npcTaxPrev=t.npcToday||0; t.npcToday=0; }
     // NPCの店からも税をとる（オンライン。オフラインは売れるたびに計算済み）
     if(NET.online){
       const rateOf=k=>{ const m=(t.taxmode||{})[k], b=townVal(t,'tax',5); return m==='free'?0:m==='double'?b*2:b; };
       const npcTax=npcOnline(d).reduce((a,n)=>a+Math.round(n.sale*rateOf(n.key)/100),0);
+      t.npcTaxPrev=npcTax;
       if(npcTax>0){ t.fund=(t.fund||0)+npcTax; t.inPrev=(t.inPrev||0)+npcTax; }
     }
     // 倍税・免税は街の治安にも響く
@@ -1646,7 +1648,8 @@ function settle(){
   });
   // 税の納付
   const tx=Math.round((S.today.tax||0)+(S.today.npctax||0));
-  if(tx>0) townTx(t=>{ t.fund=(t.fund||0)+tx; t.inToday=(t.inToday||0)+tx; });
+  const ntx=Math.round(S.today.npctax||0);
+  if(tx>0) townTx(t=>{ t.fund=(t.fund||0)+tx; t.inToday=(t.inToday||0)+tx; if(ntx) t.npcToday=(t.npcToday||0)+ntx; });
   // ランキング・優勝
   const rk=ranking();
   rk.forEach((r,i)=>{ if(r.me) S.rankY=i+1; else if(r.id!=null&&S.npcs[r.id]) S.npcs[r.id].rankY=i+1; });
@@ -3178,7 +3181,7 @@ SCREENS.lord=function(){
   <div class="tbl"><table class="t" style="width:100%">
     <tr><th>人口</th><td>${people.toLocaleString()}人</td><th>方針</th><td>${purpose}</td></tr>
     <tr><th>街資金</th><td class="r">${yen(t.fund||0)}</td><th>税率</th><td>${tax}%</td></tr>
-    <tr><th>前期税収</th><td class="r">${yen(t.inPrev||0)}</td><th>前期歳出</th><td class="r">${yen(t.outPrev||0)}</td></tr>
+    <tr><th>前期税収</th><td class="r">${yen(t.inPrev||0)}${t.npcTaxPrev?`<br><small>うちNPC ${yen(t.npcTaxPrev)}</small>`:''}</td><th>前期歳出</th><td class="r">${yen(t.outPrev||0)}</td></tr>
     <tr><th>開拓</th><td colspan="3">${bar(dev,'#9c6')} <small>（街の売れ行き ×${townMult().toFixed(2)}）</small></td></tr>
     <tr><th>治安</th><td colspan="3">${bar(saf,saf<50?'#d55':'#4a8')}</td></tr>
     <tr><th>開拓対策費</th><td class="r">${yen(t.devem||0)}/日</td><th>治安対策費</th><td class="r">${yen(t.safem||0)}/日</td></tr>
