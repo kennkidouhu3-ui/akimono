@@ -1989,9 +1989,10 @@ function rankTable(limit){
   </table></div>${pager}
   <div class="c note"><span class="npctag">NPC</span> は街のコンピューター商人です（表彰されても賞品はもらえません）。<br>点数＝人気 × 利益（直近3日と今期の利益。利益＝売上＋収入−税−経費−仕入れ。売れたり稼いだりするとすぐ上がります）× 優勝回数による補正。優勝を重ねるほど点数は伸びにくくなります。</div>`;
 }
-function resultsHtml(){
+function resultsHtml(left){
   const r=NET.online?T().results:null; if(!r||!r.top||!r.top.length) return '';
   const md=['🥇','🥈','🥉','4位','5位'], pz=[1,2,3,4,5].map(prizeText);
+  if(left) return `<div class="flash" style="text-align:left"><b>${periodLabel(r.d)}の表彰</b><table style="width:100%;border-collapse:collapse;margin-top:4px">${r.top.map((x,i)=>`<tr><td style="width:2.6em;vertical-align:top;white-space:nowrap">${md[i]}</td><td style="text-align:left">${esc(x.shop)}${x.npc?' <span class="npctag">NPC</span>':''}<br><small>${(x.point||0).toLocaleString()}点・${pz[i]}</small></td></tr>`).join('')}</table></div>`;
   return `<div class="flash" style="text-align:center"><b>${periodLabel(r.d)}の表彰</b><br>${r.top.map((x,i)=>`${md[i]} ${esc(x.shop)}${x.npc?' <span class="npctag">NPC</span>':''} <small>${(x.point||0).toLocaleString()}点・${pz[i]}</small>`).join('<br>')}</div>`;
 }
 function noticeHtml(){ const n=T().notice, dk=T().duke; const bf=dragonHtml()+balForecastHtml()+eventHtml(); const dh=dk&&dk.msg?`<div class="flash" style="border-color:#b8860b;background:#fffbe6">${im('dig7','i16')}<b>大公 ${esc(dk.name)}</b>のお言葉：${esc(dk.msg)}</div>`:''; return bf+dh+(n?`<div class="flash" style="border-color:#d0402a;background:#fff4ee"><b>お知らせ</b>：${esc(n).replace(/\n/g,'<br>')}</div>`:''); }
@@ -3313,10 +3314,8 @@ SCREENS.guide=function(){
    ============================================================ */
 SCREENS.log=function(){
   return `<div class="c"><big>新聞</big>${NET.online?' <small class="blue">（街じゅうの出来事）</small>':''}</div>
-  <div class="c"><big>商人ランキング</big> <small>（点数順・決算ごとに表彰）</small></div>
-  ${resultsHtml()}
-  ${rankTable()}
-  <div class="c"><big>出来事</big></div>
+  ${resultsHtml(true)?`<div style="text-align:left;margin:6px 0"><big>決算の表彰</big></div>${resultsHtml(true)}`:''}
+  <div style="text-align:left;margin:6px 0"><big>出来事</big></div>
   <div class="tbl"><table class="t">${newsList().map(n=>`<tr><td class="nw"><small>${fmtDay(n.d)} ${n.t}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')||'<tr><td>まだ記事はありません</td></tr>'}</table></div>`;
 };
 SCREENS.rank=function(){
@@ -3327,9 +3326,8 @@ SCREENS.rank=function(){
   ${noticeHtml()}
   ${L&&T().msg?`<div class="flash">領主${esc(L.name)}より告知：${esc(T().msg)}</div>`:''}
   <div class="c"><big>商人ランキング</big> <small>（点数順・決算ごとに表彰）</small></div>
-  ${resultsHtml()}
   ${rankTable()}
-  <div class="c note">決算ごとに，1位は<b>爵位ポイント+1</b>，2位は<b>¥100,000とギフト券5枚</b>，3位は<b>¥50,000とギフト券3枚</b>，4位は<b>ギフト券2枚</b>，5位は<b>ギフト券1枚</b>がもらえます。<br>現実の時間で1日半以上ゲームを開いていない店は「休業中」となり，表彰の対象外になって点数がゆっくり下がります。<br><a onclick="go('dignity')">爵位名鑑を見る</a></div>
+  <div class="c note">決算の表彰の結果は <a onclick="go('log')">【情報】→[新聞]</a> で見られます。決算ごとに，1位は<b>爵位ポイント+1</b>，2位は<b>¥100,000とギフト券5枚</b>，3位は<b>¥50,000とギフト券3枚</b>，4位は<b>ギフト券2枚</b>，5位は<b>ギフト券1枚</b>がもらえます。<br>現実の時間で1日半以上ゲームを開いていない店は「休業中」となり，表彰の対象外になって点数がゆっくり下がります。<br><a onclick="go('dignity')">爵位名鑑を見る</a></div>
   <div class="tbl"><table class="t"><tr><th colspan="2">最新ニュース</th></tr>
   ${newsList().slice(0,6).map(n=>`<tr><td class="nw"><small>${fmtDay(n.d)} ${n.t}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')||'<tr><td colspan=2>まだありません</td></tr>'}</table></div>`;
 };
