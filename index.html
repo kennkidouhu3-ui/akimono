@@ -808,7 +808,7 @@ async function checkEvents(){
       if(t.evNext&&!t.evWarned&&t.evNext.at-now<=24*3600000){ t.evWarned=true; L.push(`【予告】${fmtReal(t.evNext.at)}から「${EVENTS[t.evNext.type].n}」！ ${EVENTS[t.evNext.type].desc}`); }
       return L;
     });
-    if(logs&&logs.length){ logs.forEach(m=>{ S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); }); softRender(); }
+    if(logs&&logs.length){ logs.forEach(m=>{ S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m}); newsNet(m); }); softRender(); }
   }
   // 各自に1回だけ届く効果（大商隊・収穫祭）
   const e=T().ev;
@@ -877,7 +877,7 @@ async function checkRaid(){
         }
         return {logs,rew};
       });
-      if(out){ (out.logs||[]).forEach(m=>{ S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); });
+      if(out){ (out.logs||[]).forEach(m=>{ S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m}); newsNet(m); });
         if(out.rew) raidRewards(out.rew.r); softRender(); }
     }
     // 豪将リキーヤの加勢：気まぐれ（来るかどうか・いつ来るか・どれだけ強いかがランダム）
@@ -898,7 +898,7 @@ async function checkRaid(){
         const say=lines[Math.floor(Math.random()*lines.length)];
         return {msg:(first?`豪将リキーヤが気まぐれに加勢に現れた！${say} `:`豪将リキーヤの${big?'渾身の一撃！！':'一撃！'}${say} `)+`バルバロスに${d.toLocaleString()}のダメージ！`+(leave?'　……と思ったら「飽きた」と帰ってしまった。':'')};
       });
-      if(res&&res.msg){ S.news.unshift({d:day(),t:hms(S.clock%1440),m:res.msg}); newsNet(res.msg); softRender(); }
+      if(res&&res.msg){ S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m:res.msg}); newsNet(res.msg); softRender(); }
     }
     await checkNpcDuel();
     await checkNiku();
@@ -934,8 +934,8 @@ async function checkNiku(){
       if(!t.nikuHit||t.nikuHit.p!==curPeriod()) t.nikuHit={p:curPeriod(),keys:[]};
       t.nikuHit.keys.push(n.target.key);
       t.nikuLast={id:n.at,target:n.target,pow,def,win,at:now,steal};
-      logs.push(win?`${NIKU}が${n.target.shop}を襲撃！ しかし，守りを固めていた${n.target.name}に撃退された！（防衛力${def}／襲撃${pow}）`
-                   :`${NIKU}が${n.target.shop}を襲撃！ 点数${steal.pt.toLocaleString()}・人気${steal.pop}${steal.dig?'・爵位ポイント1':''}を奪っていった…（防衛力${def}／襲撃${pow}）`);
+      logs.push(win?`【襲撃】${NIKU}が${n.target.shop}を襲撃！ しかし，守りを固めていた${n.target.name}に撃退された！（防衛力${def}／襲撃${pow}）`
+                   :`【襲撃】${NIKU}が${n.target.shop}を襲撃！ 点数${steal.pt.toLocaleString()}・人気${steal.pop}${steal.dig?'・爵位ポイント1':''}を奪っていった…（防衛力${def}／襲撃${pow}）`);
       t.niku=null;
     }
     if(!t.niku){
@@ -948,7 +948,7 @@ async function checkNiku(){
     }
     return logs;
   });
-  if(out&&out.length){ out.forEach(m=>{ S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); }); softRender(); }
+  if(out&&out.length){ out.forEach(m=>{ S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m}); newsNet(m); }); softRender(); }
 }
 function applyNikuResult(){
   const L=T().nikuLast; if(!L||S.nikuSeen===L.id) return;
@@ -986,7 +986,7 @@ async function checkNpcDuel(){
   });
   if(!out) return;
   const m=out.npcWin?`【決闘】${out.a.shop}の${out.a.name}が${out.b.shop}に決闘を挑み，勝利した！`:`【決闘】${out.a.shop}の${out.a.name}が${out.b.shop}に決闘を挑んだが，返り討ちにあった！`;
-  S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m);
+  S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m}); newsNet(m);
   const mail={kind:'npcduel',npc:out.a.name,shop:out.a.shop,win:!out.npcWin,prize:out.prize};
   if(out.b.key===myKey()) applyNpcDuel(mail); else sendMail(out.b.key,mail);
   if(!NET.online){ const n=S.npcs[+String(out.a.key).slice(4)]; if(n) n.pop=clamp(n.pop+(out.npcWin?2:-1),n.popBase?n.popBase-15:5,100); }
@@ -1062,7 +1062,7 @@ function balForecastHtml(){
 }
 function fmtDay(d){ if(d==null) return ''; d=Math.max(1,d)-1; const y=Math.floor(d/360)+1, mo=Math.floor(d%360/30)+1, dd=d%30+1; return `商暦${y}年${mo}月${dd}日`; }
 function clockStr(){ return `${fmtDay(day())} ${hms(S.clock%1440)}`; }
-function news(t){ S.news.unshift({d:day(),t:hms(S.clock%1440),m:t}); S.news=S.news.slice(0,80); if(NET.online && (t.includes(S.shop)||t.includes(S.owner))) newsNet(t); }
+function news(t){ S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m:t}); S.news=S.news.slice(0,80); if(NET.online && (t.includes(S.shop)||t.includes(S.owner))) newsNet(t); }
 function letter(from,face,body,gift){ S.letters.unshift({d:day(),from,face,body,gift:gift||null,read:false}); S.letters=S.letters.slice(0,40); }
 function has(no,n){ return (S.stock[no]||0)>=(n||1); }
 function add(no,n){ S.stock[no]=(S.stock[no]||0)+n; if(S.stock[no]<=0) delete S.stock[no]; }
@@ -1215,9 +1215,11 @@ async function newsNet(m){
     if(Math.random()<0.15){ const s=await NET.db.collection('news').orderBy('t','desc').limit(300).get(); s.docs.slice(80).forEach(d=>NET.db.doc('news/'+d.id).delete().catch(()=>{})); }
   }catch(e){ netErr(e); }
 }
-function newsLine(m){ const s=esc(m); const mm=s.match(/^【([^】]+)】(.*)$/); if(!mm) return s; const col=/襲来|警報|襲撃/.test(mm[1])?'#c33':/決算|表彰/.test(mm[1])?'#b8860b':'#3a7abd'; return `<span style="display:inline-block;background:${col};color:#fff;border-radius:3px;padding:0 5px;font-size:12px;margin-right:4px">${mm[1]}</span><b>${mm[2]}</b>`; }
+function newsLine(m){ const s=esc(m); const mm=s.match(/^【([^】]+)】(.*)$/); if(!mm) return s; const col=/襲来|警報|襲撃|万引き|政変/.test(mm[1])?'#c33':/決算|表彰/.test(mm[1])?'#b8860b':'#3a7abd'; return `<span style="display:inline-block;background:${col};color:#fff;border-radius:3px;padding:0 5px;font-size:12px;margin-right:4px">${mm[1]}</span><b>${mm[2]}</b>`; }
+function realStamp(ms){ const d=new Date(ms+9*3600000); return `${d.getUTCMonth()+1}/${d.getUTCDate()}(${'日月火水木金土'[d.getUTCDay()]}) ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`; }
+function newsTime(n){ if(n.at) return realStamp(n.at); if(n.d) return `${fmtDay(n.d)} ${n.t||''}`; return ''; }
 function newsList(){
-  if(NET.online && NET.news.length) return NET.news.map(n=>({d:n.d,t:n.hm||'',m:n.m}));
+  if(NET.online && NET.news.length) return NET.news.map(n=>({at:typeof n.t==='number'?n.t:0,d:n.d,t:n.hm||'',m:n.m}));
   return S?S.news:[];
 }
 function shopSummary(){
@@ -1594,7 +1596,7 @@ function townDaily(d){
     if(logs) awards.forEach(a=>sendMail(a.key,{kind:'prize',rank:a.rank,day:d,point:a.point}));
     if(logs&&NET.online) NPC_GUILDS.forEach(G=>{ if(NET.guilds[G.id]) guildTx(G.id,g=>{ g.gp=(g.gp||0)+3; g.gpTotal=(g.gpTotal||0)+3; g.exp=(g.exp||0)+20000; }); });
     const gw=NET.town&&NET.town._gwar; if(logs&&gw){ gw.forEach(x=>{ const add=[50,25,10][x.rank-1]; guildTx(x.id,g=>{ g.gp=(g.gp||0)+add; g.gpTotal=(g.gpTotal||0)+add; }); if(x.rank===1) x.members.forEach(u=>{ if(String(u).startsWith('npc:')) return; if(u===NET.uid) S.money+=100000; else sendMail(u,{kind:'money',amount:100000,note:'ギルド対抗戦1位の賞金'}); }); }); townTx(t=>{ delete t._gwar; }); }
-    (logs||[]).forEach(m=>{ S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); }); if(logs&&logs.length) softRender(); });
+    (logs||[]).forEach(m=>{ S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m}); newsNet(m); }); if(logs&&logs.length) softRender(); });
 }
 
 /* ============================================================
@@ -1693,11 +1695,11 @@ function simulate(dt){
   const gi0=guildInfo(S.guild); const dragonX=(dragonActive()?3:1)*(evActive('festival')?1.5:1); const exposedX=(S.exposedUntil&&Date.now()<S.exposedUntil)?0.75:1; const gb = (gi0? 1+gi0.bonus*0.03 : 1)*townMult()*(1+(skillFx().sales||0))*dragonX*exposedX;
   const trashF = S.trash>100?0.6:S.trash>50?0.85:1;
   // 万引き：治安が悪いほど起きやすい。店番ロボットがいれば防げる（ときどき壊れる）
-  { const saf=townVal(T(),'safety',80); const p=dt/60*Math.max(0,70-saf)/70*0.25;
+  { const saf=townVal(T(),'safety',80); const p=dt/60*Math.max(0,70-saf)/70*0.08;
     const shelves=S.cases.filter(c=>c&&has(c.no)&&!ITEMS[c.no].noshow);
     if(shelves.length&&Math.random()<p){
       if(has(64)){ if(Math.random()<0.05){ add(64,-1); letter('店番ロボット','kaoguide','ビビッ…万引き犯を追い払いましたが，もみ合いで店番ロボットが壊れてしまいました…。'); } }
-      else { const c=shelves[Math.floor(Math.random()*shelves.length)]; const k=Math.min(S.stock[c.no]-((S.fav||{})[c.no]?1:0),1+rnd(3)); if(k>0){ add(c.no,-k); S.today.theft=(S.today.theft||0)+k; letter('店員','kaoguide',`万引きにあいました！ ${ITEMS[c.no].name}×${k}が盗まれてしまいました…。街の治安が悪いようです（店番ロボットがいれば防げます）。`); } }
+      else { const c=shelves[Math.floor(Math.random()*shelves.length)]; const k=Math.min(S.stock[c.no]-((S.fav||{})[c.no]?1:0),1+rnd(3)); if(k>0){ add(c.no,-k); S.today.theft=(S.today.theft||0)+k; letter('店員','kaoguide',`万引きにあいました！ ${ITEMS[c.no].name}×${k}が盗まれてしまいました…。街の治安が悪いようです（店番ロボットがいれば防げます）。`); const nm=`【万引き】${S.shop}で${ITEMS[c.no].name}×${k}が盗まれた！ 街の治安の悪化が心配される`; S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m:nm}); newsNet(nm); } }
     } }
   S.cases.forEach((c,idx)=>{
     if(!c || !has(c.no)) return;
@@ -1938,7 +1940,7 @@ function header(){
 function statusLine(){
   const saved = NET.lastSave? `最終セーブ ${new Date(NET.lastSave).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`:'';
   return `<b>${esc(S.shop)}</b>　資金 <b>${yen(S.money)}</b>　持ち時間 <b>${hm(S.time)}</b><br>
-  <small>${clockStr()}（次の決算まで 現実で${hm((nextSettleMs()-Date.now())/60000)}）　人気 ${popStars(S.pop)}　点数 <b>${myPoint().toLocaleString()}</b>　${rebelSum()>0?'<span class=red>反乱発生中</span>':''}</small><br>${netBadge()} <small class="note">${saved}</small>`;
+  <small>${realStamp(Date.now())}（次の決算まで ${hm((nextSettleMs()-Date.now())/60000)}）　人気 ${popStars(S.pop)}　点数 <b>${myPoint().toLocaleString()}</b>　${rebelSum()>0?'<span class=red>反乱発生中</span>':''}</small><br>${netBadge()} <small class="note">${saved}</small>`;
 }
 function render(){
   const app=$('#app');
@@ -2098,7 +2100,7 @@ SCREENS.town=function(){
   </div>
   <div class="tbl"><table class="t">
     <tr><th colspan="2">最新ニュース</th></tr>
-    ${newsList().slice(0,5).map(n=>`<tr><td class="nw"><small>${fmtDay(n.d)} ${n.t}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')}
+    ${newsList().slice(0,5).map(n=>`<tr><td class="nw"><small>${newsTime(n)}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')}
   </table></div>`;
 };
 let townTimer=null;
@@ -3316,7 +3318,7 @@ SCREENS.log=function(){
   return `<div class="c"><big>新聞</big>${NET.online?' <small class="blue">（街じゅうの出来事）</small>':''}</div>
   ${resultsHtml(true)?`<div style="text-align:left;margin:6px 0"><big>決算の表彰</big></div>${resultsHtml(true)}`:''}
   <div style="text-align:left;margin:6px 0"><big>出来事</big></div>
-  <div class="tbl"><table class="t">${newsList().map(n=>`<tr><td class="nw"><small>${fmtDay(n.d)} ${n.t}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')||'<tr><td>まだ記事はありません</td></tr>'}</table></div>`;
+  <div class="tbl"><table class="t">${newsList().map(n=>`<tr><td class="nw"><small>${newsTime(n)}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')||'<tr><td>まだ記事はありません</td></tr>'}</table></div>`;
 };
 SCREENS.rank=function(){
   const L=T().lord;
@@ -3329,7 +3331,7 @@ SCREENS.rank=function(){
   ${rankTable()}
   <div class="c note">決算の表彰の結果は <a onclick="go('log')">【情報】→[新聞]</a> で見られます。決算ごとに，1位は<b>爵位ポイント+1</b>，2位は<b>¥100,000とギフト券5枚</b>，3位は<b>¥50,000とギフト券3枚</b>，4位は<b>ギフト券2枚</b>，5位は<b>ギフト券1枚</b>がもらえます。<br>現実の時間で1日半以上ゲームを開いていない店は「休業中」となり，表彰の対象外になって点数がゆっくり下がります。<br><a onclick="go('dignity')">爵位名鑑を見る</a></div>
   <div class="tbl"><table class="t"><tr><th colspan="2">最新ニュース</th></tr>
-  ${newsList().slice(0,6).map(n=>`<tr><td class="nw"><small>${fmtDay(n.d)} ${n.t}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')||'<tr><td colspan=2>まだありません</td></tr>'}</table></div>`;
+  ${newsList().slice(0,6).map(n=>`<tr><td class="nw"><small>${newsTime(n)}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')||'<tr><td colspan=2>まだありません</td></tr>'}</table></div>`;
 };
 SCREENS.dignity=function(){
   const list=ranking().slice().sort((a,b)=>(b.dig-a.dig)||(b.point-a.point));
@@ -4183,7 +4185,7 @@ function soldierTo(where){
 function assault(){
   if(!spendTime(120)){ setFlash('持ち時間が足りません（2時間）',1); render(); return; }
   townTx(t=>{ const logs=[]; if(rebelSum(t)>0) clash(t,logs); return logs; }).then(logs=>{
-    (logs||[]).forEach(m=>{ S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); });
+    (logs||[]).forEach(m=>{ S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m}); newsNet(m); });
     setFlash((logs&&logs.length)?logs.join('<br>'):'戦いは起こらなかった'); save(); render();
   });
 }
@@ -4346,15 +4348,16 @@ function tradeSell(id){
 // 船：class＝行ける海の格（1:近海 2:遠洋 3:危険な海）・speed＝かかる時間の倍率・cargo＝持ち帰る量・safe＝難破しにくさ
 const SHIPS={191:{c:1,speed:1,cargo:1,safe:0},206:{c:1,speed:0.5,cargo:0.9,safe:0},192:{c:2,speed:1,cargo:1.2,safe:0},207:{c:2,speed:1.2,cargo:1.6,safe:0},208:{c:3,speed:1,cargo:1.2,safe:0.7}};
 const VOYAGES=[
-  {id:'near',name:'近くの南の島',c:1,hours:1,cost:10000,loot:[[195,6,12,100],[193,1,3,70],[198,1,3,50],[194,1,2,30]],lose:0},
-  {id:'arch',name:'珊瑚の群島',c:1,hours:3,cost:30000,loot:[[194,3,6,100],[193,2,5,80],[198,2,5,70],[197,1,2,30],[195,4,8,60]],lose:0.03},
-  {id:'saffron',name:'香辛料の港町サフラン',c:2,hours:3,cost:50000,loot:[[213,5,10,100],[214,2,4,80],[195,3,6,50]],lose:0.02,town:1},
-  {id:'kashba',name:'砂漠の港カシュバ',c:2,hours:4,cost:60000,loot:[[215,3,6,100],[214,1,3,40],[197,1,3,50]],lose:0.03,town:1},
-  {id:'myth',name:'伝説の海域',c:2,hours:6,cost:100000,loot:[[196,3,6,100],[199,1,2,50],[197,2,4,70],[193,3,6,60]],lose:0.08},
-  {id:'north',name:'氷の北海',c:3,hours:4,cost:80000,loot:[[209,3,6,100],[210,3,6,90],[198,2,4,40]],lose:0.06},
-  {id:'volcano',name:'火山島',c:3,hours:5,cost:90000,loot:[[211,2,5,100],[212,3,6,90],[196,1,2,30]],lose:0.08},
-  {id:'ghost',name:'幽霊の海',c:3,hours:8,cost:150000,loot:[[216,1,2,70],[197,3,6,80],[151,1,1,10],[199,1,1,30]],lose:0.15},
+  {id:'near',name:'近くの南の島',c:1,hours:1,cost:10000,loot:[[195,6,12,100],[193,1,3,70],[198,1,3,50],[194,1,2,30]],lose:0.02},
+  {id:'arch',name:'珊瑚の群島',c:1,hours:3,cost:30000,loot:[[194,3,6,100],[193,2,5,80],[198,2,5,70],[197,1,2,30],[195,4,8,60]],lose:0.05},
+  {id:'saffron',name:'香辛料の港町サフラン',c:2,hours:3,cost:50000,loot:[[213,5,10,100],[214,2,4,80],[195,3,6,50]],lose:0.04,town:1},
+  {id:'kashba',name:'砂漠の港カシュバ',c:2,hours:4,cost:60000,loot:[[215,3,6,100],[214,1,3,40],[197,1,3,50]],lose:0.05,town:1},
+  {id:'myth',name:'伝説の海域',c:2,hours:6,cost:100000,loot:[[196,3,6,100],[199,1,2,50],[197,2,4,70],[193,3,6,60]],lose:0.11},
+  {id:'north',name:'氷の北海',c:3,hours:4,cost:80000,loot:[[209,3,6,100],[210,3,6,90],[198,2,4,40]],lose:0.09},
+  {id:'volcano',name:'火山島',c:3,hours:5,cost:90000,loot:[[211,2,5,100],[212,3,6,90],[196,1,2,30]],lose:0.11},
+  {id:'ghost',name:'幽霊の海',c:3,hours:8,cost:150000,loot:[[216,1,2,70],[197,3,6,80],[151,1,1,10],[199,1,1,30]],lose:0.19},
 ];
+function voyPrep(V){ return 30+V.hours*20; }   // 出航の準備にかかる持ち時間
 const SEA_CLASS=['','小型の船でもOK','大型の船が必要','鋼鉄船が必要'];
 SCREENS.port=function(){
   const vs=S.voyages||[], now=Date.now();
@@ -4364,9 +4367,9 @@ SCREENS.port=function(){
   h+=`<div class="c"><big>持っている船</big></div><div class="tbl"><table class="t" style="width:100%">${Object.keys(SHIPS).map(Number).map(n=>{ const X=SHIPS[n]; return `<tr><td>${iname(n)} ×${S.stock[n]||0}</td><td><small>${['','近海','遠洋','危険な海まで'][X.c]}・時間×${X.speed}・積荷×${X.cargo}${X.safe?'・難破しにくい':''}</small></td></tr>`; }).join('')}</table></div>`;
   h+=`<div class="c"><big>行き先</big></div><div class="tbl"><table class="t" style="width:100%"><tr><th>行き先</th><th>手に入る品</th><th></th></tr>
   ${VOYAGES.map(V=>{ const ok=myShips.filter(n=>SHIPS[n].c>=V.c);
-    return `<tr><td>${V.town?'🏙':'🏝'} ${esc(V.name)}<br><small>現実で約${V.hours}時間・準備${yen(V.cost)}<br>${V.c>1?`<span class="${ok.length?'':'red'}">${SEA_CLASS[V.c]}</span><br>`:''}${V.lose?`<span class="note">難破の危険${Math.round(V.lose*100)}%</span>`:''}</small></td>
+    return `<tr><td>${V.town?'🏙':'🏝'} ${esc(V.name)}<br><small>現実で約${V.hours}時間・準備${yen(V.cost)}・持ち時間${hm(voyPrep(V))}<br>${V.c>1?`<span class="${ok.length?'':'red'}">${SEA_CLASS[V.c]}</span><br>`:''}${V.lose?`<span class="note">難破の危険${Math.round(V.lose*100)}%</span>`:''}</small></td>
     <td><small>${V.loot.map(([no])=>iname(no)).join(' ')}</small></td>
-    <td class="nw">${ok.length?`<select id="shp_${V.id}">${ok.map(n=>`<option value="${n}">${esc(ITEMS[n].name)}</option>`).join('')}</select><br><button ${S.money>=V.cost?'':'disabled'} onclick="sail('${V.id}')">出航</button>`:'<small class="note">船がない</small>'}</td></tr>`; }).join('')}</table></div>
+    <td class="nw">${ok.length?`<select id="shp_${V.id}">${ok.map(n=>`<option value="${n}">${esc(ITEMS[n].name)}</option>`).join('')}</select><br><button ${S.money>=V.cost&&S.time>=voyPrep(V)?'':'disabled'} onclick="sail('${V.id}')">出航</button>`:'<small class="note">船がない</small>'}</td></tr>`; }).join('')}</table></div>
   <div class="c note">快速帆船は時間が半分，大商船は積荷が多く，鋼鉄船は危険な海へ行けて難破しにくい船です。時間は現実の時間です。</div>`;
   return h;
 };
@@ -4374,10 +4377,11 @@ function sail(id){
   const V=VOYAGES.find(x=>x.id===id); const sel=$('#shp_'+id); const ship=sel?+sel.value:0;
   if(!ship||!has(ship)||SHIPS[ship].c<V.c){ setFlash('この海へ行ける船がありません',1); render(); return; }
   if(S.money<V.cost){ setFlash('準備のお金が足りません',1); render(); return; }
+  const prep=voyPrep(V);
+  if(!spendTime(prep)){ setFlash(`出航の準備に持ち時間${hm(prep)}が必要です`,1); render(); return; }
   const hrs=V.hours*SHIPS[ship].speed;
   S.money-=V.cost; addPay(V.cost); add(ship,-1);
   S.voyages=(S.voyages||[]).concat([{ship,dest:id,back:Date.now()+hrs*3600000}]);
-  news(`${S.owner}（${S.shop}）の${ITEMS[ship].name}が${V.name}へ出航した！`);
   setFlash(`${ITEMS[ship].name}が${V.name}へ出航しました！ 帰港は現実で約${hrs<1?Math.round(hrs*60)+'分':hrs+'時間'}後です。`); save(); render();
 }
 function checkVoyages(){
@@ -4387,12 +4391,11 @@ function checkVoyages(){
     if(now<v.back) return true;
     const V=VOYAGES.find(x=>x.id===v.dest); changed=true;
     const SX=SHIPS[v.ship]||{cargo:1,safe:0};
-    if(V&&Math.random()<V.lose*(1-SX.safe)){ letter('港の船頭','kaodwarf',`${V.name}へ向かった${ITEMS[v.ship].name}が嵐で難破してしまった…。船と積み荷は戻らんかった。`); news(`${S.owner}の船が${V.name}で難破した…`); return false; }
+    if(V&&Math.random()<V.lose*(1-SX.safe)){ letter('港の船頭','kaodwarf',`${V.name}へ向かった${ITEMS[v.ship].name}が嵐で難破してしまった…。船と積み荷は戻らんかった。`); return false; }
     add(v.ship,1);
     const got=[];
     (V?V.loot:[]).forEach(([no,a,b,p])=>{ if(Math.random()*100<p){ const k=Math.max(1,Math.round((a+rnd(b-a+1))*(1+(fx.voyage||0))*SX.cargo)); add(no,k); got.push(`${ITEMS[no].name}×${k}`); } });
     letter('港の船頭','kaodwarf',`${ITEMS[v.ship].name}が${V?V.name:''}から帰ってきたぞい！ 持ち帰った品：${got.join('，')||'なし'}`);
-    news(`${S.owner}（${S.shop}）の船が${V?V.name:''}から戻った！`);
     return false;
   });
   if(changed){ save(); softRender(); }
