@@ -672,6 +672,7 @@ function migrate(s){
   if(!s.townLocal) s.townLocal=defaultTown();
   if(s.npcs&&s.npcs.length<NPCDEF.length){ for(let i=s.npcs.length;i<NPCDEF.length;i++) s.npcs.push(makeNpc(NPCDEF[i],i)); }
   if(!s.voyages) s.voyages=[];
+  if(!s.drPeriod){ (s.dragons||[]).forEach(g=>{ g.born=curPeriod(); }); (s.dragonsRet||[]).forEach(g=>{ g.breedDay=0; }); s.drPeriod=1; }
   if(!s.npcBoost4&&s.npcs){ s.npcs.forEach((n,i)=>{ const d=NPCDEF[i]; if(d&&d.strong){ n.mult=d.mult; n.popBase=d.popBase; n.pop=Math.max(n.pop,d.popBase); } }); s.npcBoost4=1; }
   if(!s.npcBoost3&&s.npcs){ s.npcs.forEach((n,i)=>{ const d=NPCDEF[i]; if(d&&(d.warrior||d.tyrant)) n.st={...d.st}; }); s.npcBoost3=1; }
   if(s.npcs) s.npcs.forEach(n=>{ n.pool=(n.pool||[]).filter(no=>![81,82,83,84,85,86,151,181,182,183,184].includes(no)); n.cases=(n.cases||[]).map(c=>c&&[81,82,83,84,85,86,151,181,182,183,184].includes(c.no)?null:c); });
@@ -3278,7 +3279,7 @@ SCREENS.library=function(){
   ◆暴君にくべんき藩　ときどきお店を襲います。予告が出たら兵士を雇って備えましょう。<br>
   ◆港と船　「造船術」で船を造り，[港]から島や遠くの町へ探索に出かけると，そこでしか手に入らない品を持ち帰ります。<br>
   ◆ギルド　加盟すると人気や売れ行きにボーナス。ギルドポイントで広告・看板商品・共同仕入れ・クエストなど。NPCのギルドもあります。<br>
-  ◆ドラゴンレース　[競技場]でドラゴンを育て，ゲーム内の2日ごと（現実で約48分ごと）のレースに出走させます。結果は能力と作戦で決まります。<br>
+  ◆ドラゴンレース　[競技場]でドラゴンを育て，決算のとき（1日2回）のレースに出走させます。結果は能力と作戦で決まります。<br>
   ◆オンライン　ランキング・商店通り・掲示板・新聞・領主・ギルド・イベントはほかのプレイヤーと共通です。決闘・手紙・送金・宅配便でやりとりもできます。
   </td></tr></table></div>`;
 };
@@ -3822,27 +3823,27 @@ const DR_NPCNAMES=['ブレイズ','アクアヴェール','ヴェルデ','シル
 const DR_KIND={nov:{name:'登竜レース',purse:300000,fee:0,lv:[35,55],note:'勝利1回以下のドラゴンのみ'},grd:{name:'重賞レース',purse:1500000,fee:50000,lv:[50,78],note:'出走料¥50,000'}};
 function mul32(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; }
 function curDay(){ return Math.floor(nowClock()/1440)+1; }
-function nextRaceDay(){ const d=curDay(); return d%2===0? d+2 : d+1; }
+function nextRaceDay(){ return curPeriod()+1; }   // レースは決算ごと（1日2回）
 function raceInfo(d,kind){ const r=mul32(d*7+(kind==='grd'?3:1)); return {d,kind,dist:[1200,1600,2000,2400,3200][Math.floor(r()*5)],surf:r()<0.35?'ダート':'芝',weather:r()<0.3?'雨':'晴'}; }
-function drAge(g){ return Math.max(0,curDay()-(g.born||curDay())); }
+function drAge(g){ return Math.max(0,curPeriod()-(g.born||curPeriod())); }   // 決算の回数で年をとる
 function drImg(g,retired){ return im('dragon'+(retired?(g.wins>=2?4:3):1)+((g.color||0)+1),'i16'); }
 function drStatBars(st){ return DR_STATS.map(([k,n])=>`<small>${n}</small><div class="hpbar" style="width:90px;display:inline-block;vertical-align:middle"><div style="width:${st[k]}%;background:#c96"></div></div><small>${st[k]}</small>`).join('<br>'); }
 async function raceDocGet(id){ if(NET.online){ const s=await NET.db.doc('drace/'+id).get(); return s.exists?s.data():null; } return S.draceLocal[id]||null; }
 function dragonScreen(){
   const tab=sub.dt||0;
   const tabs=`<div class="tabs">${['牧場','レース','結果'].map((x,i)=>`<span class="${tab===i?'on':''}" onclick="go('slime',{dr:1,dt:${i}})">${x}</span>`).join('')}</div>`;
-  let h=talk('kaoslime3','竜舎の親方','ドラゴンレースへようこそ！ 牧場でドラゴンを持ち，調教して鍛え，レースで勝って賞金を稼ぐんだ。レースはゲーム内の2日ごと（現実で約48分ごと），<b>登竜レース</b>と<b>重賞レース</b>が行われるぞ。結果は実力と作戦で決まる。運じゃないぞ！')+tabs;
+  let h=talk('kaoslime3','竜舎の親方','ドラゴンレースへようこそ！ 牧場でドラゴンを持ち，調教して鍛え，レースで勝って賞金を稼ぐんだ。レースは<b>決算のとき（1日2回）</b>，<b>登竜レース</b>と<b>重賞レース</b>が行われるぞ。結果は実力と作戦で決まる。運じゃないぞ！')+tabs;
   if(tab===0){
     h+=`<div class="c"><big>わが牧場</big> <small>（${S.dragons.length}/3頭）</small></div>`;
     h+=S.dragons.map((g,i)=>`<div class="tbl"><table class="t" style="width:100%"><tr><td class="c" style="width:60px">${im('dragon1'+(g.color+1),'','width=40 height=40')}<br><b>${esc(g.name)}</b><br><small>${DR_COLORS[g.color]}竜・${drAge(g)}日</small></td>
       <td>${drStatBars(g.st)}<br><small>体調 <b>${g.cond}</b>／戦績 ${g.runs||0}戦${g.wins||0}勝／獲得賞金 ${yen(g.earn||0)}</small></td></tr>
       <tr><td colspan="2" class="c"><select id="drT${i}">${DR_STATS.map(([k,n])=>`<option value="${k}">${n}</option>`).join('')}</select> <button onclick="drTrain(${i})">調教（¥20,000・1時間）</button> ${drAge(g)>=10?`<button onclick="drRetire(${i})">引退</button>`:''}</td></tr></table></div>`).join('')||'<div class="c note">まだドラゴンがいません。</div>';
     if(S.dragons.length<3) h+=`<div class="c"><big>ドラゴンを購入</big></div><div class="c">名前 <input id="drName" maxlength="10" style="width:120px"> 色 <select id="drCol">${DR_COLORS.map((c,i)=>`<option value="${i}">${c}</option>`).join('')}</select> <button onclick="drBuy()">購入（¥500,000）</button></div>`;
-    if(S.dragonsRet.length) h+=`<div class="c"><big>引退したドラゴン</big></div><div class="tbl"><table class="t" style="width:100%">${S.dragonsRet.map((g,i)=>`<tr><td>${drImg(g,1)} ${esc(g.name)}<br><small>${g.runs||0}戦${g.wins||0}勝・${g.wins>=2?'繁殖竜':'功労竜'}</small></td><td>${g.wins>=2?(g.breedDay&&curDay()-g.breedDay<3?`<small class="note">あと${3-(curDay()-g.breedDay)}日で次の生産</small>`:`<button ${S.dragons.length>=3?'disabled':''} onclick="drBreed(${i})">仔竜を生産（¥200,000）</button>`):'<small class="note">2勝以上で繁殖竜になれます</small>'}</td></tr>`).join('')}</table></div>`;
-    h+=`<div class="c note">能力：スピード＝本来の速さ／勝負根性＝逃げ・先行で粘る力／瞬発力＝差し・追込の切れ味／パワー＝ダートや雨に強い／健康＝体調の回復／柔軟性＝距離の適性（高いほど長距離向き）。<br>10日以上になると引退させられます。2勝以上した竜は繁殖竜として仔竜を生めます。</div>`;
+    if(S.dragonsRet.length) h+=`<div class="c"><big>引退したドラゴン</big></div><div class="tbl"><table class="t" style="width:100%">${S.dragonsRet.map((g,i)=>`<tr><td>${drImg(g,1)} ${esc(g.name)}<br><small>${g.runs||0}戦${g.wins||0}勝・${g.wins>=2?'繁殖竜':'功労竜'}</small></td><td>${g.wins>=2?(g.breedDay&&curPeriod()-g.breedDay<3?`<small class="note">あと決算${3-(curPeriod()-g.breedDay)}回で次の生産</small>`:`<button ${S.dragons.length>=3?'disabled':''} onclick="drBreed(${i})">仔竜を生産（¥200,000）</button>`):'<small class="note">2勝以上で繁殖竜になれます</small>'}</td></tr>`).join('')}</table></div>`;
+    h+=`<div class="c note">能力：スピード＝本来の速さ／勝負根性＝逃げ・先行で粘る力／瞬発力＝差し・追込の切れ味／パワー＝ダートや雨に強い／健康＝体調の回復／柔軟性＝距離の適性（高いほど長距離向き）。<br>決算10回（約5日）以上たつと引退させられます。2勝以上した竜は繁殖竜として仔竜を生めます。</div>`;
   } else if(tab===1){
     const d=nextRaceDay();
-    h+=`<div class="c"><big>次のレース</big>　<small>${fmtDay(d)}（あと${hm(((d-1)*1440)-nowClock())}）</small></div>`;
+    h+=`<div class="c"><big>次のレース</big>　<small>${fmtReal(nextSettleMs())}の決算のとき（あと${hm((nextSettleMs()-Date.now())/60000)}）</small></div>`;
     ['nov','grd'].forEach(kind=>{
       const ri=raceInfo(d,kind), K=DR_KIND[kind];
       h+=`<div class="tbl"><table class="t" style="width:100%"><tr><th colspan="2">${K.name} <small>賞金総額${yen(K.purse)}</small></th></tr>
@@ -3854,8 +3855,8 @@ function dragonScreen(){
     setTimeout(async()=>{ const el=$('#drEntries'); if(!el) return; let out=''; for(const kind of ['nov','grd']){ const doc=await raceDocGet(d+'-'+kind).catch(()=>null); const es=doc?Object.values(doc.entries||{}):[]; out+=`<b>${DR_KIND[kind].name}の出走表</b><br>${es.map(e=>`${im('dragon1'+(e.color+1),'i16')}${esc(e.dname)}（${esc(e.shop)}・${e.strat}）`).join('<br>')||'まだ登録はありません'}<br>`; } el.innerHTML=out; },30);
   } else {
     h+=`<div id="drResults" class="c note">結果を読み込み中…</div>`;
-    setTimeout(async()=>{ const el=$('#drResults'); if(!el) return; const d=curDay()%2===0?curDay():curDay()-1; let out=''; for(const dd of [d,d-2]) for(const kind of ['grd','nov']){ const doc=await raceDocGet(dd+'-'+kind).catch(()=>null); if(!doc||!doc.results) continue; const ri=doc.info||raceInfo(dd,kind);
-      out+=`<div class="tbl"><table class="t" style="width:100%"><tr><th colspan="3">${fmtDay(dd)} ${DR_KIND[kind].name}　<small>${ri.surf}${ri.dist}m・${ri.weather}</small></th></tr>${doc.results.map(r=>`<tr><td class="c nw">${r.place}着</td><td>${im('dragon1'+((r.color||0)+1),'i16')}<b>${esc(r.dname)}</b> <small>${r.npc?(r.strong?esc(r.shop)+' <span class="npctag strong">強豪</span>':'<span class="npctag">NPC</span>'):esc(r.shop)}・${r.strat}</small></td><td class="r nw">${r.prize?yen(r.prize):''}</td></tr>`).join('')}</table></div>`; }
+    setTimeout(async()=>{ const el=$('#drResults'); if(!el) return; const d=curPeriod(); let out=''; for(const dd of [d,d-1,d-2]) for(const kind of ['grd','nov']){ const doc=await raceDocGet(dd+'-'+kind).catch(()=>null); if(!doc||!doc.results) continue; const ri=doc.info||raceInfo(dd,kind);
+      out+=`<div class="tbl"><table class="t" style="width:100%"><tr><th colspan="3">${periodLabel(dd)} ${DR_KIND[kind].name}　<small>${ri.surf}${ri.dist}m・${ri.weather}</small></th></tr>${doc.results.map(r=>`<tr><td class="c nw">${r.place}着</td><td>${im('dragon1'+((r.color||0)+1),'i16')}<b>${esc(r.dname)}</b> <small>${r.npc?(r.strong?esc(r.shop)+' <span class="npctag strong">強豪</span>':'<span class="npctag">NPC</span>'):esc(r.shop)}・${r.strat}</small></td><td class="r nw">${r.prize?yen(r.prize):''}</td></tr>`).join('')}</table></div>`; }
       el.innerHTML=out||'まだ結果はありません。'; el.className=''; },30);
   }
   return h;
@@ -3866,7 +3867,7 @@ function drBuy(){
   const name=($('#drName').value.trim()||pick(DR_NPCNAMES)).slice(0,10), color=+$('#drCol').value;
   S.money-=500000; addPay(500000);
   const st={}; DR_STATS.forEach(([k])=>st[k]=25+rnd(31));
-  S.dragons.push({id:Math.random().toString(36).slice(2,9),name,color,st,cond:80,born:curDay(),wins:0,runs:0,earn:0});
+  S.dragons.push({id:Math.random().toString(36).slice(2,9),name,color,st,cond:80,born:curPeriod(),wins:0,runs:0,earn:0});
   news(`${S.owner}（${S.shop}）がドラゴン「${name}」を購入した`); setFlash(`ドラゴン「${esc(name)}」がやって来ました！`); save(); render();
 }
 function drTrain(i){
@@ -3880,10 +3881,10 @@ function drTrain(i){
 function drRetire(i){ const g=S.dragons[i]; confirmBox(`${esc(g.name)}を引退させますか？`,()=>{ S.dragons.splice(i,1); S.dragonsRet.push(g); news(`ドラゴン「${g.name}」（${S.shop}）が引退した。通算${g.runs||0}戦${g.wins||0}勝`); setFlash(`${esc(g.name)}は引退しました。おつかれさま！`); save(); render(); }); }
 function drBreed(i){
   const p=S.dragonsRet[i]; if(S.dragons.length>=3||S.money<200000){ setFlash(S.dragons.length>=3?'牧場がいっぱいです':'資金が足りません',1); render(); return; }
-  S.money-=200000; p.breedDay=curDay();
+  S.money-=200000; p.breedDay=curPeriod();
   const st={}; DR_STATS.forEach(([k])=>st[k]=Math.min(90,Math.round((p.st[k]+30+rnd(31))/2)+Math.min(8,p.wins||0)));
   const name=(p.name.slice(0,6)+'ジュニア').slice(0,10);
-  S.dragons.push({id:Math.random().toString(36).slice(2,9),name,color:p.color,st,cond:80,born:curDay(),wins:0,runs:0,earn:0,parent:p.name});
+  S.dragons.push({id:Math.random().toString(36).slice(2,9),name,color:p.color,st,cond:80,born:curPeriod(),wins:0,runs:0,earn:0,parent:p.name});
   setFlash(`${esc(p.name)}の仔竜「${esc(name)}」が生まれました！`); save(); render();
 }
 async function drEnter(kind){
@@ -3898,7 +3899,7 @@ async function drEnter(kind){
   let r;
   if(NET.online) r=await dbTx('drace/'+id,fn).catch(e=>{ netErr(e); return {ret:'err'}; });
   else { r=fn(S.draceLocal[id]); if(r.set) S.draceLocal[id]=r.set; }
-  if(r.ret==='ok'){ S.money-=K.fee; addPay(K.fee); setFlash(`${esc(g.name)}を${K.name}（${fmtDay(d)}）に出走登録しました！`); }
+  if(r.ret==='ok'){ S.money-=K.fee; addPay(K.fee); setFlash(`${esc(g.name)}を${K.name}（${fmtReal(nextSettleMs())}の決算のとき）に出走登録しました！`); }
   else setFlash({dup:'そのドラゴンはもう登録済みです',full:'出走枠がいっぱいです',done:'締め切られました'}[r.ret]||'登録できませんでした',1);
   save(); render();
 }
@@ -3928,7 +3929,7 @@ let drChecking=false;
 async function checkDragonRaces(){
   if(!S||drChecking) return; drChecking=true;
   try{
-    const cd=curDay(); const days=[cd%2===0?cd:cd-1, (cd%2===0?cd:cd-1)-2];
+    const cd=curPeriod(); const days=[cd,cd-1];
     for(const d of days) for(const kind of ['nov','grd']){
       const id=d+'-'+kind;
       let r;
@@ -3938,7 +3939,7 @@ async function checkDragonRaces(){
       if(r.ret!=='ok') continue;
       const doc=r.doc, K=DR_KIND[kind];
       doc.results.filter(x=>x.uid).forEach(x=>{ const m={kind:'drres',day:d,race:kind,did:x.did,place:x.place,prize:x.prize,dname:x.dname}; if(x.uid===myKey()) applyDrRes(m); else sendMail(x.uid,m); });
-      const w=doc.results[0]; const msg=`${fmtDay(d)}の${K.name}は ${w.dname}${w.npc?'':'（'+w.shop+'）'} が優勝！`;
+      const w=doc.results[0]; const msg=`${periodLabel(d)}の${K.name}は ${w.dname}${w.npc?'':'（'+w.shop+'）'} が優勝！`;
       news(msg); newsNet(msg);
       if(!NET.online) delete S.draceLocal[(d-6)+'-'+kind];
     }
@@ -3947,9 +3948,9 @@ async function checkDragonRaces(){
 }
 function applyDrRes(m){
   const g=(S.dragons||[]).find(x=>x.id===m.did); const K=DR_KIND[m.race]||{name:'レース'};
-  if(m.prize){ S.money+=m.prize; addIncome(m.prize); }
+  if(m.prize){ S.money+=m.prize; addIncome(Math.round(m.prize*0.1)); }   // 点数への反映は1割
   if(g){ g.runs=(g.runs||0)+1; if(m.place===1) g.wins=(g.wins||0)+1; g.earn=(g.earn||0)+(m.prize||0); g.cond=Math.max(0,g.cond-(m.place<=3?15:20)); }
-  letter('竜舎の親方','kaoslime3',`${fmtDay(m.day)}の${K.name}で，${m.dname}は${m.place}着でした。${m.prize?`賞金${yen(m.prize)}を獲得！`:''}`);
+  letter('竜舎の親方','kaoslime3',`${periodLabel(m.day)}の${K.name}で，${m.dname}は${m.place}着でした。${m.prize?`賞金${yen(m.prize)}を獲得！`:''}`);
 }
 
 SCREENS.forge=function(){
