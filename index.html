@@ -619,8 +619,9 @@ let sub={};
 let REFS=[];
 function R(v){ REFS.push(v); return REFS.length-1; }
 const NET={guilds:{},jobs:[],kind:'',ready:false,online:false,db:null,uid:null,shops:{},town:null,bbs:[],news:[],auc:[],mailQ:{},readonly:false,lastSave:0};
-function defaultTown(){ return {day:0,lord:null,tax:5,msg:'',safety:80,guard:0,bal:null,riot:{},fund:0,develop:50,devem:0,safem:0,taxmode:{},inToday:0,inPrev:0,outPrev:0,manorFocus:'',manorRent:0,manorMax:5}; }
+function defaultTown(){ return {day:0,lord:null,tax:5,msg:'',safety:80,guard:0,bal:null,riot:{},fund:0,develop:50,devem:0,safem:0,taxmode:{},inToday:0,inPrev:0,outPrev:0,manorFocus:'',manorRent:0,manorMax:10}; }
 function townVal(t,k,d){ return t[k]==null?d:t[k]; }
+function manorMax(t){ return Math.max(10,townVal(t||T(),'manorMax',10)); }
 let _dt=defaultTown();
 function T(){ if(NET.online) return NET.town||_dt; return S?S.townLocal:_dt; }
 function myKey(){ return NET.online?NET.uid:'me'; }
@@ -1123,7 +1124,7 @@ function newsList(){
 }
 function shopSummary(){
   const t=myStat(); const w=S.eq[1]&&ITEMS[S.eq[1]]?ITEMS[S.eq[1]].name:'';
-  return {uid:NET.uid,owner:S.owner,shop:S.shop,kao:S.kao,job:S.job,comment:S.comment,money:Math.round(S.money+S.bank-S.debt),
+  return {manor:{...(S.manor||{})},uid:NET.uid,owner:S.owner,shop:S.shop,kao:S.kao,job:S.job,comment:S.comment,money:Math.round(S.money+S.bank-S.debt),
     pop:Math.round(S.pop),dig:S.dig,wins:S.wins,soldiers:S.soldiers,guild:S.guild,house:S.house,
     st:{life:t.life,attack:t.attack,defence:t.defence,tech:t.tech},btype:S.btype,weapon:w,
     cases:S.cases.map(c=>c&&has(c.no)?{no:c.no,price:c.price,stock:S.stock[c.no]}:null),day:day(),t:Date.now(),
@@ -2042,6 +2043,26 @@ function editCase(i){
     ${list.length?'':'<p class="note">陳列できる商品がありません。市場で仕入れるか，倉庫の道具で作りましょう。</p>'}
     <div class="c"><button onclick="applyCase(${i})">陳列する（10分）</button> <button onclick="closeModal()">やめる</button></div>`);
 }
+// アイテムからそのまま陳列棚に並べる
+function canDisplay(no){ const it=ITEMS[no]; return S&&it&&it.pop>0&&!it.noshow&&has(no); }
+function quickDisplay(no){
+  const it=ITEMS[no]; if(!canDisplay(no)) return;
+  const cur=S.cases.findIndex(c=>c&&c.no===no);
+  const empty=S.cases.findIndex(c=>!c||!has(c.no));
+  const def=cur>=0?cur:(empty>=0?empty:0);
+  const price=cur>=0?S.cases[cur].price:marketPrice(no);
+  modal(`<div class="c">${im('item-no-'+no,'','width=32 height=32')}<br><big>${esc(it.name)}を棚に並べる</big><br><small>在庫 ${S.stock[no]}${it.scale}</small></div>
+  <p>棚：<select id="qdCase">${S.cases.map((c,i)=>`<option value="${i}" ${i===def?'selected':''}>棚${i+1}${CASE_BOOST(i)>1?'（★特等席）':''}：${c&&ITEMS[c.no]&&has(c.no)?esc(ITEMS[c.no].name)+'（入れかえ）':'空き'}</option>`).join('')}</select></p>
+  <p>価格：<input type="number" id="qdPrice" value="${price}" min="1" style="width:110px"> 円　<small>標準 ${yen(it.price)}</small></p>
+  <p><small>${mkInfo(no)}</small></p>
+  <div class="c toolbar"><button onclick="quickDisplayGo(${no})" style="font-weight:bold">並べる（10分）</button> <button onclick="closeModal()">やめる</button></div>`);
+}
+function quickDisplayGo(no){
+  const i=+$('#qdCase').value, pr=Math.max(1,Math.round(+$('#qdPrice').value||0));
+  if(!spendTime(10)){ closeModal(); setFlash('持ち時間が足りません',1); render(); return; }
+  S.cases[i]={no,price:pr}; closeModal();
+  setFlash(`陳列棚${i+1}に${ITEMS[no].name}を${yen(pr)}で並べました`); save(); render();
+}
 function applyCase(i){
   if(!spendTime(10)){ closeModal(); setFlash('持ち時間が足りません',1); render(); return; }
   const no=+$('#csNo').value, pr=Math.max(1,Math.round(+$('#csPrice').value||0));
@@ -2124,7 +2145,7 @@ function itemInfo(no){
   ${FORGE.some(f=>f.mats.some(m=>m[1]===no))?`<div style="margin-top:6px"><big>使い道</big><br><small>[鍛冶工房]：${FORGE.filter(f=>f.mats.some(m=>m[1]===no)).map(f=>esc(ITEMS[f.no].name)).join('，')}</small></div>`:''}
   ${it.curse?'<div class="flash err" style="margin-top:6px">呪い：装備している間，決算ごとに人気が1下がります。</div>':''}
   ${makers.length?`<div style="margin-top:6px"><big>手に入れ方</big><br><small>${makers.slice(0,8).join('<br>')}</small></div>`:''}
-  <div class="c toolbar">${S&&have&&it.soubi&&S.eq[it.soubi]!==no?`<button onclick="closeModal();equip(${no})">装備する</button>`:''}${S&&have&&it.uses.length?`<button onclick="closeModal();go('use',{no:${no}})">使う</button>`:''}<button onclick="closeModal()">閉じる</button></div>`);
+  <div class="c toolbar">${S&&have&&it.soubi&&S.eq[it.soubi]!==no?`<button onclick="closeModal();equip(${no})">装備する</button>`:''}${S&&have&&it.uses.length?`<button onclick="closeModal();go('use',{no:${no}})">使う</button>`:''}${canDisplay(no)?`<button onclick="closeModal();quickDisplay(${no})">棚に並べる</button>`:''}<button onclick="closeModal()">閉じる</button></div>`);
 }
 
 /* ============================================================
@@ -2270,11 +2291,11 @@ SCREENS.stock=function(){
     const it=ITEMS[n];
     const eq=it.soubi? (S.eq[it.soubi]===n?'<small class="blue">装備中</small>':`<button onclick="equip(${n})">装備</button>`):'';
     const tag=it.fromMon?'<span class="npctag">素材</span>':it.island?'<span class="npctag">島</span>':it.food?'<span class="npctag">食</span>':it.eventOnly?'<span class="npctag strong">レア</span>':'';
-    return `<tr><td>${iname(n)} ${tag}${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}${it.skill?`<br><small>${sk(it.skill)}</small>`:''}<br><small class="note">${it.type}・維持費 ${upkeepStr(it)}</small></td><td class="r nw">${S.stock[n]}${it.scale}</td>
-      <td class="nw">${it.uses.length?`<button onclick="go('use',{no:${n}})">使う</button>`:''} ${eq} <button onclick="discard(${n})">捨てる</button></td></tr>`;
+    return `<tr><td>${iname(n)} ${tag}${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}${it.skill?`<br><small>${sk(it.skill)}</small>`:''}<br><small class="note">${it.type}・維持費 ${upkeepStr(it)}</small>
+      <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${it.uses.length?`<button onclick="go('use',{no:${n}})">使う</button>`:''}${eq}${canDisplay(n)?`<button onclick="quickDisplay(${n})">${S.cases.some(c=>c&&c.no===n)?'棚を変更':'棚に並べる'}</button>`:''}<button onclick="discard(${n})">捨てる</button></div></td><td class="r nw">${S.stock[n]}${it.scale}</td></tr>`;
   }).join('');
   return `<div class="c"><big>倉庫</big> <small>（${owned.length}種類）</small></div>${tabs}${tools}
-  <div class="tbl"><table class="t" style="width:100%"><tr><th>商品</th><th>数量</th><th>操作</th></tr>${rows||`<tr><td colspan=3 class="c">${q?'見つかりません':'何もありません'}</td></tr>`}</table></div>
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>商品・操作</th><th>数量</th></tr>${rows||`<tr><td colspan=2 class="c">${q?'見つかりません':'何もありません'}</td></tr>`}</table></div>
   <div class="c note">アイテム名を押すと，くわしい説明（維持費・装備したときの能力など）が見られます。<br>倉庫の品には，決算ごとに維持費がかかります（いま合計 ${yen(Math.round(Object.keys(S.stock).reduce((a,no)=>a+(ITEMS[no]?upkeep(ITEMS[no]):0)*S.stock[no],0)))}/回）。</div>`;
 };
 function discard(n){
@@ -3304,7 +3325,7 @@ function lordOffice(t,shops){
   <div class="tbl"><table class="t">
     <tr><th>特産品</th><td><select id="lMf"><option value="">なし</option>${MANOR.map(m=>`<option value="${m.id}" ${t.manorFocus===m.id?'selected':''}>${m.name}</option>`).join('')}</select> <small>（収穫1.5倍）</small></td></tr>
     <tr><th>地代</th><td><select id="lMr">${[0,500,1000,2000,3000,5000].map(v=>`<option value="${v}" ${v===townVal(t,'manorRent',0)?'selected':''}>${v?yen(v):'なし'}</option>`).join('')}</select> <small>1区画あたり/日（街資金へ）</small></td></tr>
-    <tr><th>区画の上限</th><td>1人${townVal(t,'manorMax',5)}区画まで ${townVal(t,'manorMax',5)<10?`<button onclick="lordManorOpen()">開墾する（街資金¥1,000,000で+1）</button>`:''}</td></tr>
+    <tr><th>区画の上限</th><td>1人${manorMax(t)}区画まで ${manorMax(t)<20?`<button onclick="lordManorOpen()">開墾する（街資金¥1,000,000で+1）</button>`:''}</td></tr>
   </table></div>
   <div class="c"><button onclick="lordManor()">荘園の方針を決定</button></div>
   <div class="c"><big>領主報酬</big></div>
@@ -3346,7 +3367,7 @@ function lordManor(){
   const f=$('#lMf').value, rent=+$('#lMr').value;
   townTx(t=>{ t.manorFocus=f; t.manorRent=rent; }).then(()=>{ lordNews(`領主${S.owner}が荘園の方針を定めました（特産：${f?MANOR.find(m=>m.id===f).name:'なし'}・地代：${rent?yen(rent)+'/区画':'なし'}）`); setFlash('荘園の方針を決めました'); render(); });
 }
-function lordManorOpen(){ townTx(t=>{ if((t.fund||0)<1000000) return 'poor'; t.fund-=1000000; t.manorMax=Math.min(10,townVal(t,'manorMax',5)+1); return 'ok'; }).then(r=>{ setFlash(r==='ok'?'荘園を開墾しました。1人あたりの区画の上限が増えました':'街資金が足りません',r!=='ok'); if(r==='ok') lordNews(`領主${S.owner}が荘園を開墾しました`); render(); }); }
+function lordManorOpen(){ townTx(t=>{ if((t.fund||0)<1000000) return 'poor'; t.fund-=1000000; t.manorMax=Math.min(20,manorMax(t)+1); return 'ok'; }).then(r=>{ setFlash(r==='ok'?'荘園を開墾しました。1人あたりの区画の上限が増えました':'街資金が足りません',r!=='ok'); if(r==='ok') lordNews(`領主${S.owner}が荘園を開墾しました`); render(); }); }
 function lordPay(){
   townTx(t=>{ if(t.payDay===curPeriod()) return 0; const v=Math.min(300000,Math.floor(Math.max(0,t.fund||0)*0.05)); t.fund-=v; t.payDay=curPeriod(); return v; }).then(v=>{ if(v>0){ S.money+=v; addIncome(v); setFlash(`領主報酬 ${yen(v)} を受け取りました`); save(); } else setFlash('受け取れる報酬がありません',1); render(); });
 }
@@ -3356,7 +3377,7 @@ function lordSupport(){
   townTx(t=>{ t.fund=(t.fund||0)+v; }).then(()=>{ news(`${S.owner}（${S.shop}）が街に${yen(v)}を資金援助しました`); setFlash(`街に${yen(v)}を援助しました`); render(); });
 }
 SCREENS.manor=function(){
-  const tw=T(), mx=townVal(tw,'manorMax',5), rent=townVal(tw,'manorRent',0), f=tw.manorFocus||'';
+  const tw=T(), mx=manorMax(tw), rent=townVal(tw,'manorRent',0), f=tw.manorFocus||'';
   const plots=MANOR.reduce((a,m)=>a+(S.manor[m.id]||0),0);
   return `<div class="c"><big>荘園</big></div>
   ${talk('kaokeeper','荘園の管理人',`土地を買えば，決算のたびに収穫物をお届けします。数を増やすほど収穫も増えますよ（各${mx}区画まで）。`)}
@@ -3366,9 +3387,20 @@ SCREENS.manor=function(){
   <div class="tbl"><table class="t" style="width:100%"><tr><th></th><th>土地</th><th>決算ごとの収穫（1区画）</th><th>所有</th><th></th></tr>
   ${MANOR.map((m,i)=>`<tr><td>${im(m.img,'','style="max-height:50px;max-width:70px"')}</td><td>${m.name}${f===m.id?' <small class="red">特産</small>':''}<br><small>${yen(m.price)}</small></td><td><small>${m.out.map(([x,n])=>iname(x)+'×'+(f===m.id?Math.round(n*1.5):n)).join('<br>')}</small></td><td class="r">${S.manor[m.id]||0}</td><td><button ${(S.manor[m.id]||0)>=mx?'disabled':''} onclick="buyManor(${i})">購入</button></td></tr>`).join('')}
   </table></div>
-  <div class="c note">特産品・地代・区画の上限は，領主が領主邸の政務室で決めます。</div>`;
+  <div class="c note">特産品・地代・区画の上限は，領主が領主邸の政務室で決めます。</div>
+  <div class="c"><big>荘園の持ち主</big></div>
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>お店</th><th>持っている荘園</th><th>計</th></tr>
+  ${manorOwners().map(o=>`<tr ${o.me?'style="font-weight:bold"':''}><td>${esc(o.shop)}<br><small>${esc(o.name)}</small></td><td><small>${MANOR.filter(m=>o.manor[m.id]).map(m=>`${m.name}×${o.manor[m.id]}`).join('<br>')}</small></td><td class="c"><b>${o.total}</b></td></tr>`).join('')||'<tr><td colspan="3" class="c">まだ誰も荘園を持っていません</td></tr>'}
+  </table></div>
+  <div class="c note">区画の数が多い順です。</div>`;
 };
-function buyManor(i){ const m=MANOR[i]; if((S.manor[m.id]||0)>=townVal(T(),'manorMax',5)) return; if(S.money<m.price){ setFlash('資金が足りません',1); render(); return; } S.money-=m.price; S.manor[m.id]=(S.manor[m.id]||0)+1; setFlash(`${m.name}を購入しました`); save(); render(); }
+function manorOwners(){
+  const list=[];
+  if(S) list.push({me:1,name:S.owner,shop:S.shop,manor:S.manor||{}});
+  if(NET.online) Object.values(NET.shops||{}).forEach(s=>{ if(s&&s.uid&&s.uid!==NET.uid&&s.manor) list.push({name:s.owner,shop:s.shop,manor:s.manor}); });
+  return list.map(o=>({...o,total:MANOR.reduce((a,m)=>a+(o.manor[m.id]||0),0)})).filter(o=>o.total>0).sort((a,b)=>b.total-a.total);
+}
+function buyManor(i){ const m=MANOR[i]; if((S.manor[m.id]||0)>=manorMax()){ setFlash('上限まで持っています',1); render(); return; } if(S.money<m.price){ setFlash('資金が足りません',1); render(); return; } S.money-=m.price; S.manor[m.id]=(S.manor[m.id]||0)+1; setFlash(`${m.name}を購入しました`); save(); render(); }
 SCREENS.guild=function(){ return NET.online? guildOnline() : guildOffline(); };
 function guildOffline(){
   const g=guildInfo(S.guild);
