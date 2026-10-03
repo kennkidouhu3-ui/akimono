@@ -3312,7 +3312,12 @@ SCREENS.guide=function(){
    情報：新聞・ランキング・図書館
    ============================================================ */
 SCREENS.log=function(){
-  return `<div class="c"><big>新聞</big>${NET.online?' <small class="blue">（街じゅうの出来事）</small>':''}</div><div class="tbl"><table class="t">${newsList().map(n=>`<tr><td class="nw"><small>${fmtDay(n.d)} ${n.t}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')||'<tr><td>まだ記事はありません</td></tr>'}</table></div>`;
+  return `<div class="c"><big>新聞</big>${NET.online?' <small class="blue">（街じゅうの出来事）</small>':''}</div>
+  <div class="c"><big>商人ランキング</big> <small>（点数順・決算ごとに表彰）</small></div>
+  ${resultsHtml()}
+  ${rankTable()}
+  <div class="c"><big>出来事</big></div>
+  <div class="tbl"><table class="t">${newsList().map(n=>`<tr><td class="nw"><small>${fmtDay(n.d)} ${n.t}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')||'<tr><td>まだ記事はありません</td></tr>'}</table></div>`;
 };
 SCREENS.rank=function(){
   const L=T().lord;
