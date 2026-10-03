@@ -930,7 +930,7 @@ async function checkNiku(){
       if(!win){ const row=(NET.online?ranking():allShops()).find(r=>r.key===n.target.key)||{};
         steal={pt:Math.round((row.point||0)*0.1),pop:Math.round((row.pop||0)*0.1),dig:(row.dig||0)>0?1:0};
         t.nikuScore=(t.nikuScore||0)+steal.pt; t.nikuPop=Math.min(80,(t.nikuPop||0)+steal.pop); t.nikuDig=(t.nikuDig||0)+steal.dig;
-        if(String(n.target.key).startsWith('npc:')){ t.nikuStolen=t.nikuStolen||{}; t.nikuStolen[n.target.key]=now+12*3600000; } }
+        if(String(n.target.key).startsWith('npc:')){ t.nikuStolen=t.nikuStolen||{}; t.nikuStolen[n.target.key]=now+12*3600000; if(steal.dig){ t.npcDigLoss=t.npcDigLoss||{}; t.npcDigLoss[n.target.key]=(t.npcDigLoss[n.target.key]||0)+1; } } }
       if(!t.nikuHit||t.nikuHit.p!==curPeriod()) t.nikuHit={p:curPeriod(),keys:[]};
       t.nikuHit.keys.push(n.target.key);
       t.nikuLast={id:n.at,target:n.target,pow,def,win,at:now,steal};
@@ -956,7 +956,7 @@ function applyNikuResult(){
   if(L.target.key===myKey()){
     if(L.win){ S.pop=clamp(S.pop+3,0,100); S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.8)); add(151,1); letter('傭兵隊長','kaoarmy',`${NIKU}の襲撃を見事に撃退しました！ 人気+3。兵士の2割が負傷しました。現場に「呪いの骨片」が1つ残されていました……。`); }
     else { const sp=Math.round(S.pop*0.1), sd=S.dig>0?1:0; S.pop=clamp(S.pop-sp,0,100); S.dig=Math.max(0,S.dig-sd); S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.7)); letter('傭兵隊長','kaoarmy',`${NIKU}にお店を襲われてしまいました…。人気−${sp}${sd?'・爵位ポイント−1':''}。点数も奪われました（お金は取られていません）。`); }
-  } else if(String(L.target.key).startsWith('npc:')&&!NET.online){ const x=S.npcs[+String(L.target.key).slice(4)]; if(x&&!L.win) x.pop=clamp(Math.round(x.pop*0.9),5,100); }
+  } else if(String(L.target.key).startsWith('npc:')&&!NET.online){ const x=S.npcs[+String(L.target.key).slice(4)]; if(x&&!L.win){ x.pop=clamp(Math.round(x.pop*0.9),5,100); if(x.dig>0) x.dig--; } }
   save();
 }
 function nikuHtml(){
@@ -1173,7 +1173,7 @@ function npcOnline(atDay){
     const ex=(((T().exposed||{})['npc:'+i]||0)>Date.now()?0.8:1)*(((T().nikuStolen||{})['npc:'+i]||0)>Date.now()?0.9:1);
     const tw=T(), nikuB=d.tyrant?{pt:tw.nikuScore||0,pop:tw.nikuPop||0,dig:tw.nikuDig||0}:{pt:0,pop:0,dig:0};
     return {me:false,npc:true,exposed:ex<1,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop:Math.min(99,Math.round(pop*ex)+nikuB.pop),wins,
-      dig:(Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))))+nikuB.dig,money:Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3),
+      dig:Math.max(0,(Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))))+nikuB.dig-((T().npcDigLoss||{})['npc:'+i]||0)),money:Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3),
       point:Math.round(calcPoint(pop*ex,wins,profit3*ex,today*ex)*(d.mult||1))+nikuB.pt,sale:Math.round(today*(d.mult||1)*ex),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
       st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
   });
@@ -1297,6 +1297,19 @@ function processMail(){
 }
 /* ---------- Firebase 接続（Claude の外で遊ぶとき） ---------- */
 const FB_EMBED={apiKey:"AIzaSyBkhd5bhjf0-PF1OzG5kiMK_etf2qVrzG4",authDomain:"akimono.firebaseapp.com",projectId:"akimono",storageBucket:"akimono.firebasestorage.app",messagingSenderId:"952406395304",appId:"1:952406395304:web:6a85d5c2c06ecb9f5fb59d"};
+const DEVKEY='akimono-device';
+function deviceId(){ try{ let d=localStorage.getItem(DEVKEY); if(!d){ d='d'+Math.random().toString(36).slice(2,10)+Date.now().toString(36); localStorage.setItem(DEVKEY,d); } return d; }catch(e){ return 'unknown'; } }
+let devRecAt=0;
+async function recordDevice(){
+  if(!NET.online||!S||Date.now()-devRecAt<6*3600000) return; devRecAt=Date.now();
+  let ip='';
+  try{ const ac=new AbortController(); setTimeout(()=>ac.abort(),4000); const r=await fetch('https://api.ipify.org?format=json',{signal:ac.signal}); ip=(await r.json()).ip||''; }catch(e){}
+  const dev=deviceId(), now=Date.now(), ipk=ip?ip.replace(/[.:]/g,'_'):'';
+  try{ await dbTx('devlog/'+dev,d=>{ d=d||{accts:{},ips:{}}; d.accts=d.accts||{}; d.ips=d.ips||{};
+      d.accts[NET.uid]={name:S.owner,shop:S.shop,t:now}; if(ipk) d.ips[ipk]=now;
+      const ks=Object.keys(d.ips).sort((a,b)=>d.ips[b]-d.ips[a]); ks.slice(10).forEach(k=>delete d.ips[k]);
+      d.ua=(navigator.userAgent||'').slice(0,120); d.t=now; return {set:d}; }); }catch(e){}
+}
 const FBKEY='akimono-fbcfg', UIDKEY='akimono-uid', LOGOUTKEY='akimono-loggedout';
 function parseFbConfig(txt){
   const o={}; String(txt).replace(/(apiKey|authDomain|projectId|storageBucket|messagingSenderId|appId|measurementId)\s*["']?\s*:\s*["']([^"']+)["']/g,(m,k,v)=>{ o[k]=v; });
@@ -2014,7 +2027,7 @@ function titleScreen(){
   <div class="c"><big>商人ランキング</big></div>
   ${NET.online? rankTable() : `<div class="c note">${NET.ready?'オフラインのため，ランキングはお店を開くと表示されます。':'オンラインに接続しています…'}</div>`}
   <hr>
-  <div class="c note">${NET.online?'進行はオンラインに保存されます。':'進行はこのブラウザに保存されます。'}</div>
+  <div class="c note">${NET.online?'進行はオンラインに保存されます。':'進行はこのブラウザに保存されます。'}${NET.online?'<br><small>不正（ひとりで複数のお店を持つことなど）を防ぐため，遊んでいる端末の情報とIPアドレスを記録し，管理人が確認できるようにしています。</small>':''}</div>
   ${NET.ready&&!NET.online&&!window.claude?`<div class="c"><a onclick="modal(onlineSettingsHtml()+'<div class=c><button onclick=closeModal()>閉じる</button></div>')">オンライン設定（管理者向け）</a></div>`:''}`;
 }
 async function startNew(){
@@ -4459,7 +4472,7 @@ SCREENS.admin=function(){
   if(!ADMIN) return `<div class="c"><big>管理者画面</big></div>
     ${talk('kaominister','大臣','管理者のパスワードを入れてください。<br><small>まだ設定されていない場合は，ここで入れたパスワードが管理者パスワードになります（最初の1回だけ）。</small>')}
     <div class="c"><input type="password" id="adPw" style="width:160px" onkeydown="if(event.key==='Enter'&&!event.isComposing)adminLogin()"> <button onclick="adminLogin()">ログイン</button></div>`;
-  const t=T(), TABS=['概要','プレイヤー','街','イベント','ギルド','データ・設定'];
+  const t=T(), TABS=['概要','プレイヤー','街','イベント','ギルド','端末・IP','データ・設定'];
   let h=`<div class="c"><big>🛠 管理者画面</big> <small><a onclick="ADMIN=false;leaveAdmin()">ログアウト</a>　<a onclick="leaveAdmin()">ゲームに戻る</a></small></div>
   <div class="tabs">${TABS.map((x,i)=>`<span class="${ADTAB===i?'on':''}" onclick="ADTAB=${i};render()">${x}</span>`).join('')}</div>`;
   const ps=adminPlayers(); const now=Date.now();
@@ -4539,6 +4552,8 @@ SCREENS.admin=function(){
       <td class="nw"><button onclick="adminGuild(${R(id)},'gp')">GP+50</button><br><button onclick="adminGuild(${R(id)},'names')">名前を最新に</button>${g.npcGuild?'':`<br><button class="red" onclick="adminGuild(${R(id)},'del')">解散</button>`}</td></tr>`).join('')||'<tr><td colspan="3" class="c">ギルドはありません</td></tr>'}
     </table></div>
     <div class="c note">「名前を最新に」で，加盟店の名前・店名・顔をいまのランキングの情報に合わせます。</div>`;
+  } else if(ADTAB===5){
+    h+=adminDevHtml();
   } else {
     h+=`${NET.online?`<div class="c"><big>データの掃除</big></div>
     <div class="c toolbar"><button onclick="adminClear('bbs')">掲示板を全部消す</button> <button onclick="adminClear('news')">新聞を全部消す</button> <button onclick="adminClear('auc')">競売を全部消す</button></div>
@@ -4556,6 +4571,32 @@ function adminQuickAll(what){
     const ps=adminPlayers(); ps.forEach(p=>{ if(p.me) applyAdmin(m); else sendMail(p.key,m); }); save();
     const s=`【お知らせ】管理人から全員へ「${label}」のプレゼント！`; news(s); newsNet(s); setFlash(`${ps.length}店に配りました`); render();
   });
+}
+let ADEV=null, ADEV_LOADING=false;
+function adminDevLoad(){ if(!NET.online||ADEV_LOADING) return; ADEV_LOADING=true;
+  NET.db.collection('devlog').get().then(s=>{ ADEV=s.docs.map(d=>({id:d.id,...d.data()})); ADEV_LOADING=false; render(); }).catch(e=>{ netErr(e); ADEV_LOADING=false; ADEV=[]; render(); }); }
+function adminDevHtml(){
+  if(!NET.online) return '<div class="c note">オンラインのときだけ使えます。</div>';
+  if(!ADEV){ adminDevLoad(); return '<div class="c note">読み込み中…</div>'; }
+  const ipShow=k=>k.replace(/_/g,'.');
+  const accName=(u,a)=>{ const s=NET.shops[u]; return s?`${esc(s.shop)}（${esc(s.owner)}）`:`${esc(a.shop||'?')}（${esc(a.name||'?')}）<small class="note">削除済み?</small>`; };
+  // 同じ端末で複数のアカウント
+  const multiDev=ADEV.filter(d=>Object.keys(d.accts||{}).length>=2);
+  // 同じIPで複数のアカウント
+  const ipMap={}; ADEV.forEach(d=>Object.keys(d.ips||{}).forEach(ip=>{ Object.entries(d.accts||{}).forEach(([u,a])=>{ (ipMap[ip]=ipMap[ip]||{})[u]=a; }); }));
+  const multiIp=Object.entries(ipMap).filter(([ip,us])=>Object.keys(us).length>=2);
+  let h=`<div class="c toolbar"><button onclick="ADEV=null;render()">最新に更新</button></div>
+  <div class="c"><big>⚠ 同じ端末で使われているアカウント</big></div>
+  <div class="tbl"><table class="t" style="width:100%">${multiDev.map(d=>`<tr><td><small>端末 ${esc(d.id.slice(0,8))}</small><br>${Object.entries(d.accts).map(([u,a])=>accName(u,a)).join('<br>')}</td><td><small>${ago(d.t||0)}</small></td></tr>`).join('')||'<tr><td class="c">見つかりませんでした</td></tr>'}</table></div>
+  <div class="c note">同じブラウザで別のお店にログインし直した場合に表示されます。家族で1台を共有している場合もあります。</div>
+  <div class="c"><big>⚠ 同じIPアドレスのアカウント</big></div>
+  <div class="tbl"><table class="t" style="width:100%">${multiIp.map(([ip,us])=>`<tr><td><small>${esc(ipShow(ip))}</small><br>${Object.entries(us).map(([u,a])=>accName(u,a)).join('<br>')}</td></tr>`).join('')||'<tr><td class="c">見つかりませんでした</td></tr>'}</table></div>
+  <div class="c note">同じWi-Fiや同じ携帯回線だと，別の人でも同じIPになることがあります。参考にしてください。</div>
+  <div class="c"><big>すべての端末</big>　<small>（${ADEV.length}台）</small></div>
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>端末・アカウント</th><th>IP（新しい順）</th></tr>
+  ${ADEV.sort((a,b)=>(b.t||0)-(a.t||0)).map(d=>`<tr><td><small>${esc(d.id.slice(0,8))}・${ago(d.t||0)}<br>${esc(/iPhone|iPad/.test(d.ua||'')?'iPhone/iPad':/Android/.test(d.ua||'')?'Android':/Mac/.test(d.ua||'')?'Mac':/Windows/.test(d.ua||'')?'Windows':'その他')}</small><br>${Object.entries(d.accts||{}).map(([u,a])=>accName(u,a)).join('<br>')}</td>
+    <td><small>${Object.entries(d.ips||{}).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([ip])=>esc(ipShow(ip))).join('<br>')||'-'}</small></td></tr>`).join('')}</table></div>`;
+  return h;
 }
 function adminNews(){ const m=$('#adNews').value.trim(); if(!m) return; const s=`【お知らせ】${m}`; news(s); newsNet(s); setFlash('新聞にのせました'); render(); }
 function adminDetail(k){
@@ -4721,6 +4762,7 @@ function tick(){
   if(saveTick%60===45) checkMyJobs();
   if(saveTick%20===10) checkDragonRaces();
   if(saveTick%15===5) checkRaid();
+  if(saveTick%120===40) recordDevice();
   if(saveTick%30===17&&NET.online) softRender();   // 「いま遊んでいる人」の数をこまめに更新
   if(saveTick%10===3) checkVoyages();
 }
