@@ -439,7 +439,7 @@ const EVENT_ONLY=[81,82,83,84,85,86,151,181,182,183,184];
     if(u.exptime==null) u.exptime=Math.max(10,Math.round(u.time*0.5));   // 熟練度100%で半分の時間
   }); });
 })();
-const ITEMS = {}; DATA.items.forEach(it=>{ if(it.no===80 && !it.uses.some(u=>u.top)) it.uses.push({name:'最上級の魔物に挑む',time:120,action:'戦闘開始',info:'とてつもなく強い魔物に挑みます。勝てば賞金！',exp:1,use:[[1,80]],get:[],func:'_local_',top:1}); it.info=(it.info||'').replace(/<[^>]+>/g,''); ITEMS[it.no]=it; });
+const ITEMS = {}; DATA.items.forEach(it=>{ if(it.no===80){ it.uses[0].time=180; } if(it.no===80 && !it.uses.some(u=>u.top)) it.uses.push({name:'最上級の魔物に挑む',time:240,action:'戦闘開始',info:'とてつもなく強い魔物に挑みます。勝てば賞金！',exp:1,use:[[1,80]],get:[],func:'_local_',top:1}); it.info=(it.info||'').replace(/<[^>]+>/g,''); ITEMS[it.no]=it; });
 const ITEMLIST = DATA.items;
 const MONS = DATA.monsters;
 // 魔物の賞金：レベル（低・中・上）ごとに，強さに応じて少しずつ
@@ -2333,7 +2333,7 @@ SCREENS.use=function(){
   const ex=S.exp[no]||0;
   const rows=it.uses.map((u,i)=>{
     const t=useTime(u,no);
-    const ok = u.use.every(([n,x])=>has(x,n)) && (!u.needexp || ex>=u.needexp);
+    const ok = u.use.every(([n,x])=>has(x,n)) && (!u.needexp || ex>=u.needexp) && !bootsUsed(no);
     const need = u.use.map(([n,x])=>`<span class="${has(x,n)?'':'red'}">${iname(x)}×${n}</span>`).join(' ')||'なし';
     const get = u.get.map(([n,x,p])=>`${iname(x)}×${n}${p<100?`<small>(${p}%)</small>`:''}`).join(' ')||(specialDesc(no,i)||'－');
     return `<tr><td>${esc(u.name)}${u.needexp?`<br><small class="${ex>=u.needexp?'':'red'}">熟練度${u.needexp}%以上</small>`:''}${u.job?`<br><small>${u.job}なら短縮</small>`:''}</td>
@@ -2361,12 +2361,14 @@ function specialDesc(no,i){
   if(FOOD_EFFECT[no]&&it0(no,i)) return Object.entries(FOOD_EFFECT[no]).map(([k,v])=>`${STATNAME[k]}+${v}`).join('・')+'（ずっと）';
   if([26,35,36].includes(no)&&i===0) return {26:'HP+2（ときどき能力+1）・ずっと',35:'HP+12・能力+2・ずっと',36:'HP+25・攻撃/防御/技量+2・ずっと'}[no];
   if([27,28].includes(no)&&i===0) return '持ち時間が回復';
-  if(no===29&&i===0) return '持ち時間が回復（決算ごとに1回）';
+  if(no===29&&i===0) return bootsUsed(29)?'今回は使用済み（次の決算のあとに使える）':'持ち時間が8時間回復（使うとなくなる・決算ごとに1回）';
   if(no===77) return '人気・爵位アップ';
   return '';
 }
+function bootsUsed(no){ return no===29&&S.bootsP===curPeriod(); }
 function doUse(no,i){
   const it=ITEMS[no], u=it.uses[i];
+  if(bootsUsed(no)){ setFlash('おしゃれブーツは決算ごとに1回までです。次の決算のあとに使えます',1); render(); return; }
   if(!u.use.every(([n,x])=>has(x,n))){ setFlash('材料が足りません',1); render(); return; }
   if(u.needexp && (S.exp[no]||0)<u.needexp){ setFlash('熟練度が足りません',1); render(); return; }
   const t=useTime(u,no);
@@ -2392,13 +2394,23 @@ function pickMonster(mode,k,t){
 }
 function chooseTarget(no,i,t){
   const rows=[];
-  if(no===80 && NET.online) playerShops().forEach(p=>rows.push(`<tr><td>${kao(p.kao)}</td><td>${esc(p.shop)}<br><small>${esc(p.name)}（プレイヤー）</small></td><td><button onclick="pickTarget(${R('p:'+p.uid)},${no},${i},${t})">選ぶ</button></td></tr>`));
-  S.npcs.forEach(n=>rows.push(`<tr><td>${kao(n.kao)}</td><td>${esc(n.shop)}${n.strong?' <span class="npctag strong">強豪</span>':''}${n.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${n.tyrant?' <span class=\"npctag strong\" style=\"background:#3a1010;border-color:#300;color:#fff\">暴君</span>':''}<br><small>${esc(n.owner)}${no===80&&n.st?`・HP${n.st.life} 攻${n.st.attack}`:''}</small></td><td><button onclick="pickTarget(${R(n.id)},${no},${i},${t})">選ぶ</button></td></tr>`));
-  modal(`<div><big>相手を選ぶ</big></div><div class="tbl"><table class="t">${rows.join('')}</table></div><div class="c"><button onclick="closeModal()">やめる</button></div>`);
+  const done=tg=>no===80&&duelCount(tg)>=DUEL_LIMIT;
+  const btn=(tg,ref)=>done(tg)?'<small class="note">今回は<br>対戦済み</small>':`<button onclick="pickTarget(${ref},${no},${i},${t})">選ぶ</button>`;
+  if(no===80 && NET.online) playerShops().forEach(p=>rows.push(`<tr><td>${kao(p.kao)}</td><td>${esc(p.shop)}<br><small>${esc(p.name)}（プレイヤー）</small></td><td>${btn('p:'+p.uid,R('p:'+p.uid))}</td></tr>`));
+  S.npcs.forEach(n=>rows.push(`<tr><td>${kao(n.kao)}</td><td>${esc(n.shop)}${n.strong?' <span class="npctag strong">強豪</span>':''}${n.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${n.tyrant?' <span class=\"npctag strong\" style=\"background:#3a1010;border-color:#300;color:#fff\">暴君</span>':''}<br><small>${esc(n.owner)}${no===80&&n.st?`・HP${n.st.life} 攻${n.st.attack}`:''}</small></td><td>${btn(n.id,R(n.id))}</td></tr>`));
+  modal(`<div><big>相手を選ぶ</big></div>${no===80?`<div class="c note">同じ相手とは，決算ごとに${DUEL_LIMIT}回まで決闘できます。</div>`:''}<div class="tbl"><table class="t">${rows.join('')}</table></div><div class="c"><button onclick="closeModal()">やめる</button></div>`);
 }
-function pickTarget(k,no,i,t){ const tg=REFS[k]; closeModal(); if(!spendTime(t)){ setFlash('持ち時間が足りません',1); render(); return; } execUse(no,i,tg); }
+const DUEL_LIMIT=1;   // 同じ相手に決闘できる回数（決算ごと）
+function duelKey(tg){ return typeof tg==='number'?'npc:'+tg:String(tg); }
+function duelCount(tg){ const L=S.duelLog; return L&&L.p===curPeriod()?(L.m[duelKey(tg)]||0):0; }
+function duelMark(tg){ if(!S.duelLog||S.duelLog.p!==curPeriod()) S.duelLog={p:curPeriod(),m:{}}; const k=duelKey(tg); S.duelLog.m[k]=(S.duelLog.m[k]||0)+1; }
+function pickTarget(k,no,i,t){ const tg=REFS[k]; closeModal();
+  if(no===80&&duelCount(tg)>=DUEL_LIMIT){ setFlash('この相手とは今回の決算ではもう決闘しました。次の決算のあとに挑めます',1); render(); return; }
+  if(!spendTime(t)){ setFlash('持ち時間が足りません',1); render(); return; }
+  if(no===80) duelMark(tg);
+  execUse(no,i,tg); }
 // まとめて使えるか（戦闘・相手を選ぶもの・陳列棚キット・転職は1回ずつ）
-function canMulti(no,i){ if(no===80||no===63||no===78) return false; if((no===62&&i===1)||(no===65&&i<2)) return false; return true; }
+function canMulti(no,i){ if(no===80||no===63||no===78||no===29) return false; if((no===62&&i===1)||(no===65&&i<2)) return false; return true; }
 function maxTimes(no,i){
   const u=ITEMS[no].uses[i]; let m=99;
   u.use.forEach(([n,x])=>{ m=Math.min(m,Math.floor((S.stock[x]||0)/n)); });
@@ -2497,8 +2509,8 @@ function special(no,i,target,msgs){
     if(no===35){ S.st.life+=12; const k=pk(); S.st[k]+=2; msgs.push(`ミノヨーグルトを食べた！ HPが12・${STATNAME[k]}が2上がった（ずっと）`); }
     if(no===36){ S.st.life+=25; ks.forEach(k=>S.st[k]+=2); msgs.push('ミノチーズを食べた！ HPが25・攻撃/防御/技量が2ずつ上がった（ずっと）'); }
   }
-  else if(no===29&&i===0&&S.bootsP===curPeriod()){ add(29,1); msgs.push('今日はもうお出かけしました（決算ごとに1回までです）'); }
-  else if([27,28,29].includes(no)&&i===0){ if(no===29) S.bootsP=curPeriod(); const g={27:600,28:600,29:480}[no]; S.time=Math.min(maxTime(),S.time+g); msgs.push(`元気が出た！持ち時間が${hm(g)}回復した`); if(no===29) add(29,1); }
+  else if(no===29&&i===0&&S.bootsP===curPeriod()){ add(29,1); msgs.push('もうお出かけしました（決算ごとに1回までです）'); }
+  else if([27,28,29].includes(no)&&i===0){ if(no===29) S.bootsP=curPeriod(); const g={27:600,28:600,29:480}[no]; S.time=Math.min(maxTime(),S.time+g); msgs.push(`元気が出た！持ち時間が${hm(g)}回復した`); }
   else if(no===77){ S.pop=clamp(S.pop+30,0,100); S.dig+=1; msgs.push('盛大なお祝いパーティを開いた！人気と爵位ポイントが上がった'); news(`${S.shop}で盛大なパーティが開かれた`); }
   return null;
 }
@@ -2589,8 +2601,10 @@ function quickBattle(mode,same){
   if(!has(80)){ setFlash('バトルチケットがありません',1); render(); return; }
   const u=ITEMS[80].uses[mode], t=useTime(u,80);
   if(mode===0 && !(same&&BT&&BT.target!=null)){ return chooseTarget(80,0,t); }
+  if(mode===0 && same && duelCount(BT.target)>=DUEL_LIMIT){ setFlash('この相手とは今回の決算ではもう決闘しました。ほかの相手を選んでください',1); return chooseTarget(80,0,t); }
   if(mode>=1 && mode<=4 && !(same&&BT&&BT.target!=null&&BT.mode===mode)){ return chooseMonster(mode,t); }
   if(!spendTime(t)){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
+  if(mode===0&&same&&BT) duelMark(BT.target);
   execUse(80,mode,(same&&BT)?BT.target:null);
 }
 function finishBattle(){
@@ -4329,6 +4343,9 @@ SCREENS.admin=function(){
       <tr><th>次のイベント</th><td>${t.evNext?esc(EVENTS[t.evNext.type].n)+'　'+fmtReal(t.evNext.at):'未定'}${anyEventActive(t)?'<br><span class="red">開催中のイベントあり</span>':''}</td></tr>
       <tr><th>ギルド</th><td>${Object.keys(NET.guilds||{}).length}個</td></tr>
     </table></div>
+    <div class="c"><big>⚡ 全員にすぐ</big></div>
+    <div class="c toolbar"><button onclick="adminQuickAll('full')">持ち時間を満タンに</button> <button onclick="adminQuickAll('gift')">ギフト券を3枚</button> <button onclick="adminQuickAll('ticket')">バトルチケットを5枚</button></div>
+    <div class="c note">全員に届きます（相手が次にゲームを開いたとき）。</div>
     <div class="c"><big>📢 全体へのお知らせ</big></div>
     <div class="c"><textarea id="adNotice" rows="3" style="width:95%" maxlength="200">${esc(t.notice||'')}</textarea><br><button onclick="adminNotice()">お知らせを出す</button> <button onclick="$('#adNotice').value='';adminNotice()">消す</button></div>
     <div class="c note">ランキング画面やタイトル画面の一番上に表示されます。</div>
@@ -4343,7 +4360,7 @@ SCREENS.admin=function(){
     ${list.map(p=>{ const gi=p.guild&&guildInfo(p.guild); const idle=!p.me&&now-(p.t||0)>=36*3600000;
       return `<tr><td>${kao(p.kao)}</td><td><b>${esc(p.shop)}</b><br><small>${esc(p.name)}${p.me?'（あなた）':''}<br>${digHtml(p.dig)} ${p.dig}pt${gi?'・'+esc(gi.name):''}</small></td>
       <td class="nw"><small>点数 ${(p.point||0).toLocaleString()}<br>資金 ${yen(p.money||0)}<br>人気 ${Math.round(p.pop||0)}%<br>${p.me?'いま':idle?'<span class="red">休業中</span>':''}${p.me?'':ago(p.t||0)}</small></td>
-      <td class="nw"><button onclick="adminGiveBox(${R(p.key)})">付与</button><br><button onclick="adminMsgBox(${R(p.key)})">手紙</button>${p.me?'':`<br><button onclick="adminDelete(${R(p.key)})" class="red">削除</button>`}</td></tr>`; }).join('')||'<tr><td colspan="4" class="c">見つかりません</td></tr>'}
+      <td class="nw"><button onclick="adminGiveBox(${R(p.key)})">付与</button><br><button onclick="adminMsgBox(${R(p.key)})">手紙</button><br><button onclick="adminDetail(${R(p.key)})">詳細</button>${p.me?'':`<br><button onclick="adminDelete(${R(p.key)})" class="red">削除</button>`}</td></tr>`; }).join('')||'<tr><td colspan="4" class="c">見つかりません</td></tr>'}
     </table></div>`;
   } else if(ADTAB===2){
     const cands=ps.map(p=>`<option value="${R(p.key)}">${esc(p.shop)}（${esc(p.name)}）</option>`).join('');
@@ -4399,7 +4416,36 @@ SCREENS.admin=function(){
   }
   return h;
 };
+function adminQuickAll(what){
+  const label={full:'持ち時間を満タン',gift:'ギフト券3枚',ticket:'バトルチケット5枚'}[what];
+  confirmBox(`全員に「${label}」を配りますか？`,()=>{
+    const m={kind:'admin',money:0,dig:0,no:what==='gift'?79:what==='ticket'?80:0,n:what==='gift'?3:what==='ticket'?5:0,body:'管理人からのプレゼントです',full:what==='full',time:0,pop:0,exp:0,sold:0};
+    const ps=adminPlayers(); ps.forEach(p=>{ if(p.me) applyAdmin(m); else sendMail(p.key,m); }); save();
+    const s=`【お知らせ】管理人から全員へ「${label}」のプレゼント！`; news(s); newsNet(s); setFlash(`${ps.length}店に配りました`); render();
+  });
+}
 function adminNews(){ const m=$('#adNews').value.trim(); if(!m) return; const s=`【お知らせ】${m}`; news(s); newsNet(s); setFlash('新聞にのせました'); render(); }
+function adminDetail(k){
+  const key=REFS[k]; const me=key===myKey();
+  const s=me?{...shopSummary(),time:S.time,bexp:S.bexp}:(NET.shops[key]||{});
+  const st=me?myStat():(s.st||{}); const gi=s.guild&&guildInfo(s.guild);
+  const cases=(s.cases||[]).filter(Boolean).map(c=>ITEMS[c.no]?`${esc(ITEMS[c.no].name)}（${yen(c.price)}・残${c.stock||0}）`:'').join('<br>')||'なし';
+  const manor=s.manor?MANOR.filter(m=>s.manor[m.id]).map(m=>`${m.name}×${s.manor[m.id]}`).join('・'):'';
+  modal(`<div class="c">${kao(s.kao||1)}<br><big>${esc(s.shop||'')}</big><br><small>${esc(s.owner||'')}</small></div>
+  <table class="t" style="width:100%">
+    <tr><th>資金</th><td>${yen(s.money||0)}</td></tr>
+    <tr><th>点数・人気</th><td>${(s.point||0).toLocaleString()}点・${s.pop||0}%</td></tr>
+    <tr><th>爵位</th><td>${digHtml(s.dig||0)} ${s.dig||0}pt・優勝${s.wins||0}回</td></tr>
+    <tr><th>職業</th><td>${(JOBS[s.job]||JOBS['']).name}</td></tr>
+    <tr><th>ギルド</th><td>${gi?esc(gi.name):'なし'}</td></tr>
+    <tr><th>能力</th><td><small>HP${st.life||0} 攻${st.attack||0} 防${st.defence||0} 技${st.tech||0}・兵士${s.soldiers||0}人</small></td></tr>
+    ${me?`<tr><th>持ち時間・経験値</th><td>${hm(s.time)}・${s.bexp||0}</td></tr>`:''}
+    <tr><th>陳列中</th><td><small>${cases}</small></td></tr>
+    ${manor?`<tr><th>荘園</th><td><small>${manor}</small></td></tr>`:''}
+    <tr><th>最後に遊んだ</th><td><small>${me?'いま':ago(s.t||0)}</small></td></tr>
+  </table>
+  <div class="c toolbar"><button onclick="closeModal();adminGiveBox(${R(key)})">付与</button><button onclick="closeModal()">閉じる</button></div>`);
+}
 function adminMsgBox(k){ modal(`<div><big>手紙を送る</big></div><textarea id="amB" rows="4" style="width:100%" maxlength="200"></textarea><div class="c"><button onclick="adminMsg(${k})">送る</button> <button onclick="closeModal()">やめる</button></div>`); }
 function adminMsg(k){ const key=REFS[k], body=$('#amB').value.trim(); closeModal(); if(!body) return; const m={kind:'admin',money:0,dig:0,no:0,n:0,body};
   if(key===myKey()){ applyAdmin(m); save(); setFlash('送りました'); render(); return; } sendMail(key,m).then(ok=>{ setFlash(ok?'送りました':'送れませんでした',!ok); render(); }); }
@@ -4441,6 +4487,10 @@ function adminGiveBox(k){
   <table class="t" style="width:100%">
   <tr><th>資金</th><td><input type="number" id="agM" value="0" style="width:120px"> 円 <small>（マイナスで減らす）</small></td></tr>
   <tr><th>爵位pt</th><td><input type="number" id="agD" value="${all?0:1}" style="width:70px"> pt</td></tr>
+  <tr><th>持ち時間</th><td><input type="number" id="agT" value="0" style="width:70px"> 時間 <label><input type="checkbox" id="agTF"> 満タンにする</label><br><small class="note">上限（ふつう72時間）までふえます</small></td></tr>
+  <tr><th>人気</th><td><input type="number" id="agP" value="0" style="width:70px"> <small>（−100〜100）</small></td></tr>
+  <tr><th>経験値</th><td><input type="number" id="agE" value="0" style="width:90px"></td></tr>
+  <tr><th>兵士</th><td><input type="number" id="agS" value="0" style="width:90px"> 人</td></tr>
   <tr><th>アイテム</th><td><select id="agI"><option value="0">なし</option><option value="79">★ギフト券</option><option value="80">★バトルチケット</option>${items}</select> ×<input type="number" id="agN" value="1" min="1" style="width:60px"></td></tr>
   <tr><th>ひとこと</th><td><input id="agB" maxlength="60" style="width:100%" placeholder="例：ランキング1位おめでとう！"></td></tr>
   </table>
@@ -4449,8 +4499,9 @@ function adminGiveBox(k){
 function adminGive(k){
   const key=REFS[k];
   const money=parseInt($('#agM').value)||0, dig=parseInt($('#agD').value)||0, no=+$('#agI').value, n=Math.max(1,parseInt($('#agN').value)||1), body=$('#agB').value.trim();
+  const time=Math.round((parseFloat($('#agT').value)||0)*60), full=$('#agTF').checked, pop=clamp(parseInt($('#agP').value)||0,-100,100), exp=parseInt($('#agE').value)||0, sold=parseInt($('#agS').value)||0;
   closeModal();
-  const m={kind:'admin',money,dig,no:no||0,n:no?n:0,body};
+  const m={kind:'admin',money,dig,no:no||0,n:no?n:0,body,time,full,pop,exp,sold};
   if(key==='*all*'){ const ps=adminPlayers(); ps.forEach(p=>{ if(p.me) applyAdmin(m); else sendMail(p.key,m); }); save(); const s=`【お知らせ】管理人から全員へプレゼントが届きました！`; news(s); newsNet(s); setFlash(`${ps.length}店に配りました（相手が次にゲームを開いたときに届きます）`); render(); return; }
   if(key===myKey()){ applyAdmin(m); setFlash('付与しました'); save(); render(); return; }
   sendMail(key,m).then(ok=>{ setFlash(ok?'付与しました（相手が次にゲームを開いたときに届きます）':'送れませんでした',!ok); render(); });
@@ -4460,6 +4511,10 @@ function applyAdmin(m){
   if(m.money){ S.money+=m.money; parts.push((m.money>0?'資金 ':'資金 ')+(m.money>0?'+':'')+yen(m.money)); }
   if(m.dig){ S.dig=Math.max(0,S.dig+m.dig); parts.push(`爵位ポイント ${m.dig>0?'+':''}${m.dig}`); }
   if(m.no&&ITEMS[m.no]&&m.n){ add(m.no,m.n); parts.push(`${ITEMS[m.no].name}×${m.n}`); }
+  if(m.full){ S.time=maxTime(); parts.push('持ち時間が満タン'); } else if(m.time){ S.time=clamp(S.time+m.time,0,maxTime()); parts.push(`持ち時間 ${m.time>0?'+':''}${hm(m.time)}`); }
+  if(m.pop){ S.pop=clamp(S.pop+m.pop,0,100); parts.push(`人気 ${m.pop>0?'+':''}${m.pop}`); }
+  if(m.exp){ S.bexp=Math.max(0,(S.bexp||0)+m.exp); parts.push(`経験値 ${m.exp>0?'+':''}${m.exp}`); }
+  if(m.sold){ S.soldiers=Math.max(0,(S.soldiers||0)+m.sold); parts.push(`兵士 ${m.sold>0?'+':''}${m.sold}人`); }
   letter('街の管理人','kaominister',`${m.body?m.body+'<br>':''}管理人から ${parts.join('，')||'お知らせ'} が届きました。`.replace('<br>','　'));
   if(digLevel(S.dig)>bd) news(`${S.owner}（${S.shop}）が${DIGNITY[digLevel(S.dig)]}に叙爵された`);
 }
