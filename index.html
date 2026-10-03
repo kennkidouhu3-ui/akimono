@@ -431,6 +431,14 @@ const EVENT_ONLY=[81,82,83,84,85,86,151,181,182,183,184];
   const jc=p=>({name:p[0],time:360,action:'転職する',use:[[1,78]],get:[],func:'_local_1',param:p[1]});
   I(78).uses.push(jc(['肉屋へ転職したい','25,,0.5,meat']),jc(['八百屋へ転職したい','234,,0.5,veg']),jc(['魚屋へ転職したい','235,,0.5,fish']));
 })();
+(function normalizeExp(){
+  const NO_EXP=[79,80,63,78,62,77,11];   // 交換・バトル・キット・転職・広告・パーティ・宝くじ
+  DATA.items.forEach(it=>{ if(NO_EXP.includes(it.no)) return; (it.uses||[]).forEach(u=>{
+    if(['食べる','飲む'].includes(u.name)||(u.time||0)<20) return;
+    if(!u.exp) u.exp=1;
+    if(u.exptime==null) u.exptime=Math.max(10,Math.round(u.time*0.5));   // 熟練度100%で半分の時間
+  }); });
+})();
 const ITEMS = {}; DATA.items.forEach(it=>{ if(it.no===80 && !it.uses.some(u=>u.top)) it.uses.push({name:'最上級の魔物に挑む',time:120,action:'戦闘開始',info:'とてつもなく強い魔物に挑みます。勝てば賞金！',exp:1,use:[[1,80]],get:[],func:'_local_',top:1}); it.info=(it.info||'').replace(/<[^>]+>/g,''); ITEMS[it.no]=it; });
 const ITEMLIST = DATA.items;
 const MONS = DATA.monsters;
@@ -2329,11 +2337,12 @@ SCREENS.use=function(){
     const need = u.use.map(([n,x])=>`<span class="${has(x,n)?'':'red'}">${iname(x)}×${n}</span>`).join(' ')||'なし';
     const get = u.get.map(([n,x,p])=>`${iname(x)}×${n}${p<100?`<small>(${p}%)</small>`:''}`).join(' ')||(specialDesc(no,i)||'－');
     return `<tr><td>${esc(u.name)}${u.needexp?`<br><small class="${ex>=u.needexp?'':'red'}">熟練度${u.needexp}%以上</small>`:''}${u.job?`<br><small>${u.job}なら短縮</small>`:''}</td>
-      <td><small>${need}</small></td><td><small>${get}</small></td><td class="nw">${hm(t)}</td>
+      <td><small>${need}</small></td><td><small>${get}</small></td><td class="nw">${hm(t)}${u.exptime!=null&&u.exptime<u.time?`<br><small class="note">熟練で<br>最短${hm(u.exptime)}</small>`:''}</td>
       <td class="nw">${ok&&canMulti(no,i)&&maxTimes(no,i)>=2?`<input type="number" id="mt${i}" value="${no===79||no===78?1:maxTimes(no,i)}" min="1" max="${maxTimes(no,i)}" style="width:56px">回<br><button onclick="useN(${no},${i})">${esc(u.action||'実行')}</button><br><small class="note">最大${maxTimes(no,i)}回</small>`:`<button ${ok?'':'disabled'} onclick="doUse(${no},${i})">${esc(u.action||'実行')}</button>`}</td></tr>`;
   }).join('');
   return `<div class="c"><big>${esc(it.name)}</big>を使う　<small>所持 ${S.stock[no]}${it.scale}・熟練度 ${ex.toFixed(1)}%</small></div>
   <div class="c"><small>${esc(it.info)}</small></div>
+  <div class="c"><div class="hpbar" style="width:160px;display:inline-block"><div style="width:${Math.min(100,ex)}%;background:#9c6"></div></div> <small>熟練度 ${ex.toFixed(1)}%（使うほど上がり，時間が短くなります）</small></div>
   <div class="tbl"><table class="t" style="width:100%"><tr><th>内容</th><th>必要</th><th>入手</th><th>時間</th><th></th></tr>${rows}</table></div>
   <div class="c note">回数を入れると，持ち時間と材料が続くかぎりまとめて実行します（最大99回）。</div>
   <div class="c"><a onclick="go('stock')">倉庫へ戻る</a></div>`;
