@@ -105,6 +105,9 @@ small{font-size:12px;}
 @media (min-width:720px){ .shopinner{zoom:1.4;} }
 @media (max-width:540px){ .tcell{height:84px;} .tcell img.bld{max-height:72px;} body{font-size:13px;} }
 
+/* 倉庫の分類タブ */
+.cattabs span{display:inline-flex;align-items:center;gap:2px;}
+.cattabs span small{color:#888;margin-left:2px;}
 /* NPC の印 */
 .npctag.strong{background:#fde8e8;border-color:#d44;color:#c22;font-weight:bold;}
 .npctag{display:inline-block;font-size:11px;line-height:1.3;padding:0 5px;border:1px solid #999;border-radius:3px;background:#eee;color:#666;font-weight:normal;vertical-align:middle;}
@@ -460,7 +463,8 @@ const DIG_POINT = [0,1,3,7,15,30,60,100];
 const DIG_PENSION = [0,1000,3000,6000,12000,25000,50000,150000];
 const DIG_DISC    = [0,0,0,0,0,3,5,10];
 const DIG_TIME    = [0,0,0,0,0,6,12,24];
-const CASECOST = [0,0,2000,4000,8000,16000,32000,64000,128000];
+const CASECOST = [0,0,2000,4000,8000,16000,32000,64000,150000];   // 8つ目は特等席（売れ行き2倍）
+const CASE_BOOST = i => i===7 ? 2 : 1;
 const BTYPES = ['普通','華麗','特攻','回避','強化','堅固','回復','命中','必殺','技巧','奮戦'];
 const BTYPEINFO = [
   [70,5,4,3,3,3,3,3,3,3,10,100],[37,5,15,10,2,7,7,7,5,5,20,80],[60,13,5,10,0,10,0,2,0,0,0,40],
@@ -807,13 +811,25 @@ async function checkRaid(){
       if(out){ (out.logs||[]).forEach(m=>{ S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); });
         if(out.rew) raidRewards(out.rew.r); softRender(); }
     }
-    // 豪将リキーヤの加勢（5分ごと）
+    // 豪将リキーヤの加勢：気まぐれ（来るかどうか・いつ来るか・どれだけ強いかがランダム）
     const rr0=T().raid;
-    if(raidActive()&&Date.now()-(rr0.rikiLast||rr0.start)>=5*60000){
-      const res=await townTx(t=>{ const r=t.raid; if(!r||r.done||r.hp<=0||Date.now()>=r.end) return null; if(Date.now()-(r.rikiLast||r.start)<5*60000) return null;
-        const first=!r.rikiLast; const d=Math.round(r.max*0.06*(1+(r.buff||0)/200)); r.hp=Math.max(0,r.hp-d); r.rikiLast=Date.now();
-        r.dmg=r.dmg||{}; const x=r.dmg['npc:riki']||{name:'豪将リキーヤ',shop:'リキーヤ道場',dmg:0,npc:true}; x.dmg+=d; r.dmg['npc:riki']=x; return {d,first}; });
-      if(res){ const m=res.first?`豪将リキーヤが加勢に駆けつけた！「山賊どもめ，俺が相手だ！」 ${res.d.toLocaleString()}のダメージ！`:`豪将リキーヤの一撃！ バルバロスに${res.d.toLocaleString()}のダメージ！`; S.news.unshift({d:day(),t:hms(S.clock%1440),m}); newsNet(m); softRender(); }
+    if(raidActive()&&!rr0.rikiOff&&(rr0.rikiNext==null||Date.now()>=rr0.rikiNext)){
+      const res=await townTx(t=>{ const r=t.raid; if(!r||r.done||r.hp<=0||Date.now()>=r.end||r.rikiOff) return null;
+        const M=60000, rnd2=(a,b)=>a+Math.random()*(b-a);
+        if(r.rikiNext==null){
+          if(Math.random()<0.15){ r.rikiOff=true; return {msg:'豪将リキーヤは今日は昼寝をしているらしい……。（今回は加勢なし）'}; }
+          r.rikiNext=r.start+Math.round(rnd2(2,20))*M; return null; }
+        if(Date.now()<r.rikiNext) return null;
+        const first=!r.rikiLast; let pct=rnd2(0.03,0.10), big=Math.random()<0.15; if(big) pct*=2;
+        const d=Math.round(r.max*pct*(1+(r.buff||0)/200)); r.hp=Math.max(0,r.hp-d); r.rikiLast=Date.now();
+        r.dmg=r.dmg||{}; const x=r.dmg['npc:riki']||{name:'豪将リキーヤ',shop:'リキーヤ道場',dmg:0,npc:true}; x.dmg+=d; r.dmg['npc:riki']=x;
+        let leave=!first&&Math.random()<0.1;
+        if(leave) r.rikiOff=true; else r.rikiNext=Date.now()+Math.round(rnd2(2,12))*M;
+        const lines=first?['「山賊どもめ，俺が相手だ！」','「ふあぁ……騒がしいと思ったら山賊か」','「祭りか？ 混ぜろ！」']:['「まだまだぁ！」','「ふんっ！」','「腹ごなしにちょうどいい」','「おらおらおら！」'];
+        const say=lines[Math.floor(Math.random()*lines.length)];
+        return {msg:(first?`豪将リキーヤが気まぐれに加勢に現れた！${say} `:`豪将リキーヤの${big?'渾身の一撃！！':'一撃！'}${say} `)+`バルバロスに${d.toLocaleString()}のダメージ！`+(leave?'　……と思ったら「飽きた」と帰ってしまった。':'')};
+      });
+      if(res&&res.msg){ S.news.unshift({d:day(),t:hms(S.clock%1440),m:res.msg}); newsNet(res.msg); softRender(); }
     }
     await checkNiku();
     await checkEvents();
@@ -924,7 +940,7 @@ function raidPanel(){
   <div class="c"><big>応援する</big></div>
   <div class="c toolbar"><button onclick="raidCheer('money')">声援（¥30,000）<br><small>攻撃力+5%</small></button> <button onclick="raidCheer('potion')">差し入れ（ポーション20）<br><small>攻撃力+3%</small></button></div>
   <div class="c"><input type="number" id="rsN" value="${Math.min(50,S.soldiers||0)||10}" min="1" style="width:70px">人 <button onclick="raidSoldiers(false)">兵士を出す（1人60）</button>${isLordMe()?` <button onclick="raidSoldiers(true)">護衛軍を出す</button>`:''}</div>
-  <div class="c note">${im('kaoriki','','width=24 height=24')} 豪将リキーヤが5分ごとに加勢してくれます（1回でボスのHPの約6%！ 応援で攻撃力が上がると，リキーヤも強くなります）。<br>戦うのが苦手でも，応援や兵士で参加できます。撃退すると，貢献に応じて賞金・経験値・爵位ポイント，そして<b>ダイヤモンド原石</b>（MVPは3個・ほかは1個）がもらえます。撃退できないと，街資金が奪われ全店の人気が下がります。</div>
+  <div class="c note">${im('kaoriki','','width=24 height=24')} 豪将リキーヤが<b>気まぐれに</b>加勢してくれます（来る時間も一撃の強さもその日しだい。来ない日もあります）。<br>戦うのが苦手でも，応援や兵士で参加できます。撃退すると，貢献に応じて賞金・経験値・爵位ポイント，そして<b>ダイヤモンド原石</b>（MVPは3個・ほかは1個）がもらえます。撃退できないと，街資金が奪われ全店の人気が下がります。</div>
   ${raidTopHtml(r)}`;
 }
 function raidTopHtml(r){ const e=Object.values(r.dmg||{}).sort((a,b)=>b.dmg-a.dmg).slice(0,5); return e.length?`<div class="c"><small>貢献ランキング：${e.map((x,i)=>`${i+1}位 ${esc(x.shop)}（${Math.round(x.dmg).toLocaleString()}）`).join('・')}</small></div>`:''; }
@@ -1523,7 +1539,7 @@ function simulate(dt){
     const it=ITEMS[c.no];
     const rv=rivalsOf(c.no);
     const gd=myGuildDoc(), feat=gd&&gActive(gd.feature)&&gd.feature.no===c.no;
-    const k=Math.min(S.stock[c.no], poisson(myRate(c,rv)*dt*gb*trashF*(feat?1.3:1)));
+    const k=Math.min(S.stock[c.no], poisson(myRate(c,rv)*dt*gb*trashF*(feat?1.3:1)*CASE_BOOST(idx)));
     if(k>0){
       S.today.popv=(S.today.popv||0)+(popGain(c.price,c.no,rv)+(feat?0.4:0))*0.4*Math.sqrt(k*c.price/500);
       add(c.no,-k);
@@ -1956,8 +1972,8 @@ SCREENS.main=function(){
   let rows='';
   S.cases.forEach((c,i)=>{
     const it=c?ITEMS[c.no]:null;
-    rows+=`<tr><td class="c">${i+1}</td>
-      <td class="nw">${it?iname(c.no):'<span class="note">（空き）</span>'}</td>
+    rows+=`<tr><td class="c">${i+1}${CASE_BOOST(i)>1?'<br><span class="red">★</span>':''}</td>
+      <td class="nw">${it?iname(c.no):'<span class="note">（空き）</span>'}${CASE_BOOST(i)>1?'<br><small class="red">★特等席・売れ行き2倍</small>':''}</td>
       <td class="r">${it?(S.stock[c.no]||0)+it.scale:'-'}</td>
       <td class="r nw">${it?yen(c.price)+'<br><small>相場'+yen(marketPrice(c.no))+'</small>':'-'}</td>
       <td class="r">${it?(S.today.items[c.no]||0):'-'}</td>
@@ -1970,10 +1986,10 @@ SCREENS.main=function(){
   <div class="tbl"><table class="t">
     <tr><th>棚</th><th>商品</th><th>在庫</th><th>価格</th><th>本日販売</th><th></th></tr>${rows}
   </table></div>
-  <div class="c note">陳列の変更には持ち時間10分が必要です。価格が標準価格より安いほど売れやすく，高すぎると売れません。</div>
+  <div class="c note">陳列の変更には持ち時間10分が必要です。価格が標準価格より安いほど売れやすく，高すぎると売れません。<br>8つ目の棚は<b>特等席</b>：維持費は高めですが，その棚の品は<b>2倍</b>売れます。</div>
   <div class="tbl"><table class="t">
     <tr><th>今期の売上</th><td class="r">${yen(S.today.sales)}（${S.today.count}個）</td><th>ごみ</th><td>${trashMsg(S.trash)}</td></tr>
-    <tr><th>人気</th><td>${popStars(S.pop)}</td><th>陳列棚維持費</th><td class="r">${yen(CASECOST[S.ncase])}/日</td></tr>
+    <tr><th>人気</th><td>${popStars(S.pop)}</td><th>陳列棚維持費</th><td class="r">${yen(CASECOST[S.ncase])}/決算</td></tr>
   </table></div>`;
 };
 function mkInfo(no){ const rv=rivalsOf(no); const d=demandOf(no); return `相場 <b>${yen(marketPrice(no,rv))}</b>（${rv.length?'販売 '+rv.length+'店':'販売店舗なし'}）・需要 ${d>=1.15?'<span class=red>▲高い</span>':d<=0.85?'<span class=blue>▼低い</span>':'ふつう'}<br>手に入りにくい品を相場より安く売ると人気が上がり，どこにでもある品を高く売ると下がります。`; }
@@ -2189,20 +2205,20 @@ function equipSlot(s,no){
    ============================================================ */
 // 倉庫の分類（種類のほかに，魔物の素材・島の品・食べもの・装備品など）
 const STOCK_CATS=[
-  {k:'all',n:'すべて',f:()=>true},
-  {k:'use',n:'使える品',f:it=>it.uses.length>0},
-  {k:'equip',n:'装備品',f:it=>!!it.soubi},
-  {k:'eqon',n:'装備中',f:it=>[1,2,3,4].some(s=>S.eq[s]===it.no)},
-  {k:'mat',n:'原料',f:it=>it.type==='原料'&&!it.fromMon&&!it.island},
-  {k:'mon',n:'魔物の素材',f:it=>!!it.fromMon},
-  {k:'isle',n:'島・町の品',f:it=>!!it.island},
-  {k:'food',n:'食べもの',f:it=>!!it.food},
-  {k:'drug',n:'薬',f:it=>it.type==='薬'&&!it.food},
-  {k:'book',n:'本',f:it=>it.type==='本'},
-  {k:'map',n:'地図・道具',f:it=>['地図','道具'].includes(it.type)&&!SHIPS[it.no]},
-  {k:'ship',n:'船',f:it=>!!SHIPS[it.no]},
-  {k:'rare',n:'イベント品',f:it=>!!it.eventOnly},
-  {k:'sell',n:'売れる品',f:it=>it.pop>0&&!it.noshow},
+  {k:'all',n:'すべて',ic:'item-type10',f:()=>true},
+  {k:'use',ic:'item-no-37',n:'使える品',f:it=>it.uses.length>0},
+  {k:'equip',ic:'item-type4',n:'装備品',f:it=>!!it.soubi},
+  {k:'eqon',ic:'item-type5',n:'装備中',f:it=>[1,2,3,4].some(s=>S.eq[s]===it.no)},
+  {k:'mat',ic:'item-type1',n:'原料',f:it=>it.type==='原料'&&!it.fromMon&&!it.island},
+  {k:'mon',ic:'item-no-101',n:'魔物の素材',f:it=>!!it.fromMon},
+  {k:'isle',ic:'item-no-193',n:'島・町の品',f:it=>!!it.island},
+  {k:'food',ic:'item-no-224',n:'食べもの',f:it=>!!it.food},
+  {k:'drug',ic:'item-type3',n:'薬',f:it=>it.type==='薬'&&!it.food},
+  {k:'book',ic:'item-type2',n:'本',f:it=>it.type==='本'},
+  {k:'map',ic:'item-type9',n:'地図・道具',f:it=>['地図','道具'].includes(it.type)&&!SHIPS[it.no]},
+  {k:'ship',ic:'item-no-191',n:'船',f:it=>!!SHIPS[it.no]},
+  {k:'rare',ic:'item-no-81',n:'イベント品',f:it=>!!it.eventOnly},
+  {k:'sell',ic:'item-no-197',n:'売れる品',f:it=>it.pop>0&&!it.noshow},
 ];
 SCREENS.stock=function(){
   const ck=sub.cat||'all', C=STOCK_CATS.find(c=>c.k===ck)||STOCK_CATS[0];
@@ -2212,7 +2228,7 @@ SCREENS.stock=function(){
   let nos=owned.filter(n=>C.f(ITEMS[n])&&(!q||ITEMS[n].name.includes(q)));
   const sorter={type:(a,b)=>typeIdx(ITEMS[a].type)-typeIdx(ITEMS[b].type)||a-b, name:(a,b)=>ITEMS[a].name.localeCompare(ITEMS[b].name,'ja'), many:(a,b)=>S.stock[b]-S.stock[a], value:(a,b)=>ITEMS[b].price*S.stock[b]-ITEMS[a].price*S.stock[a], price:(a,b)=>ITEMS[b].price-ITEMS[a].price};
   nos.sort(sorter[sort]||sorter.type);
-  const tabs=`<div class="tabs">${STOCK_CATS.map(c=>{ const n=cnt(c); return (n||c.k==='all')?`<span class="${ck===c.k?'on':''}" onclick="sub.cat='${c.k}';render()">${c.n}<small>(${n})</small></span>`:''; }).join('')}</div>`;
+  const tabs=`<div class="tabs cattabs">${STOCK_CATS.map(c=>{ const n=cnt(c); return (n||c.k==='all')?`<span class="${ck===c.k?'on':''}" onclick="sub.cat='${c.k}';render()">${c.ic?im(c.ic,'','width=20 height=20 style="vertical-align:middle;margin-right:3px;image-rendering:pixelated"'):''}${c.n}<small>(${n})</small></span>`:''; }).join('')}</div>`;
   const tools=`<div class="c"><input id="stQ" value="${esc(q)}" placeholder="名前でさがす" style="width:45%" onkeydown="if(event.key==='Enter'&&!event.isComposing){sub.q=this.value;sub.cat='all';render();}"> <button onclick="sub.q=$('#stQ').value;sub.cat='all';render()">さがす</button>${q?` <button onclick="sub.q='';render()">×</button>`:''}
     <select onchange="sub.sort=this.value;render()">${[['type','種類順'],['name','名前順'],['many','数が多い順'],['value','合計の値打ち順'],['price','値段が高い順']].map(([v,l])=>`<option value="${v}" ${sort===v?'selected':''}>${l}</option>`).join('')}</select></div>`;
   let rows=nos.map(n=>{
