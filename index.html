@@ -1803,7 +1803,7 @@ function settle(){
   S.trash+=5;
   // 銀行
   S.bankCount++;
-  if(S.bankCount%14===0 && S.bank>0){ const it=Math.min(500000,Math.round(Math.min(S.bank,10000000)*0.05)); S.bank+=it; letter('銀行','kaofather',`預金利息 ${yen(it)} をお付けしました。${S.bank>10000000?'（利息がつくのは預金¥1,000万まで・1回¥50万までです）':''}`); }
+  if(S.bankCount%14===0 && S.bank>0){ const it=Math.min(5000000,Math.round(Math.min(S.bank,100000000)*0.05)); S.bank+=it; letter('銀行','kaofather',`預金利息 ${yen(it)} をお付けしました。${S.bank>100000000?'（利息がつくのは預金¥1億まで・1回¥500万までです）':''}`); }
   if(S.debt>0){
     S.debt=Math.round(S.debt*(AWAY?1.01:1.03)); if(!AWAY) S.debtDays++;
     if(S.debtDays>20){ const pay=Math.round(S.debt*1.1); S.money-=pay; S.debt=0; S.debtDays=0; letter('銀行','kaofather',`返済期限を過ぎたため ${yen(pay)} を強制回収しました。`); }
@@ -1986,7 +1986,7 @@ function rankTable(limit){
     const cs=(r.cases||[]).filter(c=>c&&c.stock>0&&ITEMS[c.no]);
     const first=cs[0];
     return `<tr ${r.me?'style="font-weight:bold"':''}>
-    <td class="r nw"><b>No.${off+i+1}</b>${off+i<6?im('rank'+(off+i+1),'i16'):''}<br>${updown(r,off+i)}<br><b class="red">${(r.point||0).toLocaleString()}</b>点</td>
+    <td class="r nw"><b>No.${off+i+1}</b>${off+i<6?im('rank'+(6-(off+i)),'i16'):''}<br>${updown(r,off+i)}<br><b class="red">${(r.point||0).toLocaleString()}</b>点</td>
     <td class="c">${kao(r.kao)}<br>${im((JOBS[r.job]||JOBS['']).img,'','width=20 height=30')}</td>
     <td>${guildIcon(r.guild)}${r.me?'<span class="span">'+esc(r.shop)+'</span>':(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${r.npc?' <span class="npctag">NPC</span>':''}${r.strong?' <span class="npctag strong">強豪</span>':''}${r.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${r.tyrant?' <span class=\"npctag strong\" style=\"background:#3a1010;border-color:#300;color:#fff\">暴君</span>':''}${((T().exposed||{})[r.key]||0)>Date.now()?' <span class="npctag" style="background:#fdd;border-color:#c33;color:#c33">取締中</span>':''}${L&&L.key===r.key?' <small class="red">[領主]</small>':''} ${winIcons(r.wins)}
       <br><small>${esc(r.name)}・${(JOBS[r.job]||JOBS['']).name}・${digHtml(r.dig)}${r.soldiers?'・兵'+r.soldiers:''}</small>
@@ -4233,7 +4233,7 @@ SCREENS.bank=function(){
   const maxDep=Math.max(0,Math.floor(worth*0.7)-S.bank);
   const credit=(50+S.bwin*2+digLevel(S.dig)*50+S.wins*10+Math.round(S.pop));
   return `<div class="c"><big>銀行</big></div>
-  ${talk('kaofather','銀行員','預金には決算14回ごと（約1週間）に5%の利息がつきます（利息がつくのは¥1,000万まで・1回¥50万まで）（全資金の70%まで）。借入は借りた時に10%，その後は決算ごとに5%の利息，決算14回（約1週間）以内にご返済ください。')}
+  ${talk('kaofather','銀行員','預金には決算14回ごと（約1週間）に5%の利息がつきます（利息がつくのは¥1億まで・1回¥500万まで）（全資金の70%まで）。借入は借りた時に10%，その後は決算ごとに5%の利息，決算14回（約1週間）以内にご返済ください。')}
   <div class="tbl"><table class="t">
     <tr><th>預金</th><td class="r">${yen(S.bank)}</td><td><input type="number" id="bkA" value="10000" style="width:100px"> <button onclick="bankOp(0)">預ける</button> <button onclick="bankOp(1)">引き出す</button></td></tr>
     <tr><th>借金</th><td class="r">${yen(S.debt)}${S.debt?`<br><small>${S.debtDays}日経過</small>`:''}</td><td><button onclick="bankOp(2)">借りる</button> <button onclick="bankOp(3)">返す</button><br><small>借入限度 ${yen(credit*1000)}</small></td></tr>
