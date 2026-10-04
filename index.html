@@ -954,7 +954,7 @@ function applyNikuResult(){
   const L=T().nikuLast; if(!L||S.nikuSeen===L.id) return;
   S.nikuSeen=L.id;
   if(L.target.key===myKey()){
-    if(L.win){ S.pop=clamp(S.pop+3,0,100); S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.8)); add(151,1); letter('傭兵隊長','kaoarmy',`${NIKU}の襲撃を見事に撃退しました！ 人気+3。兵士の2割が負傷しました。現場に「呪いの骨片」が1つ残されていました……。`); }
+    if(L.win){ S.nikuRepel=(S.nikuRepel||0)+1; S.pop=clamp(S.pop+3,0,100); S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.8)); add(151,1); letter('傭兵隊長','kaoarmy',`${NIKU}の襲撃を見事に撃退しました！ 人気+3。兵士の2割が負傷しました。現場に「呪いの骨片」が1つ残されていました……。`); }
     else { const sp=Math.round(S.pop*0.1), sd=S.dig>0?1:0; S.pop=clamp(S.pop-sp,0,100); S.dig=Math.max(0,S.dig-sd); S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.7)); letter('傭兵隊長','kaoarmy',`${NIKU}にお店を襲われてしまいました…。人気−${sp}${sd?'・爵位ポイント−1':''}。点数も奪われました（お金は取られていません）。`); }
   } else if(String(L.target.key).startsWith('npc:')&&!NET.online){ const x=S.npcs[+String(L.target.key).slice(4)]; if(x&&!L.win){ x.pop=clamp(Math.round(x.pop*0.9),5,100); if(x.dig>0) x.dig--; } }
   save();
@@ -997,6 +997,128 @@ function applyNpcDuel(m){
   else { S.pop=clamp(S.pop-1,0,100); letter(m.npc,'kaoarmy',`${m.shop}の${m.npc}に決闘を挑まれ，敗れてしまった…。人気−1。能力や装備を鍛えて備えよう。`); }
   save();
 }
+
+/* ============================================================
+   流行・相棒・ギルド討伐戦・ログインボーナス・称号
+   ============================================================ */
+function realDayKey(){ return Math.floor((Date.now()+JST)/86400000); }
+// ----- 1. 流行：毎日3品，よく売れる -----
+function trendItems(){
+  const k=realDayKey(); if(trendItems._k===k) return trendItems._v;
+  const pool=ITEMLIST.filter(it=>it.pop>0&&!it.noshow&&it.price>0&&!it.eventOnly&&it.no!==80&&!['地図','本'].includes(it.type)).map(it=>it.no);
+  const r=mul32(k*131+7), out=[]; while(out.length<3&&pool.length){ const i=Math.floor(r()*pool.length); out.push(pool.splice(i,1)[0]); }
+  trendItems._k=k; trendItems._v=out; return out;
+}
+function isTrend(no){ return trendItems().includes(no); }
+function trendHtml(){ const tr=trendItems(); return `<div class="flash" style="text-align:left;border-color:#e07a2a;background:#fff3e8">📈 <b>今日の流行</b>：${tr.map(no=>iname(no)).join('・')}<br><small>流行の品は1.5倍売れます（毎日0時に入れかわり）</small></div>`; }
+async function checkTrendNews(){
+  const k=realDayKey(); if(T().trendDay===k) return;
+  const msg=await townTx(t=>{ if(t.trendDay===k) return null; t.trendDay=k; return `【流行】今日の流行は「${trendItems().map(no=>ITEMS[no].name).join('」「')}」！ 1.5倍売れるぞ`; });
+  if(msg){ S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m:msg}); newsNet(msg); }
+}
+// ----- 5. 相棒（魔物を仲間に） -----
+function petOf(){ const p=(S.pets||[])[S.petActive]; return p||null; }
+function petStatBonus(){ const p=petOf(); return p&&S.petMode!=='guard'?0.05*p.tier:0; }
+function petGuardRate(){ const p=petOf(); return p&&S.petMode==='guard'?[0,0.5,0.7,0.9][p.tier]:0; }
+function petTame(mon){
+  if(!mon) return '';
+  const mi=MONS.indexOf(mon); if(mi<0) return '';
+  if((S.pets||[]).length>=3||Math.random()>=0.04) return '';
+  S.pets=(S.pets||[]).concat([{mi,tier:Math.floor(mi/15)+1,name:mon.name}]); if(S.petActive==null) S.petActive=0;
+  return `<b class="blue">${esc(mon.name)}が起き上がり，仲間になりたそうにこちらを見ている……相棒になった！</b>`;
+}
+function petsHtml(){
+  const ps=S.pets||[];
+  return `<div class="c"><big>相棒</big> <small>（${ps.length}/3）</small></div>
+  <div class="tbl"><table class="t" style="width:100%">${ps.map((p,i)=>{ const m=MONS[p.mi]; return `<tr><td style="width:44px">${im('no-'+m.img,'','width=36 height=46')}</td><td><b>${esc(p.name)}</b> ${S.petActive===i?'<span class="blue">（連れている）</span>':''}<br><small>${['','低','中','上'][p.tier]}レベルの魔物・戦闘：全能力+${5*p.tier}%／店番：万引きを${[0,50,70,90][p.tier]}%防ぐ</small></td><td class="nw">${S.petActive===i?'':`<button onclick="S.petActive=${i};save();render()">連れる</button><br>`}<button onclick="petRelease(${i})">逃がす</button></td></tr>`; }).join('')||'<tr><td class="c note">魔物を倒すと，まれに仲間になります</td></tr>'}</table></div>
+  ${ps.length?`<div class="c">相棒の役目：<button ${S.petMode!=='guard'?'disabled':''} onclick="S.petMode='battle';save();render()">⚔ 戦闘で手伝う</button> <button ${S.petMode==='guard'?'disabled':''} onclick="S.petMode='guard';save();render()">🏪 店番をする</button></div>`:''}`;
+}
+function petRelease(i){ confirmBox('この相棒を逃がしますか？',()=>{ S.pets.splice(i,1); if(S.petActive>=S.pets.length) S.petActive=S.pets.length?0:null; save(); render(); }); }
+// ----- 7. ギルド討伐戦：毎日，ギルドごとに巨大な魔物を倒す速さを競う -----
+const GBOSS={name:'暴食の巨獣ベヒモス',img:44};
+function gbossMax(g){ const n=Object.keys(g.members||{}).filter(u=>!String(u).startsWith('npc:')).length; return 60000+30000*Math.max(1,n); }
+function gbossHtml(my){
+  const k=realDayKey(), B=T().gboss&&T().gboss.day===k?T().gboss:{hp:{},max:{},done:{}};
+  const id=S.guild, max=B.max[id]||gbossMax(my), hp=B.hp[id]!=null?B.hp[id]:max, done=B.done[id];
+  const order=Object.entries(B.done||{}).sort((a,b)=>a[1]-b[1]);
+  const cd=Math.max(0,(S.gbossCd||0)-Date.now());
+  return `<div class="c"><big>ギルド討伐戦</big></div>
+  ${talk('kaoguild','ギルド受付',`今日の相手は「${GBOSS.name}」！ ギルドのみんなで力を合わせて，ほかのギルドより早く倒しましょう。上位3ギルドには，明日の0時にごほうびが出ます。`)}
+  <div class="tbl"><table class="t" style="width:100%"><tr><td style="width:60px" class="c">${im('no-'+GBOSS.img,'','width=48 height=60 style="filter:hue-rotate(200deg) saturate(1.5)"')}</td><td>
+    <b>${GBOSS.name}</b>${done?` <b class="blue">討伐済み！（${order.findIndex(x=>x[0]===id)+1}番目）</b>`:''}<div class="hpbar e" style="width:100%;height:12px"><div style="width:${hp/max*100}%"></div></div><small>HP ${Math.max(0,hp).toLocaleString()} / ${max.toLocaleString()}</small></td></tr></table></div>
+  ${done?'':`<div class="c"><button ${cd>0?'disabled':''} onclick="gbossAttack()" style="font-weight:bold">攻撃する（持ち時間1時間）${cd>0?`<br><small>あと${Math.ceil(cd/1000)}秒</small>`:''}</button></div>`}
+  <div class="c"><big>今日の討伐順</big></div>
+  <div class="tbl"><table class="t" style="width:100%">${order.map(([g,ms],i)=>{ const G=NET.guilds[g]; return `<tr><td>${i+1}位</td><td>${G?im(G.icon||'guildprize','i16')+' '+esc(G.name):'?'}</td><td><small>${realStamp(ms)}</small></td></tr>`; }).join('')||'<tr><td class="c note">まだどのギルドも倒していません</td></tr>'}</table></div>
+  <div class="c note">ごほうび：1位 GP+30・加盟店に¥200,000／2位 GP+20・¥100,000／3位 GP+10・¥50,000</div>`;
+}
+function gbossAttack(){
+  const g=myGuildDoc(); if(!g) return;
+  if((S.gbossCd||0)>Date.now()) return;
+  if(!spendTime(60)){ setFlash('持ち時間が足りません（1時間）',1); render(); return; }
+  S.gbossCd=Date.now()+3*60000;
+  const st=myStat(), dmg=Math.round((st.attack+st.defence*0.5+st.tech*0.5)*rr(4,7)), id=S.guild, k=realDayKey(), max=gbossMax(g);
+  townTx(t=>{ if(!t.gboss||t.gboss.day!==k) t.gboss={day:k,hp:{},max:{},done:{}};
+    const B=t.gboss; if(B.done[id]) return 'done'; if(B.hp[id]==null){ B.hp[id]=max; B.max[id]=max; }
+    B.hp[id]=Math.max(0,B.hp[id]-dmg); if(B.hp[id]<=0){ B.done[id]=Date.now(); return 'kill'; } return 'hit'; })
+  .then(r=>{ if(r==='kill'){ S.gbossKill=(S.gbossKill||0)+1; const m=`【ギルド討伐戦】ギルド「${g.name}」が${GBOSS.name}を倒した！`; news(m); newsNet(m); setFlash(`とどめの一撃！ ${dmg.toLocaleString()}のダメージで${GBOSS.name}を倒した！`); }
+    else if(r==='hit') setFlash(`${GBOSS.name}に${dmg.toLocaleString()}のダメージ！`); else setFlash('もう倒しています',1);
+    save(); render(); });
+}
+async function checkGbossRewards(){
+  const k=realDayKey(), B=T().gboss; if(!B||B.day>=k||B.paid) return;
+  const out=await townTx(t=>{ if(!t.gboss||t.gboss.day>=k||t.gboss.paid) return null; t.gboss.paid=true; return Object.entries(t.gboss.done||{}).sort((a,b)=>a[1]-b[1]).slice(0,3).map(x=>x[0]); });
+  if(!out) return;
+  const GP=[30,20,10], MON=[200000,100000,50000];
+  out.forEach((gid,i)=>{ const G=NET.guilds[gid]; if(!G) return; guildTx(gid,g=>{ g.gp=(g.gp||0)+GP[i]; g.gpTotal=(g.gpTotal||0)+GP[i]; });
+    Object.keys(G.members||{}).forEach(u=>{ if(String(u).startsWith('npc:')) return; const m={kind:'money',amount:MON[i],note:`ギルド討伐戦${i+1}位のごほうび`}; if(u===NET.uid){ S.money+=MON[i]; letter('ギルド受付','kaoguild',`ギルド討伐戦で${i+1}位！ ごほうび${yen(MON[i])}です。`); } else sendMail(u,m); });
+    const msg=`【ギルド討伐戦】${i+1}位 ギルド「${G.name}」（GP+${GP[i]}）`; newsNet(msg); });
+}
+// ----- 8. 毎日のログインボーナス -----
+const LOGIN_BONUS=[{t:'ギフト券×1',f:()=>add(79,1)},{t:'持ち時間+2時間',f:()=>{ S.time=Math.min(maxTime(),S.time+120); }},{t:'ギフト券×2',f:()=>add(79,2)},{t:'バトルチケット×3',f:()=>add(80,3)},{t:'¥50,000',f:()=>{ S.money+=50000; }},{t:'ギフト券×3',f:()=>add(79,3)},{t:'修行キット＋ギフト券×5',f:()=>{ add(37,1); add(79,5); }}];
+function checkLoginBonus(){
+  if(!S) return; const k=realDayKey(); const L=S.login||{day:0,streak:0};
+  if(L.day===k) return;
+  const streak=L.day===k-1?L.streak+1:1; S.login={day:k,streak,best:Math.max(L.best||0,streak)};
+  const B=LOGIN_BONUS[(streak-1)%7]; B.f();
+  letter('案内人','kaoguide',`ログインボーナス！ 連続${streak}日目：${B.t}をお届けしました。毎日遊ぶと豪華になります（7日目は修行キットとギフト券×5）。`);
+  setFlash(`🎁 ログインボーナス（連続${streak}日目）：${B.t}`); save();
+}
+// ----- 9. 称号（実績で手に入れて，好きなものを選ぶ） -----
+const TITLES=[
+  {id:'first',n:'初陣',d:'はじめて戦闘に勝つ',c:()=>(S.bwin||0)>=1},
+  {id:'veteran',n:'百戦錬磨',d:'戦闘に100回勝つ',c:()=>(S.bwin||0)>=100},
+  {id:'smith10',n:'強化職人',d:'装備を+10まで強化する',c:()=>Object.values(S.enh||{}).some(v=>v>=10)},
+  {id:'smith20',n:'伝説の鍛冶師',d:'装備を+20まで強化する',c:()=>Object.values(S.enh||{}).some(v=>v>=20)},
+  {id:'niku',n:'暴君を退けし者',d:'にくべんき藩の襲撃を撃退する',c:()=>(S.nikuRepel||0)>=1},
+  {id:'raid',n:'山賊討伐隊',d:'山賊バルバロスの撃退に参加する',c:()=>(S.raidWins||0)>=1},
+  {id:'dragon',n:'竜使い',d:'ドラゴンを持つ',c:()=>(S.dragons||[]).length>=1},
+  {id:'drwin',n:'名竜主',d:'ドラゴンレースで1着になる',c:()=>(S.drWins||0)>=1},
+  {id:'rich',n:'大富豪',d:'資金と預金の合計が1億円をこえる',c:()=>S.money+S.bank-S.debt>=1e8},
+  {id:'popular',n:'街一番の人気店',d:'人気90%以上になる',c:()=>S.pop>=90},
+  {id:'champ',n:'商人の頂点',d:'ランキング1位で表彰される',c:()=>(S.wins||0)>=1},
+  {id:'duke',n:'大公殿下',d:'爵位が大公になる',c:()=>digLevel(S.dig)>=7},
+  {id:'manor',n:'大地主',d:'荘園を合わせて20区画持つ',c:()=>Object.values(S.manor||{}).reduce((a,b)=>a+b,0)>=20},
+  {id:'sailor',n:'七つの海の船乗り',d:'船で10回探索から戻る',c:()=>(S.voyCount||0)>=10},
+  {id:'chef',n:'名料理人',d:'家庭料理入門の熟練度50%以上',c:()=>(S.exp[236]||0)>=50},
+  {id:'tamer',n:'魔物使い',d:'魔物を相棒にする',c:()=>(S.pets||[]).length>=1},
+  {id:'daily',n:'皆勤賞',d:'7日連続でログインする',c:()=>((S.login||{}).best||0)>=7},
+  {id:'guild',n:'ギルドの英雄',d:'ギルド討伐戦でとどめを刺す',c:()=>(S.gbossKill||0)>=1},
+];
+function titleName(id){ const x=TITLES.find(t=>t.id===id); return x?x.n:''; }
+function checkTitles(){
+  if(!S) return; S.titles=S.titles||[]; let got=false;
+  TITLES.forEach(x=>{ if(!S.titles.includes(x.id)&&x.c()){ S.titles.push(x.id); got=true; letter('案内人','kaoguide',`称号「${x.n}」を手に入れました！（${x.d}）[ステータス]で称号を選べます。`); const m=`【称号】${S.owner}（${S.shop}）が称号「${x.n}」を手に入れた！`; news(m); newsNet(m); } });
+  if(got) save();
+}
+function titlesHtml(){
+  const got=S.titles||[];
+  return `<div class="c"><big>称号</big> <small>（${got.length}/${TITLES.length}）</small></div>
+  <div class="c">いまの称号：<select onchange="S.title=this.value||null;save();publishShop(true);render()"><option value="">なし</option>${got.map(id=>`<option value="${id}" ${S.title===id?'selected':''}>${esc(titleName(id))}</option>`).join('')}</select></div>
+  <div class="tbl"><table class="t" style="width:100%">${TITLES.map(x=>`<tr><td class="nw">${got.includes(x.id)?`<b style="color:#b8860b">【${x.n}】</b>`:'<span class="note">？？？</span>'}</td><td><small>${x.d}</small></td></tr>`).join('')}</table></div>
+  <div class="c note">選んだ称号は，ランキングの名前の横に表示されます。</div>`;
+}
+function titleBadge(id){ return id&&titleName(id)?` <small style="color:#b8860b;font-weight:bold">【${esc(titleName(id))}】</small>`:''; }
+
 function raidRewards(r){
   const ents=Object.entries(r.dmg||{}).filter(([k,v])=>!String(k).startsWith('npc:')); if(!ents.length) return;
   const total=ents.reduce((a,[k,v])=>a+v.dmg,0)||1, pool=1000000+500000*ents.length;
@@ -1005,7 +1127,7 @@ function raidRewards(r){
   ents.forEach(([k,v])=>{ const rk=order.indexOf(k); const money=Math.round(pool*v.dmg/total)+(k===top?200000:0); const m={kind:'raidrew',money,exp:300,dig:k===top?2:1,mvp:k===top,dmg:v.dmg,dia:k===top?3:1}; if(k===myKey()) applyRaidRew(m); else sendMail(k,m); });
   news(`レイドのMVPは ${r.dmg[top].shop} ！`);
 }
-function applyRaidRew(m){ S.money+=m.money; addIncome(m.money); if(m.dia) add(81,m.dia); S.bexp=(S.bexp||0)+(m.exp||0); S.dig+=m.dig||0; letter('大臣','kaominister',`山賊バルバロス撃退の報奨です。${m.mvp?'<MVP>':''}貢献 ${Math.round(m.dmg).toLocaleString()} により，賞金${yen(m.money)}・経験値${m.exp}・爵位ポイント+${m.dig}${m.dia?`・ダイヤモンド原石×${m.dia}`:''}を授けます。`.replace('<MVP>','最も活躍した店として，')); save(); }
+function applyRaidRew(m){ S.raidWins=(S.raidWins||0)+1; S.money+=m.money; addIncome(m.money); if(m.dia) add(81,m.dia); S.bexp=(S.bexp||0)+(m.exp||0); S.dig+=m.dig||0; letter('大臣','kaominister',`山賊バルバロス撃退の報奨です。${m.mvp?'<MVP>':''}貢献 ${Math.round(m.dmg).toLocaleString()} により，賞金${yen(m.money)}・経験値${m.exp}・爵位ポイント+${m.dig}${m.dia?`・ダイヤモンド原石×${m.dia}`:''}を授けます。`.replace('<MVP>','最も活躍した店として，')); save(); }
 function raidAdd(dmg,kind){
   const key=myKey(), me={name:S.owner,shop:S.shop};
   return townTx(t=>{ const r=t.raid; if(!r||r.done||Date.now()>=r.end||r.hp<=0) return 'closed';
@@ -1110,8 +1232,8 @@ function activeSkills(){
 function seriesCount(){ const cnt={}; if(!S) return cnt; [1,2,3,4].forEach(s=>{ const it=ITEMS[S.eq[s]]; if(it&&it.series) cnt[it.series]=(cnt[it.series]||0)+1; }); return cnt; }
 function skillFx(){ const fx={}; activeSkills().forEach(a=>{ const f=SKILLS[a.k].fx; for(const k in f) fx[k]=(fx[k]||0)+f[k]; }); return fx; }
 function myStat(){
-  const t=totalStat(S.st,S.eq), fx=skillFx();
-  return {life:Math.round(t.life*(1+(fx.life||0))),attack:Math.round(t.attack*(1+(fx.atk||0))),defence:Math.round(t.defence*(1+(fx.def||0))),tech:Math.round(t.tech*(1+(fx.tech||0)))};
+  const t=totalStat(S.st,S.eq), fx=skillFx(), pb=petStatBonus();
+  return {life:Math.round(t.life*(1+(fx.life||0)+pb)),attack:Math.round(t.attack*(1+(fx.atk||0)+pb)),defence:Math.round(t.defence*(1+(fx.def||0)+pb)),tech:Math.round(t.tech*(1+(fx.tech||0)+pb))};
 }
 const FX_WHERE={atk:'能力（攻撃）',life:'能力（HP）',def:'能力（防御）',tech:'能力（技量）',guard:'戦闘中：受けるダメージを減らす',avoid:'戦闘中：攻撃をよけやすくなる',crit:'戦闘中：会心の一撃が出やすくなる',regen:'戦闘中：自分の番ごとにHP回復',enemyHit:'戦闘中：相手の攻撃が当たりにくくなる',
   drop:'戦闘のあと：魔物の落とし物が出やすくなる',mat:'戦闘のあと：はぎ取り素材が増える',hunter:'戦闘のあと：はぎ取り素材が2倍',exp:'戦闘のあと：経験値が増える',prize:'戦闘のあと：最上級の魔物の賞金が増える',
@@ -1153,7 +1275,7 @@ function myProfit3(){ return S.hist.slice(0,3).reduce((a,h)=>a+(h.sales+(h.inc||
 function myTodayNet(){ return S.today.sales+(S.today.inc||0)-(S.today.tax||0)-(S.today.pay||0); }
 function myPoint(){ return calcPoint(S.pop,S.wins,myProfit3(),myTodayNet()); }
 function expSum(){ return Object.values(S.exp||{}).reduce((a,b)=>a+b,0); }
-function mySummaryRow(){ const st=myStat(); return {me:true,key:myKey(),name:S.owner,shop:S.shop,money:S.money+S.bank-S.debt,dig:S.dig,kao:S.kao,job:S.job,pop:S.pop,wins:S.wins,guild:S.guild,soldiers:S.soldiers,t:Date.now(),
+function mySummaryRow(){ const st=myStat(); return {title:S.title||null,me:true,key:myKey(),name:S.owner,shop:S.shop,money:S.money+S.bank-S.debt,dig:S.dig,kao:S.kao,job:S.job,pop:S.pop,wins:S.wins,guild:S.guild,soldiers:S.soldiers,t:Date.now(),
   point:myPoint(),sale:S.today.sales,exps:expSum(),comment:S.comment,found:S.createdAt,rkY:S.rankY||0,st,btype:S.btype,cases:S.cases.map(c=>c&&has(c.no)?{no:c.no,price:c.price,stock:S.stock[c.no]}:null)}; }
 function allShops(){
   return [mySummaryRow()]
@@ -1183,7 +1305,7 @@ function playerShops(){
   return Object.values(NET.shops).filter(s=>s&&s.uid&&s.uid!==NET.uid).map(s=>{
     const h=Math.max(0,(Date.now()-(s.t||Date.now()))/3600000), idle=h>=IDLE_H;
     const base=typeof s.point==='number'?s.point:calcPoint(s.pop||0,s.wins||0,0,0);
-    return {idle,idleH:h,me:false,key:s.uid,uid:s.uid,name:s.owner,shop:s.shop,money:s.money||0,dig:s.dig||0,kao:s.kao||1,job:s.job||'',pop:s.pop||0,wins:s.wins||0,soldiers:s.soldiers||0,guild:s.guild||null,t:s.t||0,comment:s.comment||'',
+    return {title:s.title||null,idle,idleH:h,me:false,key:s.uid,uid:s.uid,name:s.owner,shop:s.shop,money:s.money||0,dig:s.dig||0,kao:s.kao||1,job:s.job||'',pop:s.pop||0,wins:s.wins||0,soldiers:s.soldiers||0,guild:s.guild||null,t:s.t||0,comment:s.comment||'',
     // 休業中になったら，そこから3日かけてゆっくり点数が下がる（最低2割は残る）
     point: idle? Math.floor(base*Math.max(0.2,1-(h-IDLE_H)/72)) : base,
     sale:idle?0:(s.sale||0),exps:s.exps||0,found:s.found||0,rkY:s.rkY||0,st:s.st||null,btype:s.btype||0,cases:s.cases||[],house:s.house||0}; });
@@ -1224,7 +1346,7 @@ function newsList(){
 }
 function shopSummary(){
   const t=myStat(); const w=S.eq[1]&&ITEMS[S.eq[1]]?ITEMS[S.eq[1]].name:'';
-  return {manor:{...(S.manor||{})},uid:NET.uid,owner:S.owner,shop:S.shop,kao:S.kao,job:S.job,comment:S.comment,money:Math.round(S.money+S.bank-S.debt),
+  return {title:S.title||null,manor:{...(S.manor||{})},uid:NET.uid,owner:S.owner,shop:S.shop,kao:S.kao,job:S.job,comment:S.comment,money:Math.round(S.money+S.bank-S.debt),
     pop:Math.round(S.pop),dig:S.dig,wins:S.wins,soldiers:S.soldiers,guild:S.guild,house:S.house,
     st:{life:t.life,attack:t.attack,defence:t.defence,tech:t.tech},btype:S.btype,weapon:w,
     cases:S.cases.map(c=>c&&has(c.no)&&S.stock[c.no]-((S.fav||{})[c.no]?1:0)>0?{no:c.no,price:c.price,stock:S.stock[c.no]-((S.fav||{})[c.no]?1:0)}:null),day:day(),t:Date.now(),
@@ -1674,7 +1796,7 @@ function myRate(c,rivals){
   const aMe=popF(S.pop)*priceF(c.price/it.price);   // 標準価格とくらべた高い・安い
   const aOther=rivals.reduce((a,r)=>a+popF(r.pop)*priceF(r.price/it.price),0);
   const share=aMe<=0?0:Math.min(1,aMe/(aMe+aOther)*(1+0.25*rivals.length));
-  return (1/it.pop)*demandOf(c.no)*aMe*share*(it.food?2:1)*(it.med?5:1);   // 食べ物は2倍・薬は5倍よく売れる
+  return (1/it.pop)*demandOf(c.no)*aMe*share*(it.food?2:1)*(it.med?5:1)*(isTrend(c.no)?1.5:1);   // 食べ物は2倍・薬は5倍よく売れる
 }
 // 売れたときの人気の変化：手に入りにくい品を安く売ると上がり，どこにでもある品を高く売ると下がる
 function popGain(price,no,rivals){
@@ -1702,7 +1824,8 @@ function simulate(dt){
   { const saf=townVal(T(),'safety',80); const p=dt/60*Math.max(0,70-saf)/70*0.08;
     const shelves=S.cases.filter(c=>c&&has(c.no)&&!ITEMS[c.no].noshow);
     if(shelves.length&&Math.random()<p){
-      if(has(64)){ if(Math.random()<0.05){ add(64,-1); letter('店番ロボット','kaoguide','ビビッ…万引き犯を追い払いましたが，もみ合いで店番ロボットが壊れてしまいました…。'); } }
+      if(Math.random()<petGuardRate()){ /* 相棒が追い払った */ }
+      else if(has(64)){ if(Math.random()<0.05){ add(64,-1); letter('店番ロボット','kaoguide','ビビッ…万引き犯を追い払いましたが，もみ合いで店番ロボットが壊れてしまいました…。'); } }
       else { const c=shelves[Math.floor(Math.random()*shelves.length)]; const k=Math.min(S.stock[c.no]-((S.fav||{})[c.no]?1:0),1+rnd(3)); if(k>0){ add(c.no,-k); S.today.theft=(S.today.theft||0)+k; letter('店員','kaoguide',`万引きにあいました！ ${ITEMS[c.no].name}×${k}が盗まれてしまいました…。街の治安が悪いようです（店番ロボットがいれば防げます）。`); const nm=`【万引き】${S.shop}で${ITEMS[c.no].name}×${k}が盗まれた！ 街の治安の悪化が心配される`; S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m:nm}); newsNet(nm); } }
     } }
   S.cases.forEach((c,idx)=>{
@@ -1727,7 +1850,7 @@ function simulate(dt){
   S.npcs.forEach(n=>{
     n.cases.forEach(nc=>{
       if(!nc||nc.stock<=0) return;
-      const k=Math.min(nc.stock,poisson(saleRate(ITEMS[nc.no],nc.price,n.pop,1)*dt*0.9*(n.mult||1)*dragonX*(ITEMS[nc.no].food?2:1)*(ITEMS[nc.no].med?5:1)*(((T().exposed||{})['npc:'+n.id]||0)>Date.now()?0.75:1)));
+      const k=Math.min(nc.stock,poisson(saleRate(ITEMS[nc.no],nc.price,n.pop,1)*dt*0.9*(n.mult||1)*dragonX*(ITEMS[nc.no].food?2:1)*(ITEMS[nc.no].med?5:1)*(isTrend(nc.no)?1.5:1)*(((T().exposed||{})['npc:'+n.id]||0)>Date.now()?0.75:1)));
       if(k>0){ nc.stock-=k; const g=nc.price*k; const tax = NET.online?0:Math.round(g*taxRateFor('npc:'+n.id)/100); n.money+=g-tax; n.today+=g; if(tax) S.today.npctax=(S.today.npctax||0)+tax; }
     });
   });
@@ -1992,7 +2115,7 @@ function rankTable(limit){
     return `<tr ${r.me?'style="font-weight:bold"':''}>
     <td class="r nw"><b>No.${off+i+1}</b>${off+i<6?im('rank'+(6-(off+i)),'i16'):''}<br>${updown(r,off+i)}<br><b class="red">${(r.point||0).toLocaleString()}</b>点</td>
     <td class="c">${kao(r.kao)}<br>${im((JOBS[r.job]||JOBS['']).img,'','width=20 height=30')}</td>
-    <td>${guildIcon(r.guild)}${r.me?'<span class="span">'+esc(r.shop)+'</span>':(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${r.npc?' <span class="npctag">NPC</span>':''}${r.strong?' <span class="npctag strong">強豪</span>':''}${r.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${r.tyrant?' <span class=\"npctag strong\" style=\"background:#3a1010;border-color:#300;color:#fff\">暴君</span>':''}${((T().exposed||{})[r.key]||0)>Date.now()?' <span class="npctag" style="background:#fdd;border-color:#c33;color:#c33">取締中</span>':''}${L&&L.key===r.key?' <small class="red">[領主]</small>':''} ${winIcons(r.wins)}
+    <td>${guildIcon(r.guild)}${r.me?'<span class="span">'+esc(r.shop)+'</span>':(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${titleBadge(r.title)}${r.npc?' <span class="npctag">NPC</span>':''}${r.strong?' <span class="npctag strong">強豪</span>':''}${r.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${r.tyrant?' <span class=\"npctag strong\" style=\"background:#3a1010;border-color:#300;color:#fff\">暴君</span>':''}${((T().exposed||{})[r.key]||0)>Date.now()?' <span class="npctag" style="background:#fdd;border-color:#c33;color:#c33">取締中</span>':''}${L&&L.key===r.key?' <small class="red">[領主]</small>':''} ${winIcons(r.wins)}
       <br><small>${esc(r.name)}・${(JOBS[r.job]||JOBS['']).name}・${digHtml(r.dig)}${r.soldiers?'・兵'+r.soldiers:''}</small>
       <br><small>人気 ${popStars(r.pop)}</small>
       ${cs.length?`<br><small>${cs.map(c=>ii(c.no)).join('')} ${esc(ITEMS[first.no].name)} ${yen(first.price)}</small>`:''}
@@ -2093,6 +2216,7 @@ SCREENS.town=function(){
   return `
   <div class="c"><big>${esc('商人の街')}</big> の風景 <small>（建物をクリックすると入れます）</small></div>
   ${lordMsg}
+  ${trendHtml()}
   <div class="town" id="town">
     <div class="town-grid">
       ${townCell('競技場','slime',im('house2b','bld'),'mapsignslime')}
@@ -2165,13 +2289,13 @@ SCREENS.main=function(){
   S.cases.forEach((c,i)=>{
     const it=c?ITEMS[c.no]:null;
     rows+=`<tr><td class="c">${i+1}${CASE_BOOST(i)>1?'<br><span class="red">★</span>':''}</td>
-      <td class="nw">${it?iname(c.no):'<span class="note">（空き）</span>'}${CASE_BOOST(i)>1?'<br><small class="red">★特等席・売れ行き2倍</small>':''}</td>
+      <td class="nw">${it?iname(c.no)+(isTrend(c.no)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''):'<span class="note">（空き）</span>'}${CASE_BOOST(i)>1?'<br><small class="red">★特等席・売れ行き2倍</small>':''}</td>
       <td class="r">${it?(S.stock[c.no]||0)+it.scale:'-'}</td>
       <td class="r nw">${it?yen(c.price)+'<br><small>相場'+yen(marketPrice(c.no))+'</small>':'-'}</td>
       <td class="r">${it?(S.today.items[c.no]||0):'-'}</td>
       <td class="nw"><button onclick="editCase(${i})">変更</button></td></tr>`;
   });
-  return `
+  return `${trendHtml()}
   <div class="c"><big>${esc(S.shop)}</big> 店内　<small>店主 ${esc(S.owner)}（${(JOBS[S.job]||JOBS['']).name}・${digHtml(S.dig)}）</small></div>
   <div class="shopview"><div class="shopinner" id="shopinner"></div></div>
   ${talk(S.kao,S.owner,esc(S.comment))}
@@ -2352,6 +2476,8 @@ SCREENS.status=function(){
   <div class="c note">経験値は戦闘（決闘・魔物退治）で手に入ります。能力が高いほど，強化に必要な経験値も増えます。</div>
   <div class="c"><big>装備</big></div>
   <div class="tbl"><table class="t" style="width:100%">${[1,2,3,4].map(slotRow).join('')}</table></div>
+  ${titlesHtml()}
+  ${petsHtml()}
   ${eqSetsHtml()}
   <div class="c"><big>発動中のスキル</big></div>
   <div class="tbl"><table class="t" style="width:100%">${activeSkills().map(a=>`<tr><td class="nw">${a.series?'<span class="red">★</span>':''}<b>${sk(a.k)}</b></td><td><small>${SKILLS[a.k].d}<br><span class="note">${esc(a.src)}</span></small></td></tr>`).join('')||'<tr><td class="c note">スキルのある装備を身につけると発動します</td></tr>'}</table></div>
@@ -2448,7 +2574,7 @@ SCREENS.stock=function(){
     const it=ITEMS[n];
     const eq=it.soubi? (S.eq[it.soubi]===n?'<small class="blue">装備中</small>':`<button onclick="equip(${n})">装備</button>`):'';
     const tag=it.fromMon?'<span class="npctag">素材</span>':it.island?'<span class="npctag">島</span>':it.food?'<span class="npctag">食</span>':it.eventOnly?'<span class="npctag strong">レア</span>':'';
-    return `<tr><td>${(S.fav||{})[n]?'<span class="red">★</span>':''}${iname(n)}${enhLv(n)?` <b class="red">+${enhLv(n)}</b>`:''} ${tag}${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(itemStat(n,enhLv(n)))}</small>`:''}${it.skill?`<br><small>${sk(it.skill)}</small>`:''}<br><small class="note">${it.type}・維持費 ${upkeepStr(it)}</small>
+    return `<tr><td>${(S.fav||{})[n]?'<span class="red">★</span>':''}${iname(n)}${isTrend(n)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''}${enhLv(n)?` <b class="red">+${enhLv(n)}</b>`:''} ${tag}${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(itemStat(n,enhLv(n)))}</small>`:''}${it.skill?`<br><small>${sk(it.skill)}</small>`:''}<br><small class="note">${it.type}・維持費 ${upkeepStr(it)}</small>
       <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${it.uses.length?`<button onclick="go('use',{no:${n}})">使う</button>`:''}${eq}${canDisplay(n)?`<button onclick="quickDisplay(${n})">${S.cases.some(c=>c&&c.no===n)?'棚を変更':'棚に並べる'}</button>`:''}<button onclick="toggleFav(${n})">${(S.fav||{})[n]?'★お気に入り中':'☆お気に入り'}</button><button onclick="discard(${n})">捨てる</button></div></td><td class="r nw">${S.stock[n]}${it.scale}</td></tr>`;
   }).join('');
   return `<div class="c"><big>倉庫</big> <small>（${owned.length}種類）</small></div>${tabs}${tools}
@@ -2772,6 +2898,7 @@ function finishBattle(){
     res.push(`${im('ability-no-0','i16')}経験値を <b>${e}</b> 手に入れた（いま${S.bexp}）。<a onclick="go('status')">ステータスで能力を強化できます</a>`);
     if(b.mon && Math.random()*100<b.mon.dropP+(skillFx().drop||0)+(evActive('meteor')?20:0)){ add(b.mon.drop,b.mon.dropN); res.push(`${iname(b.mon.drop)}×${b.mon.dropN}を手に入れた！`); }
     S.today.gpx=(S.today.gpx||0)+(b.foe.top?5:1);
+    if(b.mon&&!b.foe.top){ const tm=petTame(b.mon); if(tm) res.push(tm); }
     if(b.mon){ const mi=b.foe.top? 146+TOP_MONS.indexOf(b.mon) : 101+MONS.indexOf(b.mon); if(ITEMS[mi]){ const fx1=skillFx(); let k=(b.foe.top?1:1+rnd(2))+(fx1.mat||0); if(fx1.hunter) k*=2; if(evActive('meteor')) k*=2; add(mi,k); res.push(`はぎ取り！ ${iname(mi)}×${k}を手に入れた`); } }
     if(b.mon&&!b.foe.top&&b.mon.prize){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0))); S.money+=pz; addIncome(Math.round(pz*0.1)); res.push(`賞金 ${yen(pz)} を手に入れた`); }
     if(b.foe.top){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0))); S.money+=pz; addIncome(Math.round(pz*0.1)); S.pop=clamp(S.pop+3,0,100); res.push(`<b class="red">最上級の魔物を討ち取った！ 賞金${yen(Math.round(b.mon.prize*(1+(skillFx().prize||0))))}を得た！ 人気+3</b>`); news(`${S.owner}（${S.shop}）が最上級の魔物「${b.mon.name}」を討ち取った！`); }
@@ -2942,11 +3069,11 @@ SCREENS.market=function(){
   const tf=sub.type||0;
   const nos=ITEMLIST.filter(it=>it.plus>0&&it.price>0&&(!tf||typeIdx(it.type)===tf)).map(it=>it.no);
   const tabs=`<div class="tabs">${TYPES.map((t,i)=>`<span class="${tf===i?'on':''}" onclick="sub.type=${i};render()">${i?im('item-type'+i,'i16'):''}${t}</span>`).join('')}</div>`;
-  return `<div class="c"><big>市場</big></div>
+  return `<div class="c"><big>市場</big></div>${trendHtml()}
   ${talk('kaoguide','市場の案内係','市場では標準価格で商品を仕入れられます。入荷は時間とともに少しずつ。仕入れには <b>持ち時間 20分＋1個につき20秒</b> かかります。'+(myDisc()?`<br>${myDisc()?'いまは':''} <b>${myDisc()}%引き</b> でお求めいただけます（爵位・ギルドの共同仕入れ）。`:''))}
   ${tabs}
   <div class="tbl"><table class="t"><tr><th>商品</th><th>価格</th><th>在庫</th><th>所持</th><th>仕入</th></tr>
-  ${nos.map(n=>{ const it=ITEMS[n], st=S.market[n]||0; return `<tr><td class="nm">${iname(n)}<br><small>${esc(it.info)}</small>${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}<br><small class="note">維持費 ${upkeepStr(it)}</small></td><td class="r nw">${yen(it.price)}</td><td class="r">${st}</td><td class="r">${S.stock[n]||0}</td>
+  ${nos.map(n=>{ const it=ITEMS[n], st=S.market[n]||0; return `<tr><td class="nm">${iname(n)}${isTrend(n)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''}<br><small>${esc(it.info)}</small>${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}<br><small class="note">維持費 ${upkeepStr(it)}</small></td><td class="r nw">${yen(it.price)}</td><td class="r">${st}</td><td class="r">${S.stock[n]||0}</td>
      <td class="c">${st?`<input type="number" id="mq${n}" value="1" min="1" max="${st}" style="width:52px"><button onclick="buyMarket(${n})">買う</button>`:'<small>品切れ</small>'}</td></tr>`; }).join('')||'<tr><td colspan=5 class="c">この種類は市場に入荷しません</td></tr>'}
   </table></div>
   <div class="c note">原料や上級の装備は市場に入荷しません。地図や本を使って自分で調達・製作するか，<a onclick="go('port')">港</a>から船で島へ探索に行きましょう。</div>`;
@@ -2966,7 +3093,7 @@ SCREENS.street=function(){
     if(!p) return `<p class="c">お店が見つかりません。<a onclick="go('street')">戻る</a></p>`;
     const pr=ranking(); const pi=pr.findIndex(r=>r.key===sub.uid); const pe=pr[pi]||{};
     const gi=guildInfo(p.guild); const st=p.st||{life:0,attack:0,defence:0,tech:0};
-    return `<div class="c"><big>${esc(p.shop)}</big>　<small class="blue">プレイヤーのお店</small></div>
+    return `${trendHtml()}<div class="c"><big>${esc(p.shop)}</big>　<small class="blue">プレイヤーのお店</small></div>
     ${talk(p.kao||1,p.owner,`${esc(p.comment||'いらっしゃいませ！')}<br><small>${ago(p.t||0)}</small>`)}
     <div class="c"><big>店主の情報</big></div>
     <div class="tbl"><table class="t" style="width:100%">
@@ -2981,24 +3108,24 @@ SCREENS.street=function(){
     </table></div>
     <div class="c"><big>陳列中の商品</big></div>
     <div class="tbl"><table class="t"><tr><th>商品</th><th>価格</th><th>在庫</th><th></th></tr>
-    ${(p.cases||[]).map((c,i)=>c&&c.stock>0&&ITEMS[c.no]?`<tr><td class="nw">${iname(c.no)}</td><td class="r nw">${yen(c.price)}<br><small>標準${yen(ITEMS[c.no].price)}</small></td><td class="r">${c.stock}</td><td class="nw"><input type="number" id="pq${i}" value="1" min="1" max="${c.stock}" style="width:52px"><button onclick="buyPlayer(${R(sub.uid)},${i})">買う</button></td></tr>`:'').join('')||'<tr><td colspan=4 class="c">陳列されている商品はありません</td></tr>'}
+    ${(p.cases||[]).map((c,i)=>c&&c.stock>0&&ITEMS[c.no]?`<tr><td class="nw">${iname(c.no)}${isTrend(c.no)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''}</td><td class="r nw">${yen(c.price)}<br><small>標準${yen(ITEMS[c.no].price)}</small></td><td class="r">${c.stock}</td><td class="nw"><input type="number" id="pq${i}" value="1" min="1" max="${c.stock}" style="width:52px"><button onclick="buyPlayer(${R(sub.uid)},${i})">買う</button></td></tr>`:'').join('')||'<tr><td colspan=4 class="c">陳列されている商品はありません</td></tr>'}
     </table></div>
     <div class="c note">代金はすぐにお店へ届けられます。</div>
     <div class="c"><a onclick="go('street')">商店通りへ戻る</a></div>`;
   }
   if(sub.id!=null){
     const n=S.npcs[sub.id];
-    return `<div class="c"><big>${esc(n.shop)}</big></div>
+    return `${trendHtml()}<div class="c"><big>${esc(n.shop)}</big></div>
     ${talk(n.kao==='riki'?'kaoriki':n.kao==='niku'?'kaoniku':n.kao,n.owner,`${n.tyrant?esc(n.comment)+' <span class=\"npctag strong\" style=\"background:#3a1010;border-color:#300;color:#fff\">暴君</span>':n.warrior?esc(n.comment)+' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':n.strong?esc(n.comment)+' <span class="npctag strong">強豪</span>':`いらっしゃいませ！${(JOBS[n.job]||{}).name}の${esc(n.shop)}へようこそ。`}<br><small>人気 ${popStars(n.pop)}　爵位 ${digHtml(n.dig)}</small>`)}
     <div class="tbl"><table class="t"><tr><th>商品</th><th>価格</th><th>在庫</th><th></th></tr>
-    ${n.cases.map((c,i)=>c&&c.stock>0?`<tr><td class="nw">${iname(c.no)}</td><td class="r nw">${yen(c.price)}<br><small>標準${yen(ITEMS[c.no].price)}</small></td><td class="r">${c.stock}</td><td class="nw"><input type="number" id="sq${i}" value="1" min="1" max="${c.stock}" style="width:52px"><button onclick="buyNpc(${n.id},${i})">買う</button></td></tr>`:'').join('')}
+    ${n.cases.map((c,i)=>c&&c.stock>0?`<tr><td class="nw">${iname(c.no)}${isTrend(c.no)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''}</td><td class="r nw">${yen(c.price)}<br><small>標準${yen(ITEMS[c.no].price)}</small></td><td class="r">${c.stock}</td><td class="nw"><input type="number" id="sq${i}" value="1" min="1" max="${c.stock}" style="width:52px"><button onclick="buyNpc(${n.id},${i})">買う</button></td></tr>`:'').join('')}
     </table></div>
     <div class="c"><a onclick="go('street')">商店通りへ戻る</a></div>`;
   }
   const ps=NET.online?playerShops().sort((a,b)=>b.t-a.t):[];
   const pl=ps.map(p=>{ const d=NET.shops[p.uid]||{}; return `<tr><td>${kao(p.kao)}</td><td><a onclick="go('street',{uid:REFS[${R(p.uid)}]})">${esc(p.shop)}</a><br><small>${esc(p.name)}・${ago(p.t)}</small></td><td>${im((JOBS[p.job]||JOBS['']).img,'','width=20 height=30')}</td><td class="nw"><small>${Math.round(p.pop)}%</small></td><td>${(d.cases||[]).filter(c=>c&&c.stock>0&&ITEMS[c.no]).map(c=>ii(c.no)).join('')}</td></tr>`; }).join('');
   if(sub.survey) return marketSurvey();
-  return `<div class="c"><big>商店通り</big></div>
+  return `<div class="c"><big>商店通り</big></div>${trendHtml()}
   <div class="c"><button onclick="go('street',{survey:1})">相場を調査する</button></div>
   ${NET.online?`<div class="c"><big>プレイヤーのお店</big></div><div class="tbl"><table class="t"><tr><th></th><th>店名</th><th>職業</th><th>人気</th><th>商品</th></tr>${pl||'<tr><td colspan=5 class="c">まだほかのプレイヤーはいません</td></tr>'}</table></div><div class="c"><big>街の商人</big></div>`:''}
   <div class="tbl"><table class="t"><tr><th></th><th>店名</th><th>職業</th><th>人気</th><th>主な商品</th></tr>
@@ -3329,6 +3456,8 @@ const GUIDE=[
  ['船で島へ探索',`市場で買える本「<b>造船術</b>」で船を造り，【取引】→[<b>港</b>]から島へ探索に出発できます。現実の時間で1〜6時間たつと戻ってきて，<b>島でしか手に入らない品</b>（真珠・赤珊瑚・南国の果実・海竜の鱗・人魚の涙など）を持ち帰ります。<br>島の品からは，妙薬ネクター・真珠の首飾り・人魚のティアラ・海竜の剣と鎧などを，今ある本で作れます。遠い海ほど良い品がとれますが，難破の危険もあります。`],
  ['街のイベント',`<b>1日1回ほど</b>，次のイベントのどれかがランダムにやって来ます（同じものは続けて来にくい）。予定はランキング画面の上に出ます。<br>・<b>山賊バルバロス襲来</b>（21時〜1時間）：みんなで撃退するレイドバトル<br>・<b>幸運のドラゴン来訪</b>（19時〜3時間）：開拓+20・品が3倍売れる<br>・<b>流星群の夜</b>（22時〜2時間）：戦闘の経験値2倍・はぎ取り素材2倍<br>・<b>旅の大商隊</b>（12時〜2時間）：市場が品であふれ，仕入れ30%引き<br>・<b>収穫祭</b>（18時〜3時間）：人気+5・荘園の収穫がもう1回・売れ行き1.5倍<br>【情報】→[爵位名鑑]から，<b>爵位ポイントを使って好きなイベントを好きな時間に呼ぶ</b>こともできます（30〜50pt）。`],
  ['幸運のドラゴン来訪',`街のイベントとして<b>日本時間の19時から3時間</b>，幸運のドラゴンが街にやって来ます（予定はランキング画面の上に出ます）。<br>来るとすぐに<b>街の開拓が+20</b>され，来訪中の3時間は<b>プレイヤーもNPCも，どの店の品も3倍売れます</b>。棚に品をたっぷり並べて待ちましょう！`],
+ ['毎日の楽しみ（流行・ログインボーナス・称号）',`・<b>流行</b>：毎日0時に，よく売れる品が3つ決まります（1.5倍売れる）。トップと新聞で発表されます。<br>・<b>ログインボーナス</b>：毎日はじめて開くとプレゼント。連続7日目は修行キットとギフト券×5！<br>・<b>称号</b>：いろいろな実績で称号が手に入り，[ステータス]で好きな称号を選ぶと，ランキングの名前の横に表示されます。`],
+ ['相棒とギルド討伐戦',`・<b>相棒</b>：魔物を倒すと，まれに仲間になります（3匹まで）。連れている相棒は「戦闘で手伝う（全能力アップ）」か「店番をする（万引きを防ぐ）」を選べます。<br>・<b>ギルド討伐戦</b>：毎日，ギルドごとに巨大な魔物を倒す速さを競います（[ギルド]の「⚔ 討伐戦」）。上位3ギルドには翌日0時にごほうび。`],
  ['NPCからの決闘',`ときどき（3〜6時間ごと），NPCの商人が自分から決闘を挑んできます（豪将リキーヤとにくべんき藩は除く）。<br>勝つと人気+2と賞金，負けると人気−1。結果は新聞と手紙で知らされます。能力と装備を鍛えておきましょう。`],
  ['暴君「にくべんき藩」の襲撃',`街で最強の武力をもつNPC「にくべんき藩」が，ときどきお店（プレイヤーやNPC）を襲います。襲う日時と店は<b>前もって予告</b>され，ランキング画面の上と新聞に出ます。<br>狙われたら[傭兵所]で<b>兵士を雇って守りを固めましょう</b>（防衛力＝兵士1人10＋能力）。撃退できないと人気が大きく下がります。`],
  ['ギルド',`仲間と一緒にギルドに入ると，人気や売れ行きにボーナスがつきます。<b>ギルドポイント（GP）</b>を貯めて，広告・看板商品・共同仕入れ・クエストなどに使えます。ギルドを作るには男爵（爵位ポイント3）以上が必要です。`],
@@ -3357,6 +3486,7 @@ SCREENS.guide=function(){
    ============================================================ */
 SCREENS.log=function(){
   return `<div class="c"><big>新聞</big>${NET.online?' <small class="blue">（街じゅうの出来事）</small>':''}</div>
+  ${S?trendHtml():''}
   ${resultsHtml(true)?`<div style="text-align:left;margin:6px 0"><big>決算の表彰</big></div>${resultsHtml(true)}`:''}
   <div style="text-align:left;margin:6px 0"><big>出来事</big></div>
   <div class="tbl"><table class="t">${newsList().map(n=>`<tr><td class="nw"><small>${newsTime(n)}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')||'<tr><td>まだ記事はありません</td></tr>'}</table></div>`;
@@ -3720,7 +3850,8 @@ function guildRows(){
 function guildOnline(){
   const my=S.guild&&NET.guilds[S.guild]?NET.guilds[S.guild]:null, myId=my?S.guild:null;
   const leader=my&&my.leader===NET.uid, manage=my&&canManage(my);
-  const tabs=`<div class="tabs">${['ギルド一覧',my?'わがギルド':null,my?'ギルド掲示板':null,manage||(my&&canTreasury(my))?'運営室':null,!my?'ギルド結成':null,my?'ギルド倉庫':null,my?'ギルドクエスト':null].map((x,i)=>x?`<span class="${gTab===i?'on':''}" onclick="gTab=${i};render()">${x}</span>`:'').join('')}</div>`;
+  const tabs=`<div class="tabs">${['ギルド一覧',my?'わがギルド':null,my?'ギルド掲示板':null,manage||(my&&canTreasury(my))?'運営室':null,!my?'ギルド結成':null,my?'ギルド倉庫':null,my?'ギルドクエスト':null,my?'⚔ 討伐戦':null].map((x,i)=>x?`<span class="${gTab===i?'on':''}" onclick="gTab=${i};render()">${x}</span>`:'').join('')}</div>`;
+  if(my && gTab===7){ return `<div class="c"><big>ギルド</big></div>${tabs}${gbossHtml(my)}`; }
   let h=`<div class="c"><big>ギルド</big></div>`;
   h+=talk('kaoguild','ギルド受付',my?`あなたは「${esc(my.name)}」（Lv${guildLv(my.exp)}）の一員です。会費は売上の${my.fee}%で，ギルド金庫に貯まります。レベルが上がるほど，人気と売れ行きのボーナスが大きくなります。`:'ギルドに入ると，売上の一部を会費としてギルド金庫に納めます。そのかわり人気と売れ行きにボーナスがつき，仲間と協力できますよ。');
   if(!my && gTab!==0 && gTab!==4) gTab=0;
@@ -4123,6 +4254,7 @@ async function checkDragonRaces(){
 function applyDrRes(m){
   const g=(S.dragons||[]).find(x=>x.id===m.did); const K=DR_KIND[m.race]||{name:'レース'};
   if(m.prize){ S.money+=m.prize; addIncome(Math.round(m.prize*0.1)); }   // 点数への反映は1割
+  if(m.place===1) S.drWins=(S.drWins||0)+1;
   if(g){ g.runs=(g.runs||0)+1; if(m.place===1) g.wins=(g.wins||0)+1; g.earn=(g.earn||0)+(m.prize||0); g.cond=Math.max(0,g.cond-(m.place<=3?15:20)); }
   letter('竜舎の親方','kaoslime3',`${periodLabel(m.day)}の${K.name}で，${m.dname}は${m.place}着でした。${m.prize?`賞金${yen(m.prize)}を獲得！`:''}`);
 }
@@ -4433,7 +4565,7 @@ function checkVoyages(){
     const V=VOYAGES.find(x=>x.id===v.dest); changed=true;
     const SX=SHIPS[v.ship]||{cargo:1,safe:0};
     if(V&&Math.random()<V.lose*(1-SX.safe)){ letter('港の船頭','kaodwarf',`${V.name}へ向かった${ITEMS[v.ship].name}が嵐で難破してしまった…。船と積み荷は戻らんかった。`); return false; }
-    add(v.ship,1);
+    add(v.ship,1); S.voyCount=(S.voyCount||0)+1;
     const got=[];
     (V?V.loot:[]).forEach(([no,a,b,p])=>{ if(Math.random()*100<p){ const k=Math.max(1,Math.round((a+rnd(b-a+1))*(1+(fx.voyage||0))*SX.cargo)); add(no,k); got.push(`${ITEMS[no].name}×${k}`); } });
     letter('港の船頭','kaodwarf',`${ITEMS[v.ship].name}が${V?V.name:''}から帰ってきたぞい！ 持ち帰った品：${got.join('，')||'なし'}`);
@@ -4809,6 +4941,7 @@ function tick(){
   if(saveTick%60===45) checkMyJobs();
   if(saveTick%20===10) checkDragonRaces();
   if(saveTick%15===5) checkRaid();
+  if(saveTick%30===11){ checkTitles(); checkLoginBonus(); if(NET.online){ checkTrendNews(); checkGbossRewards(); } }
   if(saveTick%120===40) recordDevice();
   if(saveTick%30===17&&NET.online) softRender();   // 「いま遊んでいる人」の数をこまめに更新
   if(saveTick%10===3) checkVoyages();
