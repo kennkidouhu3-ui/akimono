@@ -1018,19 +1018,22 @@ async function checkTrendNews(){
 }
 // ----- 5. 相棒（魔物を仲間に） -----
 function petOf(){ const p=(S.pets||[])[S.petActive]; return p||null; }
-function petStatBonus(){ const p=petOf(); return p&&S.petMode!=='guard'?0.05*p.tier:0; }
-function petGuardRate(){ const p=petOf(); return p&&S.petMode==='guard'?[0,0.5,0.7,0.9][p.tier]:0; }
-function petTame(mon){
-  if(!mon) return '';
-  const mi=MONS.indexOf(mon); if(mi<0) return '';
-  if((S.pets||[]).length>=3||Math.random()>=0.04) return '';
-  S.pets=(S.pets||[]).concat([{mi,tier:Math.floor(mi/15)+1,name:mon.name}]); if(S.petActive==null) S.petActive=0;
+const PET_BATTLE=[0,0.05,0.10,0.15,0.25], PET_GUARD=[0,0.5,0.7,0.9,0.97], PET_TIER=['','低','中','上','最上級'];
+function petStatBonus(){ const p=petOf(); return p&&S.petMode!=='guard'?PET_BATTLE[p.tier]:0; }
+function petGuardRate(){ const p=petOf(); return p&&S.petMode==='guard'?PET_GUARD[p.tier]:0; }
+function petMon(p){ return p.top?TOP_MONS[p.ti]:MONS[p.mi]; }
+function petTame(mon,top){
+  if(!mon||(S.pets||[]).length>=3) return '';
+  let pet;
+  if(top){ const ti=TOP_MONS.indexOf(mon); if(ti<0||Math.random()>=0.005) return ''; pet={top:1,ti,tier:4,name:mon.name}; }   // 最上級は0.5%
+  else { const mi=MONS.indexOf(mon); if(mi<0||Math.random()>=0.04) return ''; pet={mi,tier:Math.floor(mi/15)+1,name:mon.name}; }
+  S.pets=(S.pets||[]).concat([pet]); if(S.petActive==null) S.petActive=0;
   return `<b class="blue">${esc(mon.name)}が起き上がり，仲間になりたそうにこちらを見ている……相棒になった！</b>`;
 }
 function petsHtml(){
   const ps=S.pets||[];
   return `<div class="c"><big>相棒</big> <small>（${ps.length}/3）</small></div>
-  <div class="tbl"><table class="t" style="width:100%">${ps.map((p,i)=>{ const m=MONS[p.mi]; return `<tr><td style="width:44px">${im('no-'+m.img,'','width=36 height=46')}</td><td><b>${esc(p.name)}</b> ${S.petActive===i?'<span class="blue">（連れている）</span>':''}<br><small>${['','低','中','上'][p.tier]}レベルの魔物・戦闘：全能力+${5*p.tier}%／店番：万引きを${[0,50,70,90][p.tier]}%防ぐ</small></td><td class="nw">${S.petActive===i?'':`<button onclick="S.petActive=${i};save();render()">連れる</button><br>`}<button onclick="petRelease(${i})">逃がす</button></td></tr>`; }).join('')||'<tr><td class="c note">魔物を倒すと，まれに仲間になります</td></tr>'}</table></div>
+  <div class="tbl"><table class="t" style="width:100%">${ps.map((p,i)=>{ const m=petMon(p); return `<tr><td style="width:44px">${im('no-'+m.img,'','width=36 height=46'+(m.fx?` style="${m.fx}"`:''))}</td><td><b>${esc(p.name)}</b> ${S.petActive===i?'<span class="blue">（連れている）</span>':''}<br><small>${p.tier===4?'<b class="red">最上級の魔物</b>':PET_TIER[p.tier]+'レベルの魔物'}・戦闘：全能力+${Math.round(PET_BATTLE[p.tier]*100)}%／店番：万引きを${Math.round(PET_GUARD[p.tier]*100)}%防ぐ</small></td><td class="nw">${S.petActive===i?'':`<button onclick="S.petActive=${i};save();render()">連れる</button><br>`}<button onclick="petRelease(${i})">逃がす</button></td></tr>`; }).join('')||'<tr><td class="c note">魔物を倒すと，まれに仲間になります</td></tr>'}</table></div>
   ${ps.length?`<div class="c">相棒の役目：<button ${S.petMode!=='guard'?'disabled':''} onclick="S.petMode='battle';save();render()">⚔ 戦闘で手伝う</button> <button ${S.petMode==='guard'?'disabled':''} onclick="S.petMode='guard';save();render()">🏪 店番をする</button></div>`:''}`;
 }
 function petRelease(i){ confirmBox('この相棒を逃がしますか？',()=>{ S.pets.splice(i,1); if(S.petActive>=S.pets.length) S.petActive=S.pets.length?0:null; save(); render(); }); }
@@ -2898,7 +2901,7 @@ function finishBattle(){
     res.push(`${im('ability-no-0','i16')}経験値を <b>${e}</b> 手に入れた（いま${S.bexp}）。<a onclick="go('status')">ステータスで能力を強化できます</a>`);
     if(b.mon && Math.random()*100<b.mon.dropP+(skillFx().drop||0)+(evActive('meteor')?20:0)){ add(b.mon.drop,b.mon.dropN); res.push(`${iname(b.mon.drop)}×${b.mon.dropN}を手に入れた！`); }
     S.today.gpx=(S.today.gpx||0)+(b.foe.top?5:1);
-    if(b.mon&&!b.foe.top){ const tm=petTame(b.mon); if(tm) res.push(tm); }
+    if(b.mon){ const tm=petTame(b.mon,!!b.foe.top); if(tm) res.push(tm); }
     if(b.mon){ const mi=b.foe.top? 146+TOP_MONS.indexOf(b.mon) : 101+MONS.indexOf(b.mon); if(ITEMS[mi]){ const fx1=skillFx(); let k=(b.foe.top?1:1+rnd(2))+(fx1.mat||0); if(fx1.hunter) k*=2; if(evActive('meteor')) k*=2; add(mi,k); res.push(`はぎ取り！ ${iname(mi)}×${k}を手に入れた`); } }
     if(b.mon&&!b.foe.top&&b.mon.prize){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0))); S.money+=pz; addIncome(Math.round(pz*0.1)); res.push(`賞金 ${yen(pz)} を手に入れた`); }
     if(b.foe.top){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0))); S.money+=pz; addIncome(Math.round(pz*0.1)); S.pop=clamp(S.pop+3,0,100); res.push(`<b class="red">最上級の魔物を討ち取った！ 賞金${yen(Math.round(b.mon.prize*(1+(skillFx().prize||0))))}を得た！ 人気+3</b>`); news(`${S.owner}（${S.shop}）が最上級の魔物「${b.mon.name}」を討ち取った！`); }
@@ -3457,7 +3460,7 @@ const GUIDE=[
  ['街のイベント',`<b>1日1回ほど</b>，次のイベントのどれかがランダムにやって来ます（同じものは続けて来にくい）。予定はランキング画面の上に出ます。<br>・<b>山賊バルバロス襲来</b>（21時〜1時間）：みんなで撃退するレイドバトル<br>・<b>幸運のドラゴン来訪</b>（19時〜3時間）：開拓+20・品が3倍売れる<br>・<b>流星群の夜</b>（22時〜2時間）：戦闘の経験値2倍・はぎ取り素材2倍<br>・<b>旅の大商隊</b>（12時〜2時間）：市場が品であふれ，仕入れ30%引き<br>・<b>収穫祭</b>（18時〜3時間）：人気+5・荘園の収穫がもう1回・売れ行き1.5倍<br>【情報】→[爵位名鑑]から，<b>爵位ポイントを使って好きなイベントを好きな時間に呼ぶ</b>こともできます（30〜50pt）。`],
  ['幸運のドラゴン来訪',`街のイベントとして<b>日本時間の19時から3時間</b>，幸運のドラゴンが街にやって来ます（予定はランキング画面の上に出ます）。<br>来るとすぐに<b>街の開拓が+20</b>され，来訪中の3時間は<b>プレイヤーもNPCも，どの店の品も3倍売れます</b>。棚に品をたっぷり並べて待ちましょう！`],
  ['毎日の楽しみ（流行・ログインボーナス・称号）',`・<b>流行</b>：毎日0時に，よく売れる品が3つ決まります（1.5倍売れる）。トップと新聞で発表されます。<br>・<b>ログインボーナス</b>：毎日はじめて開くとプレゼント。連続7日目は修行キットとギフト券×5！<br>・<b>称号</b>：いろいろな実績で称号が手に入り，[ステータス]で好きな称号を選ぶと，ランキングの名前の横に表示されます。`],
- ['相棒とギルド討伐戦',`・<b>相棒</b>：魔物を倒すと，まれに仲間になります（3匹まで）。連れている相棒は「戦闘で手伝う（全能力アップ）」か「店番をする（万引きを防ぐ）」を選べます。<br>・<b>ギルド討伐戦</b>：毎日，ギルドごとに巨大な魔物を倒す速さを競います（[ギルド]の「⚔ 討伐戦」）。上位3ギルドには翌日0時にごほうび。`],
+ ['相棒とギルド討伐戦',`・<b>相棒</b>：魔物を倒すと，まれに仲間になります（3匹まで。最上級の魔物はごくまれ）。連れている相棒は「戦闘で手伝う（全能力アップ）」か「店番をする（万引きを防ぐ）」を選べます。<br>・<b>ギルド討伐戦</b>：毎日，ギルドごとに巨大な魔物を倒す速さを競います（[ギルド]の「⚔ 討伐戦」）。上位3ギルドには翌日0時にごほうび。`],
  ['NPCからの決闘',`ときどき（3〜6時間ごと），NPCの商人が自分から決闘を挑んできます（豪将リキーヤとにくべんき藩は除く）。<br>勝つと人気+2と賞金，負けると人気−1。結果は新聞と手紙で知らされます。能力と装備を鍛えておきましょう。`],
  ['暴君「にくべんき藩」の襲撃',`街で最強の武力をもつNPC「にくべんき藩」が，ときどきお店（プレイヤーやNPC）を襲います。襲う日時と店は<b>前もって予告</b>され，ランキング画面の上と新聞に出ます。<br>狙われたら[傭兵所]で<b>兵士を雇って守りを固めましょう</b>（防衛力＝兵士1人10＋能力）。撃退できないと人気が大きく下がります。`],
  ['ギルド',`仲間と一緒にギルドに入ると，人気や売れ行きにボーナスがつきます。<b>ギルドポイント（GP）</b>を貯めて，広告・看板商品・共同仕入れ・クエストなどに使えます。ギルドを作るには男爵（爵位ポイント3）以上が必要です。`],
