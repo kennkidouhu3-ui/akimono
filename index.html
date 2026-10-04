@@ -1962,6 +1962,14 @@ function rankPager(total,per){
   const pages=Math.ceil(total/per); if(pages<=1) return '';
   return `<div class="tabs">${Array.from({length:pages},(_,i)=>`<span class="${RANK_PAGE===i?'on':''}" onclick="RANK_PAGE=${i};render()">${i*per+1}〜${Math.min(total,(i+1)*per)}位</span>`).join('')}</div>`;
 }
+function dukeBox(r){
+  const dk=T().duke; if(!dk||!dk.msg) return '';
+  const isDuke=(dk.key&&dk.key===r.key)||(!dk.key&&dk.name===r.name);
+  if(!isDuke) return '';
+  return `<div style="margin:6px 0 2px;border:2px solid #b8860b;border-radius:8px;background:linear-gradient(#fffdf2,#fff3c8);box-shadow:0 1px 3px rgba(120,90,20,.25);padding:6px 8px;text-align:left">
+    <div style="display:flex;align-items:center;gap:4px;border-bottom:1px solid #e0c060;padding-bottom:3px;margin-bottom:4px">${im('dig7','i16')}<b style="color:#8a5a00;letter-spacing:.1em">大公のお言葉</b></div>
+    <div style="font-size:14px;line-height:1.7;color:#5a3d00">${esc(dk.msg).replace(/\n/g,'<br>')}</div></div>`;
+}
 function rankTable(limit){
   const PER=5, all=ranking(); const pages=Math.max(1,Math.ceil(all.length/PER)); if(RANK_PAGE>=pages) RANK_PAGE=0;
   const off=RANK_PAGE*PER; const rk=all.slice(off,off+PER);
@@ -1985,6 +1993,7 @@ function rankTable(limit){
       <br><small>人気 ${popStars(r.pop)}</small>
       ${cs.length?`<br><small>${cs.map(c=>ii(c.no)).join('')} ${esc(ITEMS[first.no].name)} ${yen(first.price)}</small>`:''}
       ${r.comment?`<br><small>「${esc(r.comment)}」</small>`:''}
+      ${dukeBox(r)}
       <br><small>今期売上 <b>${yen(r.sale||0)}</b>　資金 <b>${yen(r.money)}</b>　熟練 ${Math.floor((r.exps||0)/10)}%</small>
       ${r.st?`<br><small>${expd(r)}</small>`:''}
       ${r.t&&!r.me&&!String(r.key).startsWith('npc:')?`<br><small class="note">${r.idle?'<span class=red>休業中</span>・':''}${ago(r.t)}</small>`:''}</td></tr>`; }).join('')}
@@ -1997,7 +2006,17 @@ function resultsHtml(left){
   if(left) return `<div class="flash" style="text-align:left"><b>${periodLabel(r.d)}の表彰</b><table style="width:100%;border-collapse:collapse;margin-top:4px">${r.top.map((x,i)=>`<tr><td style="width:2.6em;vertical-align:top;white-space:nowrap">${md[i]}</td><td style="text-align:left">${esc(x.shop)}${x.npc?' <span class="npctag">NPC</span>':''}<br><small>${(x.point||0).toLocaleString()}点・${pz[i]}</small></td></tr>`).join('')}</table></div>`;
   return `<div class="flash" style="text-align:center"><b>${periodLabel(r.d)}の表彰</b><br>${r.top.map((x,i)=>`${md[i]} ${esc(x.shop)}${x.npc?' <span class="npctag">NPC</span>':''} <small>${(x.point||0).toLocaleString()}点・${pz[i]}</small>`).join('<br>')}</div>`;
 }
-function noticeHtml(){ const n=T().notice, dk=T().duke; const bf=dragonHtml()+balForecastHtml()+eventHtml(); const dh=dk&&dk.msg?`<div class="flash" style="border-color:#b8860b;background:#fffbe6">${im('dig7','i16')}<b>大公 ${esc(dk.name)}</b>のお言葉：${esc(dk.msg)}</div>`:''; return bf+dh+(n?`<div class="flash" style="border-color:#d0402a;background:#fff4ee"><b>お知らせ</b>：${esc(n).replace(/\n/g,'<br>')}</div>`:''); }
+// 領主の顔（名前や顔を変えたらすぐ反映）
+function lordKao(L){ if(!L) return null; if(L.key==='bandit') return 'kaobal'; if(S&&L.key===myKey()) return S.kao; const s=(NET.shops||{})[L.key]; if(s&&s.kao!=null) return s.kao; if(String(L.key).startsWith('npc:')){ const d=NPCDEF[+String(L.key).slice(4)]; return d?d.kao:null; } return L.kao||null; }
+function lordName(L){ if(!L) return ''; if(S&&L.key===myKey()) return S.owner; const s=(NET.shops||{})[L.key]; return s&&s.owner?s.owner:L.name; }
+function lordMsgHtml(){
+  const L=T().lord, m=T().msg; if(!L||!m) return '';
+  const k=lordKao(L);
+  return `<div class="flash" style="display:flex;gap:10px;align-items:flex-start;text-align:left;border-color:#7a5a20;background:#fff8e8">
+    <div style="flex:0 0 auto;text-align:center">${k!=null?kao(k):''}<br><small class="red">領主</small></div>
+    <div style="flex:1"><b>領主 ${esc(lordName(L))}</b> より告知<br>${esc(m).replace(/\n/g,'<br>')}</div></div>`;
+}
+function noticeHtml(){ const n=T().notice; const bf=dragonHtml()+balForecastHtml()+eventHtml(); return bf+(n?`<div class="flash" style="border-color:#d0402a;background:#fff4ee"><b>お知らせ</b>：${esc(n).replace(/\n/g,'<br>')}</div>`:''); }
 function ago(t){ const s=(Date.now()-t)/1000; if(s<120) return '営業中'; if(s<3600) return Math.round(s/60)+'分前に営業'; if(s<86400) return Math.round(s/3600)+'時間前に営業'; return Math.round(s/86400)+'日前に営業'; }
 function openShop(k){ const key=REFS[k]; if(key==null) return; if(String(key).startsWith('npc:')) go('street',{id:+String(key).slice(4)}); else go('street',{uid:key}); }
 function titleScreen(){
@@ -2026,7 +2045,7 @@ function titleScreen(){
   </table></div>
   <div class="c"><button onclick="startNew()" style="padding:4px 20px" ${NET.ready?'':'disabled'}>${NET.ready?'新装開店':'接続中…'}</button></div>
   <hr>
-  ${T().lord&&T().msg?`<div class="flash">領主${esc(T().lord.name)}より告知：${esc(T().msg)}</div>`:''}
+  ${lordMsgHtml()}
   <div class="c"><big>商人ランキング</big></div>
   ${NET.online? rankTable() : `<div class="c note">${NET.ready?'オフラインのため，ランキングはお店を開くと表示されます。':'オンラインに接続しています…'}</div>`}
   <hr>
@@ -2066,7 +2085,7 @@ function townCell(label,r,bld,sign,wide){
 }
 function townTree(){ return `<div class="tcell" style="cursor:default">${im(pick(['tree1','tree2']),'bld')}</div>`; }
 SCREENS.town=function(){
-  const lordMsg = T().lord && T().msg ? `<div class="flash">領主${esc(T().lord.name)}より告知：${esc(T().msg)}</div>`:'';
+  const lordMsg = lordMsgHtml();
   return `
   <div class="c"><big>${esc('商人の街')}</big> の風景 <small>（建物をクリックすると入れます）</small></div>
   ${lordMsg}
@@ -3326,7 +3345,7 @@ SCREENS.rank=function(){
   <div class="c" style="margin:4px 0"><button onclick="GUIDE_OPEN=1;go('guide')">📖 遊び方ガイド</button></div>
   ${useLogin()&&!S.loginName?`<div class="flash">ログイン用のパスワードがまだ設定されていません。<a onclick="go('other')">【自店】→[手続]</a>で設定すると，別の端末からも続きを遊べます。</div>`:''}
   ${noticeHtml()}
-  ${L&&T().msg?`<div class="flash">領主${esc(L.name)}より告知：${esc(T().msg)}</div>`:''}
+  ${lordMsgHtml()}
   <div class="c"><big>商人ランキング</big> <small>（点数順・決算ごとに表彰）</small></div>
   ${rankTable()}
   <div class="c note">決算の表彰の結果は <a onclick="go('log')">【情報】→[新聞]</a> で見られます。決算ごとに，1位は<b>爵位ポイント+1</b>，2位は<b>¥100,000とギフト券5枚</b>，3位は<b>¥50,000とギフト券3枚</b>，4位は<b>ギフト券2枚</b>，5位は<b>ギフト券1枚</b>がもらえます。<br>現実の時間で1日半以上ゲームを開いていない店は「休業中」となり，表彰の対象外になって点数がゆっくり下がります。<br><a onclick="go('dignity')">爵位名鑑を見る</a></div>
