@@ -3471,7 +3471,7 @@ function lordOffice(t,shops){
   <div class="c"><select id="lTg">${opts}</select> の税を <select id="lMd"><option value="normal">通常</option><option value="free">免除</option><option value="double">２倍</option></select> <button onclick="lordTaxSide()">設定する</button></div>
   <div class="c"><button onclick="lordTaxReset()">すべての店の税を通常に戻す</button></div>
   <div class="c"><big>店舗取り締まり</big></div>
-  ${rebelSum(t)>0?'<div class="c note">反乱中のため実行できません</div>':!guardOK?'<div class="c note">取り締まりには護衛軍が200人以上必要です</div>':!fundOK?'<div class="c note">費用（街資金¥1,000,000）が足りません</div>':`<div class="c"><select id="lEx">${opts}</select> を <button onclick="lordExpose()">軍隊で取り締まる</button></div><div class="c note">費用¥1,000,000。取り締まりは決算ごとに1店まで。取り締まられた店は人気が2割下がり，次の決算までお客さんが少し減ります。街の治安も上がります。</div>`}
+  ${rebelSum(t)>0?'<div class="c note">反乱中のため実行できません</div>':!guardOK?'<div class="c note">取り締まりには護衛軍が200人以上必要です</div>':!fundOK?'<div class="c note">費用（街資金¥1,000,000）が足りません</div>':`<div class="c"><select id="lEx">${opts}</select> を <button onclick="lordExpose()">軍隊で取り締まる</button><br><small>今回の決算で：${(t.exposeLog&&t.exposeLog.p===curPeriod())?t.exposeLog.keys.length:0}/3店${(t.exposeLog&&t.exposeLog.p===curPeriod()&&t.exposeLog.keys.length)?'（'+t.exposeLog.keys.map(k=>{ const r=lordShops().find(x=>x.key===k); return r?esc(r.shop):''; }).join('，')+'）':''}</small></div><div class="c note">費用¥1,000,000。取り締まりは決算ごとに3店まで（同じ店は1回）。取り締まられた店は人気が2割下がり，次の決算までお客さんが少し減ります。街の治安も上がります。</div>`}
   <div class="c"><big>軍事設定</big></div>
   <div class="c">護衛軍 ${t.guard||0}人　<input type="number" id="lArm" value="100" min="1" style="width:80px">人 <button onclick="lordArmy(1)">増強（1人¥1,200）</button> <button onclick="lordArmy(-1)">削減</button></div>
   <div class="c"><big>荘園の方針</big></div>
@@ -3502,8 +3502,8 @@ function lordTaxReset(){ townTx(t=>{ t.taxmode={}; }).then(()=>{ lordNews(`領�
 function lordExpose(){
   const key=REFS[+$('#lEx').value]; const r=lordShops().find(x=>x.key===key); if(!r){ setFlash('お店が見つかりませんでした',1); render(); return; }
   confirmBox(`${esc(r.shop)}を軍隊で取り締まりますか？（街資金¥1,000,000）`,()=>{
-    townTx(t=>{ if(t.exposeP===curPeriod()) return 'once'; if((t.fund||0)<1000000||(t.guard||0)<200||rebelSum(t)>0) return 'ng'; t.exposeP=curPeriod(); t.fund-=1000000; t.safety=clamp(townVal(t,'safety',80)+5,0,100); t.exposed=t.exposed||{}; Object.keys(t.exposed).forEach(k=>{ if(t.exposed[k]<Date.now()) delete t.exposed[k]; }); t.exposed[key]=Date.now()+12*3600000; return 'ok'; }).then(res=>{
-      if(res!=='ok'){ setFlash(res==='once'?'取り締まりは決算ごとに1店までです':'取り締まりできませんでした',1); render(); return; }
+    townTx(t=>{ if(!t.exposeLog||t.exposeLog.p!==curPeriod()) t.exposeLog={p:curPeriod(),keys:[]}; if(t.exposeLog.keys.includes(key)) return 'same'; if(t.exposeLog.keys.length>=3) return 'once'; if((t.fund||0)<1000000||(t.guard||0)<200||rebelSum(t)>0) return 'ng'; t.exposeLog.keys.push(key); t.fund-=1000000; t.safety=clamp(townVal(t,'safety',80)+5,0,100); t.exposed=t.exposed||{}; Object.keys(t.exposed).forEach(k=>{ if(t.exposed[k]<Date.now()) delete t.exposed[k]; }); t.exposed[key]=Date.now()+12*3600000; return 'ok'; }).then(res=>{
+      if(res!=='ok'){ setFlash(res==='once'?'取り締まりは決算ごとに3店までです':res==='same'?'この店は今回の決算ではもう取り締まりました':'取り締まりできませんでした',1); render(); return; }
       if(r.me){ S.pop=Math.round(S.pop*0.8); S.exposedUntil=Date.now()+12*3600000; }
       else if(String(key).startsWith('npc:')){ const n=S.npcs[+String(key).slice(4)]; if(n) n.pop=Math.round(n.pop/2); }
       else sendMail(key,{kind:'expose'});
