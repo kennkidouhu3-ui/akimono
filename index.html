@@ -1303,8 +1303,8 @@ function npcOnline(atDay){
       st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
   });
 }
+const IDLE_H=168;   // 現実の時間で1週間（168時間）ゲームを開いていなければ休業中
 function playerShops(){
-  const IDLE_H=36;   // 現実の時間で1日半（36時間）営業していなければ休業中
   return Object.values(NET.shops).filter(s=>s&&s.uid&&s.uid!==NET.uid).map(s=>{
     const h=Math.max(0,(Date.now()-(s.t||Date.now()))/3600000), idle=h>=IDLE_H;
     const base=typeof s.point==='number'?s.point:calcPoint(s.pop||0,s.wins||0,0,0);
@@ -1784,7 +1784,7 @@ function demandOf(no){ const d=curDay(); return 1+0.3*Math.sin(d/5+no*1.3)+0.1*M
 function rivalsOf(no){
   const out=[];
   (S.npcs||[]).forEach(n=>(n.cases||[]).forEach(c=>{ if(c&&c.no===no&&c.stock>0) out.push({key:'npc:'+n.id,shop:n.shop,price:c.price,pop:n.pop,npc:1}); }));
-  if(NET.online) Object.values(NET.shops||{}).forEach(s=>{ if(!s||s.uid===NET.uid) return; if(Date.now()-(s.t||0)>36*3600000) return; (s.cases||[]).forEach(c=>{ if(c&&c.no===no&&c.stock>0) out.push({key:s.uid,shop:s.shop,price:c.price,pop:s.pop||0}); }); });
+  if(NET.online) Object.values(NET.shops||{}).forEach(s=>{ if(!s||s.uid===NET.uid) return; if(Date.now()-(s.t||0)>IDLE_H*3600000) return; (s.cases||[]).forEach(c=>{ if(c&&c.no===no&&c.stock>0) out.push({key:s.uid,shop:s.shop,price:c.price,pop:s.pop||0}); }); });
   return out;
 }
 // 相場：ほかの店の値段の平均。売っている店がなければ標準価格の2割増し
@@ -3503,7 +3503,7 @@ SCREENS.rank=function(){
   ${lordMsgHtml()}
   <div class="c"><big>商人ランキング</big> <small>（点数順・決算ごとに表彰）</small></div>
   ${rankTable()}
-  <div class="c note">決算の表彰の結果は <a onclick="go('log')">【情報】→[新聞]</a> で見られます。決算ごとに，1位は<b>爵位ポイント+1</b>，2位は<b>¥100,000とギフト券5枚</b>，3位は<b>¥50,000とギフト券3枚</b>，4位は<b>ギフト券2枚</b>，5位は<b>ギフト券1枚</b>がもらえます。<br>現実の時間で1日半以上ゲームを開いていない店は「休業中」となり，表彰の対象外になって点数がゆっくり下がります。<br><a onclick="go('dignity')">爵位名鑑を見る</a></div>
+  <div class="c note">決算の表彰の結果は <a onclick="go('log')">【情報】→[新聞]</a> で見られます。決算ごとに，1位は<b>爵位ポイント+1</b>，2位は<b>¥100,000とギフト券5枚</b>，3位は<b>¥50,000とギフト券3枚</b>，4位は<b>ギフト券2枚</b>，5位は<b>ギフト券1枚</b>がもらえます。<br>現実の時間で1週間以上ゲームを開いていない店は「休業中」となり，表彰の対象外になって点数がゆっくり下がります。<br><a onclick="go('dignity')">爵位名鑑を見る</a></div>
   <div class="tbl"><table class="t"><tr><th colspan="2">最新ニュース</th></tr>
   ${newsList().slice(0,6).map(n=>`<tr><td class="nw"><small>${newsTime(n)}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')||'<tr><td colspan=2>まだありません</td></tr>'}</table></div>`;
 };
@@ -4659,7 +4659,7 @@ SCREENS.admin=function(){
   <div class="tabs">${TABS.map((x,i)=>`<span class="${ADTAB===i?'on':''}" onclick="ADTAB=${i};render()">${x}</span>`).join('')}</div>`;
   const ps=adminPlayers(); const now=Date.now();
   if(ADTAB===0){
-    const act=ps.filter(p=>p.me||now-(p.t||0)<36*3600000).length;
+    const act=ps.filter(p=>p.me||now-(p.t||0)<IDLE_H*3600000).length;
     const total=ps.reduce((a,p)=>a+(p.money||0),0);
     const top=ranking()[0];
     h+=`<div class="tbl"><table class="t" style="width:100%">
@@ -4685,7 +4685,7 @@ SCREENS.admin=function(){
     h+=`<div class="c"><input id="adQ" placeholder="店名・店主名でさがす" value="${esc(sub.q||'')}" style="width:60%"> <button onclick="sub.q=$('#adQ').value;render()">さがす</button></div>
     <div class="c toolbar"><button onclick="adminGiveBox(${R('*all*')})" style="font-weight:bold">🎁 全員に配る</button></div>
     <div class="tbl"><table class="t" style="width:100%"><tr><th></th><th>お店</th><th>状況</th><th></th></tr>
-    ${list.map(p=>{ const gi=p.guild&&guildInfo(p.guild); const idle=!p.me&&now-(p.t||0)>=36*3600000;
+    ${list.map(p=>{ const gi=p.guild&&guildInfo(p.guild); const idle=!p.me&&now-(p.t||0)>=IDLE_H*3600000;
       return `<tr><td>${kao(p.kao)}</td><td><b>${esc(p.shop)}</b><br><small>${esc(p.name)}${p.me?'（あなた）':''}<br>${digHtml(p.dig)} ${p.dig}pt${gi?'・'+esc(gi.name):''}</small></td>
       <td class="nw"><small>点数 ${(p.point||0).toLocaleString()}<br>資金 ${yen(p.money||0)}<br>人気 ${Math.round(p.pop||0)}%<br>${p.me?'いま':idle?'<span class="red">休業中</span>':''}${p.me?'':ago(p.t||0)}</small></td>
       <td class="nw"><button onclick="adminGiveBox(${R(p.key)})">付与</button><br><button onclick="adminMsgBox(${R(p.key)})">手紙</button><br><button onclick="adminDetail(${R(p.key)})">詳細</button>${p.me?'':`<br><button onclick="adminDelete(${R(p.key)})" class="red">削除</button>`}</td></tr>`; }).join('')||'<tr><td colspan="4" class="c">見つかりません</td></tr>'}
