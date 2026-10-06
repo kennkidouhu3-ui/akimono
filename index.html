@@ -3712,9 +3712,9 @@ SCREENS.manor=function(){
     <tr><th>領主の方針</th><td>特産：<b>${f?MANOR.find(m=>m.id===f).name+'（収穫1.5倍）':'なし'}</b><br>地代：${rent?yen(rent)+'/区画/日（あなたは'+yen(rent*plots)+'/日）':'なし'}</td></tr>
   </table></div>
   <div class="tbl"><table class="t" style="width:100%"><tr><th></th><th>土地</th><th>決算ごとの収穫（1区画）</th><th>所有</th><th></th></tr>
-  ${MANOR.map((m,i)=>`<tr><td>${im(m.img,'','style="max-height:50px;max-width:70px"')}</td><td>${m.name}${f===m.id?' <small class="red">特産</small>':''}<br><small>${yen(m.price)}</small></td><td><small>${m.out.map(([x,n])=>iname(x)+'×'+(f===m.id?Math.round(n*1.5):n)).join('<br>')}</small></td><td class="r">${S.manor[m.id]||0}</td><td><button ${(S.manor[m.id]||0)>=mx?'disabled':''} onclick="buyManor(${i})">購入</button></td></tr>`).join('')}
+  ${MANOR.map((m,i)=>`<tr><td>${im(m.img,'','style="max-height:50px;max-width:70px"')}</td><td>${m.name}${f===m.id?' <small class="red">特産</small>':''}<br><small>${yen(m.price)}</small></td><td><small>${m.out.map(([x,n])=>iname(x)+'×'+(f===m.id?Math.round(n*1.5):n)).join('<br>')}</small></td><td class="r">${S.manor[m.id]||0}</td><td class="nw"><button ${(S.manor[m.id]||0)>=mx?'disabled':''} onclick="buyManor(${i})">購入</button>${(S.manor[m.id]||0)>0?`<br><button onclick="returnManor(${i})">返却</button>`:''}</td></tr>`).join('')}
   </table></div>
-  <div class="c note">特産品・地代・区画の上限は，領主が領主邸の政務室で決めます。</div>
+  <div class="c note">特産品・地代・区画の上限は，領主が領主邸の政務室で決めます。<br>いらなくなった土地は「返却」で1区画ずつ返せます（購入額の半分が戻ります）。</div>
   <div class="c"><big>荘園の持ち主</big></div>
   <div class="tbl"><table class="t" style="width:100%"><tr><th>お店</th><th>持っている荘園</th><th>計</th></tr>
   ${manorOwners().map(o=>`<tr ${o.me?'style="font-weight:bold"':''}><td>${esc(o.shop)}<br><small>${esc(o.name)}</small></td><td><small>${MANOR.filter(m=>o.manor[m.id]).map(m=>`${m.name}×${o.manor[m.id]}`).join('<br>')}</small></td><td class="c"><b>${o.total}</b></td></tr>`).join('')||'<tr><td colspan="3" class="c">まだ誰も荘園を持っていません</td></tr>'}
@@ -3726,6 +3726,19 @@ function manorOwners(){
   if(S) list.push({me:1,name:S.owner,shop:S.shop,manor:S.manor||{}});
   if(NET.online) Object.values(NET.shops||{}).forEach(s=>{ if(s&&s.uid&&s.uid!==NET.uid&&s.manor) list.push({name:s.owner,shop:s.shop,manor:s.manor}); });
   return list.map(o=>({...o,total:MANOR.reduce((a,m)=>a+(o.manor[m.id]||0),0)})).filter(o=>o.total>0).sort((a,b)=>b.total-a.total);
+}
+function returnManor(i){
+  const m=MANOR[i], have=S.manor[m.id]||0; if(have<=0) return;
+  const back=Math.round(m.price*0.5);
+  modal(`<div class="c"><big>${m.name}を返却</big></div><p class="c">いま${have}区画持っています。何区画返しますか？<br><small>1区画につき${yen(back)}戻ります（購入額の半分）</small></p>
+    <div class="c"><input type="number" id="mrN" value="1" min="1" max="${have}" style="width:70px"> 区画</div>
+    <div class="c toolbar"><button onclick="returnManorGo(${i})">返却する</button> <button onclick="closeModal()">やめる</button></div>`);
+}
+function returnManorGo(i){
+  const m=MANOR[i], have=S.manor[m.id]||0, n=clamp(parseInt($('#mrN').value)||1,1,have); closeModal(); if(!n) return;
+  const back=Math.round(m.price*0.5)*n;
+  S.manor[m.id]=have-n; if(!S.manor[m.id]) delete S.manor[m.id];
+  S.money+=back; setFlash(`${m.name}を${n}区画返却しました（${yen(back)}が戻りました）`); save(); publishShop(true); render();
 }
 function buyManor(i){ const m=MANOR[i]; if((S.manor[m.id]||0)>=manorMax()){ setFlash('上限まで持っています',1); render(); return; } if(S.money<m.price){ setFlash('資金が足りません',1); render(); return; } S.money-=m.price; S.manor[m.id]=(S.manor[m.id]||0)+1; setFlash(`${m.name}を購入しました`); save(); render(); }
 SCREENS.guild=function(){ return NET.online? guildOnline() : guildOffline(); };
