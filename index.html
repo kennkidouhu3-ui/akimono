@@ -1311,7 +1311,8 @@ function npcOnline(atDay){
       st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
   });
 }
-const IDLE_H=168;   // 現実の時間で1週間（168時間）ゲームを開いていなければ休業中
+const IDLE_H=168;
+const RIKI_SLOTS=3;   // リキーヤの時間の求人（決算ごとの件数）   // 現実の時間で1週間（168時間）ゲームを開いていなければ休業中
 function playerShops(){
   return Object.values(NET.shops).filter(s=>s&&s.uid&&s.uid!==NET.uid).map(s=>{
     const h=Math.max(0,(Date.now()-(s.t||Date.now()))/3600000), idle=h>=IDLE_H;
@@ -1780,9 +1781,9 @@ function townDaily(d){
       t.safety=clamp(townVal(t,'safety',80)-Math.min(5,dbl)+Math.min(2,fr*0.3),0,100); }
     // にくべんき藩が奪った点数・人気は少しずつ薄れる
     t.rikiPrev=t.rikiToday||0; t.rikiToday=0;
-    if(NET.online){ const hrs=2+Math.floor(Math.random()*3), price=hrs*30000; const R=NPCDEF.findIndex(x=>x.warrior);
+    if(NET.online) for(let rj=0;rj<RIKI_SLOTS;rj++){ const hrs=2+Math.floor(Math.random()*3), price=hrs*30000; const R=NPCDEF.findIndex(x=>x.warrior);
       NET.db.collection('jobs').add({poster:'npc:'+R,posterName:'豪将リキーヤ',posterShop:'リキーヤ道場',posterKao:'riki',kind:'offer',title:['店番なら俺に任せろ！','代わりに働いてやるぞ！','暇だから手伝ってやる！'][Math.floor(Math.random()*3)],hours:hrs,reward:price,end:nowClock()+43200,done:false,t:Date.now(),npc:true}).catch(()=>{});
-      logs.push(`【求人】豪将リキーヤが「${hrs}時間ぶん手伝う」と言っている（代金${yen(price)}・【取引】→[求人]）`); }
+      if(rj===0) logs.push(`【求人】豪将リキーヤが「手伝ってやるぞ！」と${RIKI_SLOTS}件の求人を出した（持ち時間2〜4時間・1時間¥30,000・【取引】→[求人]）`); }
     t.nikuScore=Math.round((t.nikuScore||0)*0.9); t.nikuPop=Math.max(0,(t.nikuPop||0)-1);
     // 治安が悪いと山賊バルバロスが攻めてきて，領主の座を狙う（レイドとは別）
     const saf=townVal(t,'safety',80);
@@ -3324,7 +3325,7 @@ const NPC_JOBS=[
   {name:'図書館の写本',t:300,pay:9000},{name:'魔物の見張り番',t:420,pay:16000,need:80},
 ];
 SCREENS.work=function(){
-  const d=day(); if(!S.work||S.work.d!==d){ S.work={d,jobs:NPC_JOBS.slice().sort(()=>Math.random()-.5).slice(0,4)}; if(!NET.online){ const h=2+rnd(3); S.work.riki={h,price:h*30000,done:false}; } }
+  const d=day(); if(!S.work||S.work.d!==d){ S.work={d,jobs:NPC_JOBS.slice().sort(()=>Math.random()-.5).slice(0,4)}; if(!NET.online){ const h=2+rnd(3); S.work.riki={h,price:h*30000,left:RIKI_SLOTS,done:false}; } }
   const st=myStat(), tab=sub.t||0;
   const tabs=NET.online?`<div class="tabs"><span class="${tab===0?'on':''}" onclick="sub.t=0;render()">プレイヤーの求人</span><span class="${tab===1?'on':''}" onclick="sub.t=1;render()">求人を出す</span><span class="${tab===2?'on':''}" onclick="sub.t=2;render()">街の日雇い</span></div>`:'';
   let h=`<div class="c"><big>求人</big></div>${talk('kaohelp','求人係',NET.online?'お店どうしで仕事を頼んだり，引き受けたりできます。報酬は求人を出したときに預かっておくので安心ですよ。':'今日のお仕事はこちらです。お店の資金が苦しい時はぜひ！')}${tabs}`;
@@ -3349,7 +3350,7 @@ SCREENS.work=function(){
     <div class="c"><button onclick="postJob()">求人を出す（10分）</button></div>
     <div class="c note">報酬は求人を出したときに預けます。期限までに誰も引き受けなかったり，取り下げたりすると返ってきます。</div>`;
   } else {
-    h+=`${S.work.riki?`<div class="tbl"><table class="t" style="width:100%"><tr><td style="width:56px">${kao('riki')}</td><td><b>豪将リキーヤ</b>「暇だから手伝ってやる！」<br><b class="blue">持ち時間を${S.work.riki.h}時間もらえる</b><br><small>代金 <span class="red">${yen(S.work.riki.price)}</span></small></td><td>${S.work.riki.done?'<small class="note">頼んだ</small>':`<button ${S.money>=S.work.riki.price&&S.time+S.work.riki.h*60<=maxTime()?'':'disabled'} onclick="rikiHelp()">頼む</button>`}</td></tr></table></div>`:''}<div class="tbl"><table class="t"><tr><th>仕事</th><th>時間</th><th>報酬</th><th></th></tr>
+    h+=`${S.work.riki?`<div class="tbl"><table class="t" style="width:100%"><tr><td style="width:56px">${kao('riki')}</td><td><b>豪将リキーヤ</b>「暇だから手伝ってやる！」<br><b class="blue">持ち時間を${S.work.riki.h}時間もらえる</b><br><small>代金 <span class="red">${yen(S.work.riki.price)}</span>・残り${S.work.riki.left==null?(S.work.riki.done?0:1):S.work.riki.left}回</small></td><td>${S.work.riki.done?'<small class="note">頼んだ</small>':`<button ${S.money>=S.work.riki.price&&S.time+S.work.riki.h*60<=maxTime()?'':'disabled'} onclick="rikiHelp()">頼む</button>`}</td></tr></table></div>`:''}<div class="tbl"><table class="t"><tr><th>仕事</th><th>時間</th><th>報酬</th><th></th></tr>
     ${S.work.jobs.map((j,i)=>`<tr><td>${esc(j.name)}${j.need?`<br><small class="${st.attack>=j.need?'':'red'}">攻撃${j.need}以上</small>`:''}</td><td class="nw">${hm(j.t)}</td><td class="nw">${yen(j.pay)}${j.get?'<br>'+iname(j.get[0])+'×'+j.get[1]:''}</td><td><button ${j.need&&st.attack<j.need?'disabled':''} onclick="doWork(${i})">働く</button></td></tr>`).join('')}
     </table></div><div class="c note">街の日雇いは毎日入れ替わります。</div>`;
   }
@@ -3414,7 +3415,7 @@ async function checkMyJobs(){
 function rikiHelp(){ const R=S.work&&S.work.riki; if(!R||R.done) return;
   if(S.money<R.price){ setFlash('代金が足りません',1); render(); return; }
   if(S.time+R.h*60>maxTime()){ setFlash('持ち時間がいっぱいで受け取れません',1); render(); return; }
-  S.money-=R.price; addPay(R.price); S.time+=R.h*60; R.done=true; rikiEarn(R.price);
+  S.money-=R.price; addPay(R.price); S.time+=R.h*60; R.left=(R.left==null?1:R.left)-1; R.done=R.left<=0; rikiEarn(R.price);
   setFlash(`豪将リキーヤ「任せろ！」 持ち時間が${R.h}時間ふえました（代金${yen(R.price)}）`); save(); render(); }
 function doWork(i){
   const j=S.work.jobs[i]; if(!spendTime(j.t)){ setFlash(`持ち時間が足りません（必要：${hm(j.t)}）`,1); render(); return; }
