@@ -321,6 +321,10 @@ const SKILLS={
   s_kiba:{n:'狩人の本能',d:'はぎ取り素材が2倍',fx:{hunter:1}}, s_majyu:{n:'魔獣の加護',d:'戦闘の経験値+50%',fx:{exp:0.5}},
   s_genjyu:{n:'幻惑',d:'敵の攻撃が当たりにくくなる（−20%）',fx:{enemyHit:0.2}}, s_haryu:{n:'覇王の威光',d:'全能力+20%・戦闘の賞金+50%',fx:{atk:0.2,def:0.2,life:0.2,tech:0.2,prize:0.5}},
   s_dia:{n:'至宝の輝き',d:'売れ行き+15%・人気の自然減−20%',fx:{sales:0.15,keep:0.2}}, s_curse:{n:'呪縛解放',d:'攻撃+50%（ただし呪いの人気低下が2倍）',fx:{atk:0.5,curse2:1}},
+  enh10:{n:'鍛錬の証',d:'強化+10以上の装備：全能力+5%',fx:{atk:0.05,def:0.05,life:0.05,tech:0.05}},
+  enh15:{n:'名工の業',d:'強化+15以上の装備：会心の一撃が出やすい・受けるダメージ−5%',fx:{crit:0.1,guard:0.05}},
+  enh20:{n:'不壊の極み',d:'強化+20の装備：全能力+10%・バトルに負けても壊れない',fx:{atk:0.1,def:0.1,life:0.1,tech:0.1}},
+  s_legend:{n:'伝説の武具',d:'装備4つすべてが+20：全能力+20%・戦闘の賞金+30%・はぎ取り素材+1',fx:{atk:0.2,def:0.2,life:0.2,tech:0.2,prize:0.3,mat:1}},
   s_sea:{n:'海神の加護',d:'全能力+10%・船の持ち帰り+50%',fx:{atk:0.1,def:0.1,life:0.1,tech:0.1,voyage:0.5}},
 };
 const SERIES={kiba:{n:'獣牙',need:4,sk:'s_kiba'},majyu:{n:'魔獣',need:4,sk:'s_majyu'},genjyu:{n:'幻獣',need:4,sk:'s_genjyu'},haryu:{n:'覇竜',need:4,sk:'s_haryu'},
@@ -1206,7 +1210,9 @@ function digHtml(p){ const l=digLevel(p); return `${digIcon(p)}<span${l>=7?' sty
 function myDisc(){ if(!S) return 0; const gd=myGuildDoc(); return Math.min(60,DIG_DISC[digLevel(S.dig)]+(gd&&gActive(gd.bulk)?10:0)+(evActive('caravan')?30:0)); }
 function enhLv(no){ return (S&&S.enh&&S.enh[no])||0; }
 function enhName(no){ const L=enhLv(no); return ITEMS[no]?ITEMS[no].name+(L?` +${L}`:''):''; }
-function itemStat(no,lv){ const it=ITEMS[no], r={}; ['life','attack','defence','tech'].forEach(a=>{ if(it[a]) r[a]=it[a]>0?Math.round(it[a]*(1+0.05*lv)):it[a]; }); return r; }
+// 強化1段階ごとに+8%，さらに+10・+15・+20で大きく伸びる（+20で元の約3.6倍）
+function enhMult(lv){ lv=lv||0; return 1+0.08*lv+(lv>=10?0.2:0)+(lv>=15?0.3:0)+(lv>=20?0.5:0); }
+function itemStat(no,lv){ const it=ITEMS[no], r={}; ['life','attack','defence','tech'].forEach(a=>{ if(it[a]) r[a]=it[a]>0?Math.round(it[a]*enhMult(lv)):it[a]; }); return r; }
 function totalStat(st,eq){
   const r={...st};
   const mine=S&&eq===S.eq;
@@ -1214,6 +1220,8 @@ function totalStat(st,eq){
   return r;
 }
 const ENH_MAX=20;
+const NO_SEND=[273,274,275,276];   // 武器強化の素材は人に送れない（贈り物・ギルド倉庫・求人の納品）
+const canSend=no=>!NO_SEND.includes(+no);
 function enhCost(no,n){
   const it=ITEMS[no]; const mats=n<=10?[[n,273],[n,275]]:[[5,273],[5,275],[n-10,274],[n-10,276]];
   return {mats,gold:Math.max(5000,Math.round(it.price*0.05*n/100)*100),time:30+n*6,rate:n<=5?100:Math.round(100-(n-5)*3.5)};
@@ -1234,7 +1242,10 @@ function enhance(no){
 function activeSkills(){
   const out=[], cnt={};
   if(!S) return out;
-  [1,2,3,4].forEach(s=>{ const it=ITEMS[S.eq[s]]; if(!it) return; if(it.skill&&SKILLS[it.skill]) out.push({k:it.skill,src:it.name}); if(it.series) cnt[it.series]=(cnt[it.series]||0)+1; });
+  let n20=0;
+  [1,2,3,4].forEach(s=>{ const it=ITEMS[S.eq[s]]; if(!it) return; if(it.skill&&SKILLS[it.skill]) out.push({k:it.skill,src:it.name}); if(it.series) cnt[it.series]=(cnt[it.series]||0)+1;
+    const L=enhLv(S.eq[s]); if(L>=20){ out.push({k:'enh20',src:enhName(S.eq[s])}); n20++; } else if(L>=15) out.push({k:'enh15',src:enhName(S.eq[s])}); else if(L>=10) out.push({k:'enh10',src:enhName(S.eq[s])}); });
+  if(n20>=4) out.push({k:'s_legend',src:'+20の装備4つ',series:1});
   Object.keys(cnt).forEach(se=>{ const X=SERIES[se]; if(X&&cnt[se]>=X.need) out.push({k:X.sk,src:X.n+'シリーズ',series:1}); });
   return out;
 }
@@ -1391,11 +1402,12 @@ function pxStep(d,now){
   if(!px.log) px.log={};
   let from=Math.max(px.at||0,(d.t||0)+PX_LAG);
   if(end-from<60000) return null;
-  if(!d.pp) d.pp={wins:d.wins||0,p3:0,tn:0,per:Math.floor(((d.t||now)+JST)/SETTLE_MS)};
+  // 古い版のデータ（利益の内訳がない）は，公開されていた点数を土台にして売れた分だけ足す
+  if(!d.pp) d.pp={wins:d.wins||0,p3:0,tn:0,per:Math.floor(((d.t||now)+JST)/SETTLE_MS),base:Math.max(0,(d.point||0)-calcPoint(d.pop||0,d.wins||0,0,0))};
   let g=0;
   while(from<end && g++<40){
     const per=Math.floor((from+JST)/SETTLE_MS), to=Math.min(end,(per+1)*SETTLE_MS-JST);
-    if(d.pp.per<per){ d.ptEnd={d:d.pp.per,v:d.point||0}; d.pp.p3=Math.round(d.pp.p3*2/3+d.pp.tn); d.pp.tn=0; d.sale=0; d.pp.per=per; d.point=calcPoint(d.pop||0,d.pp.wins,d.pp.p3,0); }
+    if(d.pp.per<per){ d.ptEnd={d:d.pp.per,v:d.point||0}; d.pp.p3=Math.round(d.pp.p3*2/3+d.pp.tn); d.pp.tn=0; d.sale=0; d.pp.per=per; d.point=calcPoint(d.pop||0,d.pp.wins,d.pp.p3,0)+(d.pp.base||0); }
     const dt=(to-from)/1000*RATE;
     const L=px.log[per]||(px.log[per]={s:{},y:0});
     (d.cases||[]).forEach((c,idx)=>{ if(!c||!(c.stock>0)) return;
@@ -1406,7 +1418,7 @@ function pxStep(d,now){
   }
   px.at=from; d.px=px; d.act=false;
   const ks=Object.keys(px.log).map(Number).sort((a,b)=>a-b); while(ks.length>20) delete px.log[ks.shift()];
-  d.point=calcPoint(d.pop||0,d.pp.wins,d.pp.p3,d.pp.tn);
+  d.point=calcPoint(d.pop||0,d.pp.wins,d.pp.p3,d.pp.tn)+(d.pp.base||0);
   return d;
 }
 let pxBusy=false;
@@ -3042,7 +3054,7 @@ function finishBattle(){
     res.push(`<b class="red">${esc(b.me.name)}は${esc(b.foe.name)}に敗北した…</b>`);
     if(b.foe&&b.foe.top) res.push('<span class="red">挑戦で使った人気2は戻りませんでした</span>');
     { const e=Math.max(1,Math.round((b.mon? b.mon.exp : 40)*0.2)); S.bexp=(S.bexp||0)+e; res.push(`${im('ability-no-0','i16')}負けても経験値を ${e} 手に入れた`); }
-    [1,2,3,4].forEach(s=>{ const n=S.eq[s]; if(n&&Math.random()<0.12){ add(n,-1); if(!has(n)) S.eq[s]=0; res.push(`<span class="red">${esc(ITEMS[n].name)}がボロボロになって壊れた…</span>`); } });
+    [1,2,3,4].forEach(s=>{ const n=S.eq[s]; if(n&&enhLv(n)>=ENH_MAX){ return; } if(n&&Math.random()<0.12){ add(n,-1); if(!has(n)) S.eq[s]=0; res.push(`<span class="red">${esc(ITEMS[n].name)}がボロボロになって壊れた…</span>`); } });
     if(b.npc){ S.pop=clamp(S.pop-1,0,100); b.npc.pop=clamp(b.npc.pop+1,0,100); res.push(`<span class="red">敗北で人気-1</span>／${esc(b.npc.shop)}の人気+1`); news(`${S.owner}が${b.npc.owner}に決闘を挑み，敗北しました`); }
     if(b.puid){ S.pop=clamp(S.pop-1,0,100); sendMail(b.puid,{kind:'duel',win:false}); res.push('<span class="red">敗北で人気-1</span>／相手の人気+1'); news(`${S.owner}（${S.shop}）が${b.foe.name}に決闘を挑み，敗北しました`); }
   }
@@ -3339,7 +3351,7 @@ SCREENS.work=function(){
       <td>${mine?`<button onclick="cancelJob(${R(x.id)})">取り下げ</button>`:`<button ${ok&&left>0?'':'disabled'} onclick="takeJob(${R(x.id)})">${x.kind==='offer'?'頼む':'引き受ける'}</button>${x.kind==='offer'&&S.time+x.hours*60>maxTime()?'<br><small class="note">持ち時間が<br>いっぱい</small>':''}`}</td></tr>`; }).join('')||'<tr><td colspan=4 class="c">いま出ている求人はありません</td></tr>'}
     </table></div>`;
   } else if(NET.online && tab===1){
-    const items=ITEMLIST.filter(it=>it.price>0).map(it=>`<option value="${it.no}">${esc(it.name)}</option>`).join('');
+    const items=ITEMLIST.filter(it=>it.price>0&&canSend(it.no)).map(it=>`<option value="${it.no}">${esc(it.name)}</option>`).join('');
     h+=`<div class="tbl"><table class="t">
       <tr><th>種類</th><td><select id="jbKind"><option value="item">品物を納品してほしい</option></select></td></tr>
       <tr><th>題名</th><td><input id="jbTitle" maxlength="20" placeholder="例：ポーション大募集！" style="width:100%"></td></tr>
@@ -3359,6 +3371,7 @@ SCREENS.work=function(){
 async function postJob(){
   const kind='item', title=$('#jbTitle').value.trim(), reward=Math.max(100,parseInt($('#jbR').value)||0), days=+$('#jbD').value;
   const no=+$('#jbNo').value, n=Math.max(1,parseInt($('#jbN').value)||1), hours=0;
+  if(!canSend(no)){ setFlash('武器強化の素材は求人にできません',1); render(); return; }
   if(S.money<reward){ setFlash('報酬を預けるお金が足りません',1); render(); return; }
   if(!spendTime(10)){ setFlash('持ち時間が足りません',1); render(); return; }
   S.money-=reward; save();
@@ -3375,6 +3388,7 @@ async function takeJob(k){
       if(!x||x.done) return {ret:'gone'};
       if(x.end<=S.clock) return {ret:'closed'};
       if(x.kind==='time') return {ret:'gone'};   // プレイヤーどうしの時間の取引は廃止（リキーヤの分は継続）
+      if(x.kind==='item'&&!canSend(x.no)) return {ret:'gone'};
       if(x.kind==='item'&&!has(x.no,x.n)) return {ret:'noitem'};
       if(x.kind==='offer'){ if(S.money<x.reward) return {ret:'nomoney'}; if(S.time+x.hours*60>maxTime()) return {ret:'full'}; }
       else if(x.kind!=='item'&&S.time<x.hours*60) return {ret:'notime'};
@@ -3604,7 +3618,7 @@ const GUIDE=[
  ['山賊バルバロスの襲来（レイド）',`街のイベントとして，<b>日本時間の21時から1時間</b>，山賊バルバロスが街を襲います。予定日時はランキング画面の上に出ます。<br>
   【施設】→[傭兵所]から<b>討伐</b>に行くか，<b>声援・差し入れ・兵士</b>で応援しましょう。撃退すると賞金や，ここでしか手に入らない<b>ダイヤモンド原石</b>がもらえます。`],
  ['狩りと鍛冶（素材で装備を作る）',`バトルチケットで魔物を倒すと，その魔物ならではの<b>素材</b>を「はぎ取り」で手に入れられます。<br>素材を集めて【施設】→[<b>鍛冶工房</b>]に持っていくと，店では買えない<b>強い装備</b>（獣牙→魔獣→幻獣→覇竜）を作れます。<br>暴君にくべんき藩を退けると手に入る「呪いの骨片」からは，とても強いけれど<b>決算ごとに人気が下がる呪われた装備</b>が作れます。`],
- ['装備の強化（+1〜+20）',`【施設】→[鍛冶工房]の「⚒ 強化」で，持っている装備を強化できます。+1ごとに能力が5%上がり，+20で2倍になります。<br>強化の素材（樫の補強材・なめし革の補強帯・魔木の芯材・竜革の補強帯）は，本「<b>木工細工入門</b>」「<b>革細工入門</b>」で作れます。+6からは失敗することもあります（失敗しても段階は下がりません）。`],
+ ['装備の強化（+1〜+20）',`【施設】→[鍛冶工房]の「⚒ 強化」で，持っている装備を強化できます。+1ごとに能力が8%上がり，+10・+15・+20ではさらに大きく伸びて，+20で約3.6倍になります。+10・+15・+20の装備には強化スキル（鍛錬の証・名工の業・不壊の極み）が付き，+20の装備はバトルに負けても壊れません。4つとも+20にすると「伝説の武具」が発動します。強化の素材は人に送ったりギルド倉庫に入れたりできません。<br>強化の素材（樫の補強材・なめし革の補強帯・魔木の芯材・竜革の補強帯）は，本「<b>木工細工入門</b>」「<b>革細工入門</b>」で作れます。+6からは失敗することもあります（失敗しても段階は下がりません）。`],
  ['装備のスキルとシリーズ',`鍛冶工房やダイヤ・海竜などの装備には，それぞれ<b>スキル</b>（攻撃UP・ガード・幸運・商才など）がついています。<br>同じシリーズの装備をそろえると<b>シリーズスキル</b>が発動します（獣牙・魔獣・幻獣・覇竜・ダイヤ・呪いは4つ，海竜は2つ）。発動中のスキルは[ステータス]で確認できます。`],
  ['肉屋・八百屋・魚屋',`市場で「<b>郊外の農園への地図</b>」（野菜・根菜・いちご）・「<b>釣り竿</b>」（魚・網漁でエビやイカ）・「<b>狩猟用の弓</b>」（鹿・猪・鳥）が買えます。<b>ミノタウロス</b>は乳しぼりのほか，<b>解体して肉</b>にもできます。<br>とれた食材はそのまま店で売れ（よく売れる安い品），本「<b>家庭料理入門</b>」で料理に，「<b>精肉・加工の手引き</b>」でソーセージ・ハム・干物などに加工すると，もっと高く売れます（食べものは売れ行き2倍）。<br>転職のススメで<b>肉屋・八百屋・魚屋</b>になると，それぞれの作業が早くなります。荘園の「野菜畑」「生け簀」「狩り場」からも決算ごとにとれます。`],
  ['船で島へ探索',`市場で買える本「<b>造船術</b>」で船を造り，【取引】→[<b>港</b>]から島へ探索に出発できます。現実の時間で1〜6時間たつと戻ってきて，<b>島でしか手に入らない品</b>（真珠・赤珊瑚・南国の果実・海竜の鱗・人魚の涙など）を持ち帰ります。<br>島の品からは，妙薬ネクター・真珠の首飾り・人魚のティアラ・海竜の剣と鎧などを，今ある本で作れます。遠い海ほど良い品がとれますが，難破の危険もあります。`],
@@ -4099,7 +4113,7 @@ function guildOnline(){
     h+=`<div class="c"><big>ギルド倉庫</big>　<small>${used}/${cap}個</small></div>
     <div class="tbl"><table class="t" style="width:100%"><tr><th>品物</th><th>数</th><th></th></tr>${Object.entries(st).filter(([n,q])=>q>0&&ITEMS[n]).map(([n,q])=>`<tr><td>${iname(+n)}</td><td class="r">${q}</td><td class="nw"><input type="number" id="gsO${n}" value="1" min="1" max="${q}" style="width:60px"><button onclick="gStoreOut(${n})">取り出す</button></td></tr>`).join('')||'<tr><td colspan=3 class="c">空っぽです</td></tr>'}</table></div>
     <div class="c"><big>預ける</big></div>
-    <div class="c">${mine.length?`<select id="gsNo">${mine.map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${S.stock[n]}）</option>`).join('')}</select> ×<input type="number" id="gsN" value="1" min="1" style="width:60px"> <button onclick="gStoreIn()">預ける</button>`:'<small class="note">預けられる品がありません</small>'}</div>
+    <div class="c">${mine.length?`<select id="gsNo">${mine.filter(canSend).map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${S.stock[n]}）</option>`).join('')}</select> ×<input type="number" id="gsN" value="1" min="1" style="width:60px"> <button onclick="gStoreIn()">預ける</button>`:'<small class="note">預けられる品がありません</small>'}</div>
     <div class="c note">加盟店ならだれでも預けたり取り出したりできます。倉庫の品に維持費はかかりません。</div>`;
   } else if(gTab===6 && my){
     const q=my.quest, active=q&&!q.done&&q.until>=curPeriod();
@@ -4155,6 +4169,7 @@ let GBUSY=false;
 function gStoreIn(){
   if(GBUSY) return;
   const no=+$('#gsNo').value, n=Math.min(S.stock[no]||0,Math.max(1,parseInt($('#gsN').value)||1)); if(!n) return;
+  if(!canSend(no)){ setFlash('武器強化の素材はギルド倉庫に入れられません',1); render(); return; }
   GBUSY=true; add(no,-n); save();
   guildTx(S.guild,g=>{ const st=g.store=g.store||{}; const used=Object.values(st).reduce((a,b)=>a+b,0); if(used+n>(g.storeCap||100)) return 'full'; st[no]=(st[no]||0)+n; return 'ok'; }).then(r=>{ GBUSY=false; if(r!=='ok'){ add(no,n); setFlash(r==='full'?`倉庫がいっぱいです（あと${Math.max(0,(myGuildDoc()?myGuildDoc().storeCap||100:100)-Object.values((myGuildDoc()||{}).store||{}).reduce((a,b)=>a+b,0))}個まで）`:'預けられませんでした。通信状態を確認してもう一度お試しください',1); } else setFlash(`${ITEMS[no].name}×${n}を預けました`); save(); render(); });
 }
@@ -4454,7 +4469,7 @@ function forgeEnhHtml(TN){
       <td><small>${c.mats.map(([q,x])=>`<span class="${has(x,q)?'':'red'}">${iname(x)}×${q}（${S.stock[x]||0}）</span>`).join('<br>')}<br>費用${yen(c.gold)}・${hm(c.time)}<br>成功率 <b>${c.rate}%</b></small></td>
       <td><button ${ok?'':'disabled'} onclick="enhance(${no})">+${n}に強化</button></td></tr>`; }).join('');
   return `<div class="c"><big>鍛冶工房</big></div>
-  ${talk('kaodwarf','工房の親方','持っとる装備を鍛えて強くしてやるぞい。+1ごとに能力が5%上がって，+20で2倍じゃ！ 強化の素材は「木工細工入門」と「革細工入門」で作れるぞ。+6からは失敗することもあるから覚悟しておけ。')}
+  ${talk('kaodwarf','工房の親方','持っとる装備を鍛えて強くしてやるぞい。+1ごとに能力が8%上がって，+20なら約3.6倍じゃ！ +20まで鍛えた装備は負けても壊れんぞい！ 強化の素材は「木工細工入門」と「革細工入門」で作れるぞ。+6からは失敗することもあるから覚悟しておけ。')}
   ${tabs}
   <div class="tbl"><table class="t" style="width:100%"><tr><th>装備</th><th>必要なもの</th><th></th></tr>${rows||'<tr><td colspan="3" class="c">強化できる装備を持っていません</td></tr>'}</table></div>
   <div class="c note">+1〜+10：樫の補強材・なめし革の補強帯　／　+11〜+20：さらに魔木の芯材・竜革の補強帯<br>失敗すると素材と費用はなくなりますが，強化の段階は下がりません。強化は同じ種類の装備すべてに効きます。</div>`;
@@ -4639,7 +4654,7 @@ SCREENS.dwarf=function(){
     const mine=Object.keys(S.stock).map(Number).filter(n=>ITEMS[n]&&ITEMS[n].price>0);
     h+=`<div class="c note">街の商人には品物を買い取ってもらえるぞい（専門の品なら標準価格の9割，それ以外は6割）。★印のプレイヤーには贈り物として届けるぞい。</div>
     <div class="c">宛先 <select id="dwTo">${recipOpts()}</select><br>
-    ${mine.length?`<select id="dwNo">${mine.map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${S.stock[n]}）</option>`).join('')}</select> ×<input type="number" id="dwN" value="1" min="1" style="width:60px"> <button onclick="sendDwarf()">送る（20分）</button>`:'<small>送れる品がありません</small>'}</div>`;
+    ${mine.length?`<select id="dwNo">${mine.filter(canSend).map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${S.stock[n]}）</option>`).join('')}</select> ×<input type="number" id="dwN" value="1" min="1" style="width:60px"> <button onclick="sendDwarf()">送る（20分）</button>`:'<small>送れる品がありません</small>'}</div>`;
   } else if(tab===3){
     h+=tradeHtml();
   } else {
@@ -4743,6 +4758,7 @@ function checkVoyages(){
 function orderImport(){ const no=+$('#imNo').value, n=clamp(parseInt($('#imN').value)||1,1,500); const c=Math.round(ITEMS[no].price*1.5)*n; if(S.money<c){ setFlash('資金が足りません',1); render(); return; } if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; } S.money-=c; addPay(c); S.imports.push({no,n,at:S.clock+480}); setFlash(`${ITEMS[no].name}×${n}を${yen(c)}で注文しました`); save(); render(); }
 function sendDwarf(){
   const r=recip($('#dwTo').value), no=+$('#dwNo').value, n=Math.min(S.stock[no]||0,Math.max(1,parseInt($('#dwN').value)||1)); if(!n) return;
+  if(!canSend(no)){ setFlash('武器強化の素材は人に送れません',1); render(); return; }
   if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; }
   if(r.uid){ add(no,-n); sendMail(r.uid,{kind:'item',no,n,note:`${S.owner}（${S.shop}）からの贈り物`}); setFlash(`${ITEMS[no].name}×${n}を贈りました`); save(); render(); return; }
   const npc=r.npc;
