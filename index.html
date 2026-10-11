@@ -1853,6 +1853,16 @@ function advance(mins,step){
 }
 // 留守の間の営業：休業扱い（IDLE_H時間）になるまでは，ログインしていなくても売れ続ける（元の商人物語と同じ）
 // 決算の時刻が来たらその時点で決算し，留守中の決算はすべて行う
+// エラーの記録（管理者画面の「概要」で見られる）
+let ERRN=0;
+function reportErr(where,e){
+  try{ console.warn(where,e); const m=String((e&&(e.stack||e.message))||e).slice(0,400);
+    if(S){ S.errLog=(S.errLog||[]).slice(-9); S.errLog.push({at:Date.now(),w:where,m}); }
+    if(NET.online&&NET.db&&ERRN++<20) NET.db.collection('errlog').add({w:where,m,uid:NET.uid||'',owner:S?S.owner:'',shop:S?S.shop:'',t:Date.now(),ua:navigator.userAgent.slice(0,120)}).catch(()=>{});
+  }catch(x){}
+}
+window.addEventListener('error',ev=>reportErr('window',ev.error||ev.message));
+window.addEventListener('unhandledrejection',ev=>reportErr('promise',ev.reason));
 function simAway(gap){
   const res={sold:0,sales:0,idle:false};
   if(!S||gap<=0) return res;
@@ -1867,14 +1877,18 @@ function simAway(gap){
     while(S.clock<simEnd){
       let target=simEnd, doSettle=false;
       if(S.lastPeriod<cp){ const bReal=(S.lastPeriod+1)*SETTLE_MS-JST; const bc=nc-Math.round((now-bReal)/1000*RATE); if(bc<=simEnd){ target=Math.max(S.clock,bc); doSettle=true; } }
-      advance(target-S.clock,chunk);
-      if(doSettle){ if(px) pxApply(px,S.lastPeriod); accC+=S.today.count; accS+=S.today.sales; settle(); S.lastPeriod++; }
+      try{ advance(target-S.clock,chunk); }
+      catch(e){ reportErr('留守中の計算',e); if(S.clock<target){ S.time=Math.min(maxTime(),S.time+(target-S.clock)); S.clock=target; } }
+      if(doSettle){ try{ if(px) pxApply(px,S.lastPeriod); accC+=S.today.count; accS+=S.today.sales; settle(); }catch(e){ reportErr('留守中の決算',e); } S.lastPeriod++; }
       else break;
     }
     // 休業に入ったあとの決算は行わない（休業中は営業も経費もなし）
-    if(S.lastPeriod<cp){ if(px) pxApply(px,S.lastPeriod); accC+=S.today.count; accS+=S.today.sales; settle(); S.lastPeriod=cp; }
-    if(px){ pxApply(px,null); S.pxDone=px.at; }
-  } finally { AWAY=false; PXW=null; }
+    if(S.lastPeriod<cp){ try{ if(px) pxApply(px,S.lastPeriod); accC+=S.today.count; accS+=S.today.sales; settle(); }catch(e){ reportErr('留守中の決算',e); } S.lastPeriod=cp; }
+    if(px){ try{ pxApply(px,null); }catch(e){ reportErr('代理営業の反映',e); } S.pxDone=px.at; }
+  } catch(e){ reportErr('留守中の処理',e); }
+  finally { AWAY=false; PXW=null; }
+  // どんなことがあっても，留守にしていた時間ぶんの持ち時間は必ず回復させる
+  if(S.clock<simEnd){ S.time=Math.min(maxTime(),S.time+(simEnd-S.clock)); S.clock=simEnd; }
   accC+=S.today.count; accS+=S.today.sales;
   res.sold=accC-sc0; res.sales=accS-ss0;
   if(nc>S.clock) S.clock=nc;
@@ -4837,7 +4851,8 @@ function adminPlayers(){
   if(NET.online) playerShops().forEach(p=>a.push(p));
   return a;
 }
-let ADTAB=0;
+let ADTAB=0, ADERR=null;
+async function adminErrLoad(){ if(!NET.online){ ADERR=(S&&S.errLog||[]).map(x=>({t:x.at,w:x.w,m:x.m,shop:S.shop,owner:S.owner})).reverse(); render(); return; } try{ const q=await NET.db.collection('errlog').orderBy('t','desc').limit(20).get(); ADERR=q.docs.map(d=>d.data()); }catch(e){ netErr(e); ADERR=[]; } render(); }
 SCREENS.admin=function(){
   if(!ADMIN) return `<div class="c"><big>管理者画面</big></div>
     ${talk('kaominister','大臣','管理者のパスワードを入れてください。<br><small>まだ設定されていない場合は，ここで入れたパスワードが管理者パスワードになります（最初の1回だけ）。</small>')}
@@ -4858,6 +4873,7 @@ SCREENS.admin=function(){
       <tr><th>街資金・治安・開拓</th><td>${yen(t.fund||0)}・${Math.round(townVal(t,'safety',80))}・${Math.round(townVal(t,'develop',50))}</td></tr>
       <tr><th>次のイベント</th><td>${t.evNext?esc(EVENTS[t.evNext.type].n)+'　'+fmtReal(t.evNext.at):'未定'}${anyEventActive(t)?'<br><span class="red">開催中のイベントあり</span>':''}</td></tr>
       <tr><th>ギルド</th><td>${Object.keys(NET.guilds||{}).length}個</td></tr>
+      <tr><th>エラー記録</th><td>${ADERR?(ADERR.length?ADERR.map(x=>`<small>${realStamp(x.t||0)} ${esc(x.shop||'?')}（${esc(x.owner||'')}）<b>${esc(x.w||'')}</b><br><span class="note" style="word-break:break-all">${esc((x.m||'').slice(0,200))}</span></small>`).join('<hr>'):'<small>記録はありません</small>'):''} <button onclick="adminErrLoad()">最新のエラー記録を見る</button></td></tr>
     </table></div>
     <div class="c"><big>⚡ 全員にすぐ</big></div>
     <div class="c toolbar"><button onclick="adminQuickAll('full')">持ち時間を満タンに</button> <button onclick="adminQuickAll('gift')">ギフト券を3枚</button> <button onclick="adminQuickAll('ticket')">バトルチケットを5枚</button></div>
