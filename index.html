@@ -1628,12 +1628,11 @@ function catchUp(){
   if(!S) return 0;
   const gap=nowClock()-S.clock;
   if(gap<=0) return 0;
-  const p0=S.lastPeriod, m0=S.money;
-  AWAY=gap>=60; advance(Math.min(gap,3*1440)); AWAY=false;
-  if(nowClock()>S.clock) S.clock=nowClock();
+  const p0=S.lastPeriod, m0=S.money; S.awayTheft=0;
+  const r=simAway(gap);
   checkSettle();
   const ns=(S.lastPeriod||0)-(p0||S.lastPeriod||0);
-  if(gap>=30) setFlash(`お店を離れていた間に，現実で${hm(gap/60)}が経ちました。${ns>0?`決算${ns}回，`:''}資金 ${yen(m0)} → ${yen(S.money)}`);
+  if(gap>=30) setFlash(`お店を離れていた間に，現実で${hm(gap/60)}が経ちました。${r.sold>0?`留守中も営業し，${r.sold}個（${yen(r.sales)}）売れました。`:''}${S.awayTheft?`（万引き被害 ${S.awayTheft}個）`:''}${r.idle?`<br>※${Math.round(IDLE_H/24)}日以上留守にしたため，途中から休業扱いになりました。`:''}${ns>0?`決算${ns}回，`:''}資金 ${yen(m0)} → ${yen(S.money)}`);
   save();
   return gap;
 }
@@ -1753,18 +1752,46 @@ function npcRestock(n,init){
 /* ============================================================
    時間の進行
    ============================================================ */
-function advance(mins){
-  let left=mins;
+function advance(mins,step){
+  let left=mins; step=step||60;
   while(left>0){
-    const dt=Math.min(left,60);
+    const dt=Math.min(left,step);
+    const d0=Math.floor(S.clock/1440);
     simulate(dt);
     left-=dt;
-    if(S.clock%1440===0) dailyRefresh();   // ゲームの1日ごと：NPCの品出しなど
+    if(Math.floor(S.clock/1440)!==d0) dailyRefresh();   // ゲームの1日ごと：NPCの品出しなど
   }
+}
+// 留守の間の営業：休業扱い（IDLE_H時間）になるまでは，ログインしていなくても売れ続ける（元の商人物語と同じ）
+// 決算の時刻が来たらその時点で決算し，留守中の決算はすべて行う
+function simAway(gap){
+  const res={sold:0,sales:0,idle:false};
+  if(!S||gap<=0) return res;
+  const nc=nowClock(), now=Date.now(), lim=IDLE_H*3600*RATE;
+  const simEnd=S.clock+Math.min(gap,lim); res.idle=gap>lim;
+  const chunk=gap>3*1440?Math.min(600,Math.max(60,Math.round(gap/600))):60;
+  const cp=curPeriod(); if(S.lastPeriod==null) S.lastPeriod=cp;
+  const sc0=S.today.count, ss0=S.today.sales; let accC=0, accS=0;
+  AWAY=gap>=60;
+  try{
+    while(S.clock<simEnd){
+      let target=simEnd, doSettle=false;
+      if(S.lastPeriod<cp){ const bReal=(S.lastPeriod+1)*SETTLE_MS-JST; const bc=nc-Math.round((now-bReal)/1000*RATE); if(bc<=simEnd){ target=Math.max(S.clock,bc); doSettle=true; } }
+      advance(target-S.clock,chunk);
+      if(doSettle){ accC+=S.today.count; accS+=S.today.sales; settle(); S.lastPeriod++; }
+      else break;
+    }
+    // 休業に入ったあとの決算は行わない（休業中は営業も経費もなし）
+    if(S.lastPeriod<cp){ accC+=S.today.count; accS+=S.today.sales; settle(); S.lastPeriod=cp; }
+  } finally { AWAY=false; }
+  accC+=S.today.count; accS+=S.today.sales;
+  res.sold=accC-sc0; res.sales=accS-ss0;
+  if(nc>S.clock) S.clock=nc;
+  return res;
 }
 // ゲーム内の1日ごとの小さな更新（決算とは別）
 function dailyRefresh(){ (S.npcs||[]).forEach(n=>npcRestock(n,false)); }
-// 現実の時刻で決算の時間が来ていたら決算する（留守の間の分は最大2回まで）
+// 現実の時刻で決算の時間が来ていたら決算する（留守中の分は simAway で済ませてある）
 function checkSettle(){
   if(!S) return;
   const cp=curPeriod();
@@ -1829,7 +1856,7 @@ function simulate(dt){
     if(shelves.length&&Math.random()<p){
       if(Math.random()<petGuardRate()){ /* 相棒が追い払った */ }
       else if(has(64)){ if(Math.random()<0.05){ add(64,-1); letter('店番ロボット','kaoguide','ビビッ…万引き犯を追い払いましたが，もみ合いで店番ロボットが壊れてしまいました…。'); } }
-      else { const c=shelves[Math.floor(Math.random()*shelves.length)]; const k=Math.min(S.stock[c.no]-((S.fav||{})[c.no]?1:0),1+rnd(3)); if(k>0){ add(c.no,-k); S.today.theft=(S.today.theft||0)+k; letter('店員','kaoguide',`万引きにあいました！ ${ITEMS[c.no].name}×${k}が盗まれてしまいました…。街の治安が悪いようです（店番ロボットがいれば防げます）。`); const nm=`【万引き】${S.shop}で${ITEMS[c.no].name}×${k}が盗まれた！ 街の治安の悪化が心配される`; S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m:nm}); newsNet(nm); } }
+      else { const c=shelves[Math.floor(Math.random()*shelves.length)]; const k=Math.min(S.stock[c.no]-((S.fav||{})[c.no]?1:0),1+rnd(3)); if(k>0){ add(c.no,-k); S.today.theft=(S.today.theft||0)+k; if(AWAY){ S.awayTheft=(S.awayTheft||0)+k; } else { letter('店員','kaoguide',`万引きにあいました！ ${ITEMS[c.no].name}×${k}が盗まれてしまいました…。街の治安が悪いようです（店番ロボットがいれば防げます）。`); const nm=`【万引き】${S.shop}で${ITEMS[c.no].name}×${k}が盗まれた！ 街の治安の悪化が心配される`; S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m:nm}); newsNet(nm); } } }
     } }
   S.cases.forEach((c,idx)=>{
     if(!c || !has(c.no)) return;
@@ -4947,7 +4974,7 @@ function tick(){
   if(!S||!NET.ready||NET.switching||NET.kicked||NET.paused) return;
   const before=day();
   const gap=nowClock()-S.clock;
-  if(gap>0){ AWAY=gap>=60; advance(Math.min(gap,3*1440)); AWAY=false; if(nowClock()>S.clock) S.clock=nowClock(); }
+  if(gap>0){ if(gap>=60){ const r=simAway(gap); if(r.sold>0&&gap>=300) setFlash(`留守の間（${hm(gap/60)}）も営業し，${r.sold}個（${yen(r.sales)}）売れました。`); } else advance(gap); if(nowClock()>S.clock) S.clock=nowClock(); }
   const st=$('#status'); if(st) st.innerHTML=statusLine();
   checkSettle();
   saveTick++;
