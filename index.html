@@ -814,7 +814,7 @@ async function checkEvents(){
   const e=T().ev;
   if(e&&Date.now()>=e.start&&Date.now()<e.end&&S.evSeen!==e.start){
     S.evSeen=e.start;
-    if(e.type==='caravan'){ ITEMLIST.forEach(it=>{ if(it.plus>0&&it.price>0){ const cap=Math.max(3,Math.round(1440/it.plus*2)); S.market[it.no]=Math.max(S.market[it.no]||0,cap*2); } }); letter('市場の案内係','kaoguide','旅の大商隊がやって来ました！ 市場に品がどっさり入荷し，いまだけ30%引きでお求めいただけます。'); }
+    if(e.type==='caravan'){ if(NET.online) mktCaravan(); else ITEMLIST.forEach(it=>{ if(it.plus>0&&it.price>0){ const cap=Math.max(3,Math.round(1440/it.plus*2)); S.market[it.no]=Math.max(S.market[it.no]||0,cap*2); } }); letter('市場の案内係','kaoguide','旅の大商隊がやって来ました！ 市場に品がどっさり入荷し，いまだけ30%引きでお求めいただけます。'); }
     if(e.type==='festival'){ S.pop=clamp(S.pop+5,0,100); const mo=[]; MANOR.forEach(m=>{ const n=S.manor[m.id]||0; if(n>0) m.out.forEach(([no,q])=>{ add(no,q*n); mo.push(ITEMS[no].name+'×'+q*n); }); }); letter('荘園の管理人','kaokeeper',`収穫祭です！ お店の人気が5上がりました。${mo.length?'お祝いに荘園からもう一度収穫をお届けします：'+mo.join('，'):''}`); }
     save();
   }
@@ -1353,9 +1353,74 @@ function shopSummary(){
     pop:Math.round(S.pop),dig:S.dig,wins:S.wins,soldiers:S.soldiers,guild:S.guild,house:S.house,
     st:{life:t.life,attack:t.attack,defence:t.defence,tech:t.tech},btype:S.btype,weapon:w,
     cases:S.cases.map(c=>c&&has(c.no)&&S.stock[c.no]-((S.fav||{})[c.no]?1:0)>0?{no:c.no,price:c.price,stock:S.stock[c.no]-((S.fav||{})[c.no]?1:0)}:null),day:day(),t:Date.now(),
-    point:myPoint(),ptEnd:S.ptEnd||null,sale:S.today.sales,exps:Math.round(expSum()),found:S.createdAt||0,rkY:S.rankY||0};
+    point:myPoint(),ptEnd:S.ptEnd||null,pp:{wins:S.wins||0,p3:Math.round(myProfit3()),tn:Math.round(myTodayNet()),per:curPeriod()},sale:S.today.sales,exps:Math.round(expSum()),found:S.createdAt||0,rkY:S.rankY||0};
 }
 let lastPub='', pubBusy=false;
+/* ---------- 代理営業：ログインしていないお店の売上を，ログイン中の人がかわりに計算して街に反映する ----------
+   （元の商人物語は誰かがアクセスするたびに街の全店を更新していた。それと同じ動きをオンラインで再現する）
+   ・計算するのはログイン中の1人（代表）だけ。お店の持ち主が戻ったら，その記録どおりに売上・在庫が反映される */
+const PX_AWAY=6*60000, PX_LAG=180000;
+function pxLeader(){
+  if(!NET.online||NET.readonly||NET.guest||NET.kicked||!S||!NET.uid) return false;
+  const now=Date.now(); const act=Object.values(NET.shops||{}).filter(x=>x&&x.uid&&now-(x.t||0)<PX_AWAY).map(x=>x.uid);
+  if(!act.includes(NET.uid)) act.push(NET.uid); act.sort(); return act[0]===NET.uid;
+}
+function pxRate(d,c,idx){
+  const it=ITEMS[c.no]; if(!it||!it.pop||it.noshow) return 0;
+  const rv=rivalsOf(c.no).filter(r=>r.key!==d.uid);
+  const mine=S&&S.cases.find(x=>x&&x.no===c.no&&has(x.no)); if(mine) rv.push({price:mine.price,pop:S.pop});
+  const aMe=popF(d.pop||0)*priceF(c.price/it.price);
+  const aOther=rv.reduce((a,r)=>a+popF(r.pop)*priceF(r.price/it.price),0);
+  const share=aMe<=0?0:Math.min(1,aMe/(aMe+aOther)*(1+0.25*rv.length));
+  return (1/it.pop)*demandOf(c.no)*aMe*share*(it.food?2:1)*(it.med?5:1)*(isTrend(c.no)?1.5:1)*CASE_BOOST(idx)*townMult();
+}
+function pxStep(d,now){
+  if(!d||!d.uid||d.uid===NET.uid) return null;
+  if(now-(d.t||0)<PX_AWAY) return null;                       // 持ち主がいま遊んでいる
+  const end=Math.min(now,(d.t||0)+IDLE_H*3600000);            // 休業（1週間）に入ったら止める
+  const px=d.px||{from:(d.t||0)+PX_LAG,at:(d.t||0)+PX_LAG,log:{}};
+  if(!px.log) px.log={};
+  let from=Math.max(px.at||0,(d.t||0)+PX_LAG);
+  if(end-from<60000) return null;
+  if(!d.pp) d.pp={wins:d.wins||0,p3:0,tn:0,per:Math.floor(((d.t||now)+JST)/SETTLE_MS)};
+  let g=0;
+  while(from<end && g++<40){
+    const per=Math.floor((from+JST)/SETTLE_MS), to=Math.min(end,(per+1)*SETTLE_MS-JST);
+    if(d.pp.per<per){ d.ptEnd={d:d.pp.per,v:d.point||0}; d.pp.p3=Math.round(d.pp.p3*2/3+d.pp.tn); d.pp.tn=0; d.sale=0; d.pp.per=per; d.point=calcPoint(d.pop||0,d.pp.wins,d.pp.p3,0); }
+    const dt=(to-from)/1000*RATE;
+    const L=px.log[per]||(px.log[per]={s:{},y:0});
+    (d.cases||[]).forEach((c,idx)=>{ if(!c||!(c.stock>0)) return;
+      const k=Math.min(c.stock,poisson(pxRate(d,c,idx)*dt)); if(k<=0) return;
+      c.stock-=k; L.s[c.no]=(L.s[c.no]||0)+k; const gg=c.price*k, tax=Math.round(gg*taxRateFor(d.uid)/100);
+      L.y+=gg; d.pp.tn+=gg-tax; d.sale=(d.sale||0)+gg; });
+    from=to;
+  }
+  px.at=from; d.px=px; d.act=false;
+  const ks=Object.keys(px.log).map(Number).sort((a,b)=>a-b); while(ks.length>20) delete px.log[ks.shift()];
+  d.point=calcPoint(d.pop||0,d.pp.wins,d.pp.p3,d.pp.tn);
+  return d;
+}
+let pxBusy=false;
+async function pxRun(){
+  if(pxBusy||!pxLeader()) return; pxBusy=true;
+  try{
+    const now=Date.now();
+    const list=Object.values(NET.shops||{}).filter(x=>x&&x.uid&&x.uid!==NET.uid&&now-(x.t||0)>=PX_AWAY&&now-(x.t||0)<IDLE_H*3600000+3600000&&(x.cases||[]).some(c=>c&&c.stock>0)).slice(0,40);
+    for(const x of list){ try{ await dbTx('shops/'+x.uid,d=>{ const r=pxStep(d,Date.now()); return r?{set:r}:{}; }); }catch(e){ netErr(e); } }
+  }finally{ pxBusy=false; }
+}
+// 自分が留守の間に代理で計算された売上（持ち主が戻ったときに反映）
+let PXW=null;
+function pxInfo(){ if(!NET.online||!S) return null; const me=(NET.shops||{})[NET.uid]; const px=me&&me.px; if(!px||!px.log||!(px.at>(S.pxDone||0))) return null; return px; }
+function pxApply(px,per){
+  const keys=per==null?Object.keys(px.log):[String(per)];
+  keys.forEach(kk=>{ const L=px.log[kk]; if(!L||L.done) return; L.done=1;
+    for(const no in L.s){ const it=ITEMS[no]; if(!it) continue; const c=S.cases.find(x=>x&&x.no===+no); const price=c?c.price:it.price;
+      const k=Math.min(L.s[no],(S.stock[no]||0)-((S.fav||{})[no]?1:0)); if(k<=0) continue;
+      add(+no,-k); const g=price*k, tax=Math.round(g*taxRateFor(myKey())/100);
+      S.money+=g-tax; S.today.sales+=g; S.today.count+=k; S.today.tax=(S.today.tax||0)+tax; S.today.items[no]=(S.today.items[no]||0)+k;
+      S.trash+=k*0.25*(has(64)?0.5:1); S.today.popv=(S.today.popv||0)+0.25*Math.sqrt(k*price/500); } });
+}
 let lastPubT=0;
 async function publishShop(force){
   if(!NET.online||!S||pubBusy||NET.readonly||NET.kicked||NET.paused) return;
@@ -1568,6 +1633,7 @@ async function initNet(){
       if(snap.exists){ const r=migrate(JSON.parse(snap.data().json)); if(!S || (r.realLast||0)>=(S.realLast||0)-5000){ S=r; S.uid=uid; if(route!=='admin') route='rank'; } }
     }catch(e){ console.warn(e); }
     db.collection('shops').onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]=d.data()); NET.shops=o; softRender(); },netErr);
+    db.doc(MKT_PATH).onSnapshot(s=>{ NET.market=s.exists?s.data():null; if(route==='market') softRender(); },netErr);
     db.doc('town/state').onSnapshot(s=>{ NET.town=s.exists?JSON.parse(JSON.stringify(s.data())):null; if(NET.town&&!NET.town.riot) NET.town.riot={}; softRender(); },netErr);
     db.collection('mail').where('to','==',uid).onSnapshot(queueMail,netErr);
     db.collection('bbs').orderBy('t','desc').limit(40).onSnapshot(s=>{ NET.bbs=s.docs.map(d=>d.data()); softRender(); },netErr);
@@ -1577,7 +1643,7 @@ async function initNet(){
     db.collection('jobs').onSnapshot(s=>{ NET.jobs=s.docs.map(d=>({id:d.id,...d.data()})); softRender(); },netErr);
   }catch(e){ if(e) console.warn(e); NET.online=false; }
   NET.ready=true;
-  if(S){ await claimSession(); catchUp(); processMail(); publishShop(true); }
+  if(S){ await claimSession(); if(NET.online){ try{ const ms=await NET.db.doc('shops/'+NET.uid).get(); if(ms.exists) NET.shops[NET.uid]=ms.data(); }catch(e){} } catchUp(); processMail(); publishShop(true); }
   render();
 }
 /* ---------- 同じお店を複数の端末で開いたときの整理（同時に遊べるのは1台だけ） ---------- */
@@ -1598,6 +1664,7 @@ async function checkSession(){
   if(!NET.online||!S||NET.guest||NET.kicked) return;
   NET.paused=true;
   try{ const s=await NET.db.doc('sessions/'+NET.uid).get(); if(s.exists&&s.data().sid!==NET.sid){ NET.kicked=true; NET.kickedBy=s.data().dev||'別の端末'; } }catch(e){ netErr(e); }
+  try{ const ms=await NET.db.doc('shops/'+NET.uid).get(); if(ms.exists) NET.shops[NET.uid]=ms.data(); }catch(e){}
   NET.paused=false; render();
 }
 async function resumeHere(){
@@ -1608,6 +1675,7 @@ async function resumeHere(){
   }catch(e){ netErr(e); }
   NET.kicked=false;
   await claimSession();
+  try{ const ms=await NET.db.doc('shops/'+NET.uid).get(); if(ms.exists) NET.shops[NET.uid]=ms.data(); }catch(e){}
   catchUp(); processMail(); publishShop(true);
   setFlash('この端末で続きを遊べるようになりました（最新のデータを読み込みました）');
   go('rank');
@@ -1632,7 +1700,7 @@ function catchUp(){
   const r=simAway(gap);
   checkSettle();
   const ns=(S.lastPeriod||0)-(p0||S.lastPeriod||0);
-  if(gap>=30) setFlash(`お店を離れていた間に，現実で${hm(gap/60)}が経ちました。${r.sold>0?`留守中も営業し，${r.sold}個（${yen(r.sales)}）売れました。`:''}${S.awayTheft?`（万引き被害 ${S.awayTheft}個）`:''}${r.idle?`<br>※${Math.round(IDLE_H/24)}日以上留守にしたため，途中から休業扱いになりました。`:''}${ns>0?`決算${ns}回，`:''}資金 ${yen(m0)} → ${yen(S.money)}`);
+  if(gap>=30) setFlash(`お店を離れていた間に，現実で${hm(gap/60)}が経ちました。${r.sold>0?`留守中も営業し，${r.sold}個（${yen(r.sales)}）売れました${r.px?'（街の記録どおり）':''}。`:''}${S.awayTheft?`（万引き被害 ${S.awayTheft}個）`:''}${r.idle?`<br>※${Math.round(IDLE_H/24)}日以上留守にしたため，途中から休業扱いになりました。`:''}${ns>0?`決算${ns}回，`:''}資金 ${yen(m0)} → ${yen(S.money)}`);
   save();
   return gap;
 }
@@ -1772,18 +1840,20 @@ function simAway(gap){
   const chunk=gap>3*1440?Math.min(600,Math.max(60,Math.round(gap/600))):60;
   const cp=curPeriod(); if(S.lastPeriod==null) S.lastPeriod=cp;
   const sc0=S.today.count, ss0=S.today.sales; let accC=0, accS=0;
+  const px=pxInfo(); if(px){ const toClk=ms=>nc-Math.round((now-ms)/1000*RATE); PXW=[toClk(px.from||px.at),toClk(px.at)]; res.px=true; }
   AWAY=gap>=60;
   try{
     while(S.clock<simEnd){
       let target=simEnd, doSettle=false;
       if(S.lastPeriod<cp){ const bReal=(S.lastPeriod+1)*SETTLE_MS-JST; const bc=nc-Math.round((now-bReal)/1000*RATE); if(bc<=simEnd){ target=Math.max(S.clock,bc); doSettle=true; } }
       advance(target-S.clock,chunk);
-      if(doSettle){ accC+=S.today.count; accS+=S.today.sales; settle(); S.lastPeriod++; }
+      if(doSettle){ if(px) pxApply(px,S.lastPeriod); accC+=S.today.count; accS+=S.today.sales; settle(); S.lastPeriod++; }
       else break;
     }
     // 休業に入ったあとの決算は行わない（休業中は営業も経費もなし）
-    if(S.lastPeriod<cp){ accC+=S.today.count; accS+=S.today.sales; settle(); S.lastPeriod=cp; }
-  } finally { AWAY=false; }
+    if(S.lastPeriod<cp){ if(px) pxApply(px,S.lastPeriod); accC+=S.today.count; accS+=S.today.sales; settle(); S.lastPeriod=cp; }
+    if(px){ pxApply(px,null); S.pxDone=px.at; }
+  } finally { AWAY=false; PXW=null; }
   accC+=S.today.count; accS+=S.today.sales;
   res.sold=accC-sc0; res.sales=accS-ss0;
   if(nc>S.clock) S.clock=nc;
@@ -1850,6 +1920,7 @@ function simulate(dt){
   // 自店の売上
   const gi0=guildInfo(S.guild); const dragonX=(dragonActive()?3:1)*(evActive('festival')?1.5:1); const exposedX=(S.exposedUntil&&Date.now()<S.exposedUntil)?0.75:1; const gb = (gi0? 1+gi0.bonus*0.03 : 1)*townMult()*(1+(skillFx().sales||0))*dragonX*exposedX;
   const trashF = S.trash>100?0.6:S.trash>50?0.85:1;
+  let pxF=1; if(PXW){ const a=S.clock-dt, b=S.clock; const ov=Math.max(0,Math.min(b,PXW[1])-Math.max(a,PXW[0])); pxF=Math.max(0,1-ov/dt); }   // 代理営業で計算済みの時間は二重に売らない
   // 万引き：治安が悪いほど起きやすい。店番ロボットがいれば防げる（ときどき壊れる）
   { const saf=townVal(T(),'safety',80); const p=dt/60*Math.max(0,70-saf)/70*0.08;
     const shelves=S.cases.filter(c=>c&&has(c.no)&&!ITEMS[c.no].noshow);
@@ -1864,7 +1935,7 @@ function simulate(dt){
     const rv=rivalsOf(c.no);
     const gd=myGuildDoc(), feat=gd&&gActive(gd.feature)&&gd.feature.no===c.no;
     const avail=S.stock[c.no]-((S.fav||{})[c.no]?1:0);
-    const k=Math.max(0,Math.min(avail, poisson(myRate(c,rv)*dt*gb*trashF*(feat?1.3:1)*CASE_BOOST(idx))));
+    const k=Math.max(0,Math.min(avail, poisson(myRate(c,rv)*dt*pxF*gb*trashF*(feat?1.3:1)*CASE_BOOST(idx))));
     if(k>0){
       S.today.popv=(S.today.popv||0)+(popGain(c.price,c.no,rv)+(feat?0.4:0))*0.4*Math.sqrt(k*c.price/500);
       add(c.no,-k);
@@ -1884,8 +1955,8 @@ function simulate(dt){
       if(k>0){ nc.stock-=k; const g=nc.price*k; const tax = NET.online?0:Math.round(g*taxRateFor('npc:'+n.id)/100); n.money+=g-tax; n.today+=g; if(tax) S.today.npctax=(S.today.npctax||0)+tax; }
     });
   });
-  // 市場入荷
-  ITEMLIST.forEach(it=>{
+  // 市場入荷（オンラインでは街の共有市場が時間で入荷するので，ここでは何もしない）
+  if(!NET.online) ITEMLIST.forEach(it=>{
     if(it.plus>0 && it.price>0){
       const cap = it.no===25? 20 : Math.max(3,Math.round(1440/it.plus*2));
       const cur=S.market[it.no]||0;
@@ -1958,6 +2029,11 @@ function settle(){
   S.popLog={d:day()-1,sell:+sell.toFixed(1),keep:+keep.toFixed(1),dirty,guild:gb2,total:+dp.toFixed(1)};
   S.pop=clamp(S.pop+dp,0,100);
   S.trash+=5;
+  // 熟練度は決算ごとに少しずつ下がる（元の商人物語：0.5%＋いまの値の6%。決算が元の3倍あるので1回あたりは1/3）
+  { for(const no in S.exp){ const v=S.exp[no]; const nv=v-(0.5+v*0.06)/3; if(nv<=0.05) delete S.exp[no]; else S.exp[no]=Math.round(nv*100)/100; }
+    // 熟練度の合計が1000%を超えると，技術系のアクセサリをときどき忘れてしまう（元の商人物語と同じ）
+    const sum=expSum(); if(sum>1000){ const lost=[]; [18,19,24,38].forEach(no=>{ if(has(no)&&Math.random()*14000*3<(sum-1000)*10){ add(no,-1); lost.push(ITEMS[no].name); } }); [1,2,3,4].forEach(q=>{ if(S.eq[q]&&!has(S.eq[q])) S.eq[q]=0; });
+      if(lost.length){ letter('長老','kaofather',`熟練度の合計が${Math.round(sum)}%もあると，あれこれ手を広げすぎて初心を忘れがちじゃ…。${lost.join('，')}を失ってしまったようじゃな。`); news(`初心を忘れ，${S.shop}の${lost.join('・')}が失われました`); } } }
   // 銀行
   S.bankCount++;
   if(S.bankCount%14===0 && S.bank>0){ const it=Math.min(5000000,Math.round(Math.min(S.bank,100000000)*0.05)); S.bank+=it; letter('銀行','kaofather',`預金利息 ${yen(it)} をお付けしました。${S.bank>100000000?'（利息がつくのは預金¥1億まで・1回¥500万までです）':''}`); }
@@ -3095,7 +3171,25 @@ function closeShop(){ confirmBox('本当に閉店しますか？すべてのデ�
 /* ============================================================
    取引：市場・商店通り・求人・依頼所・競売・交換・質屋・宮殿
    ============================================================ */
+/* ---------- 市場は街全体で共有（誰かが買えばほかの人の分も減る）。入荷の上限はお店の数に比例 ---------- */
+const MKT_PATH='town/market';
+let MKBUSY=false;
+function mktScale(){ const now=Date.now(); const n=Object.values(NET.shops||{}).filter(x=>x&&x.uid&&now-(x.t||0)<IDLE_H*3600000).length; return Math.max(1,Math.round(Math.max(1,n)*0.6)); }
+function mktCap(it,mk){ return (it.no===25?20:Math.max(3,Math.round(1440/it.plus*2)))*mk; }
+function mktInit(mk){ const st={}; ITEMLIST.forEach(it=>{ if(it.plus>0&&it.price>0) st[it.no]=mktCap(it,mk); }); return {st,t:Date.now()}; }
+function mktFlow(m,now,mk){
+  if(!m.st) m.st={}; const dt=Math.max(0,(now-(m.t||now))/1000*RATE);
+  if(dt>0) ITEMLIST.forEach(it=>{ if(it.plus>0&&it.price>0){ const cap=mktCap(it,mk), cur=m.st[it.no]||0; if(cur<cap) m.st[it.no]=Math.min(cap,Math.round((cur+dt/it.plus*6*mk)*100)/100); } });
+  m.t=now; return m;
+}
+function mktNow(){
+  if(!NET.online) return S.market||{};
+  const mk=mktScale(); const m=NET.market?JSON.parse(JSON.stringify(NET.market)):mktInit(mk);
+  mktFlow(m,Date.now(),mk); const o={}; for(const k in m.st) o[k]=Math.floor(m.st[k]); return o;
+}
+function mktCaravan(){ if(!NET.online) return; const mk=mktScale(); dbTx(MKT_PATH,d=>{ const m=d||mktInit(mk); mktFlow(m,Date.now(),mk); ITEMLIST.forEach(it=>{ if(it.plus>0&&it.price>0) m.st[it.no]=Math.max(m.st[it.no]||0,mktCap(it,mk)*2); }); return {set:m}; }).catch(netErr); }
 SCREENS.market=function(){
+  const MK=mktNow();
   const tf=sub.type||0;
   const nos=ITEMLIST.filter(it=>it.plus>0&&it.price>0&&(!tf||typeIdx(it.type)===tf)).map(it=>it.no);
   const tabs=`<div class="tabs">${TYPES.map((t,i)=>`<span class="${tf===i?'on':''}" onclick="sub.type=${i};render()">${i?im('item-type'+i,'i16'):''}${t}</span>`).join('')}</div>`;
@@ -3103,17 +3197,30 @@ SCREENS.market=function(){
   ${talk('kaoguide','市場の案内係','市場では標準価格で商品を仕入れられます。入荷は時間とともに少しずつ。仕入れには <b>持ち時間 20分＋1個につき20秒</b> かかります。'+(myDisc()?`<br>${myDisc()?'いまは':''} <b>${myDisc()}%引き</b> でお求めいただけます（爵位・ギルドの共同仕入れ）。`:''))}
   ${tabs}
   <div class="tbl"><table class="t"><tr><th>商品</th><th>価格</th><th>在庫</th><th>所持</th><th>仕入</th></tr>
-  ${nos.map(n=>{ const it=ITEMS[n], st=S.market[n]||0; return `<tr><td class="nm">${iname(n)}${isTrend(n)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''}<br><small>${esc(it.info)}</small>${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}<br><small class="note">維持費 ${upkeepStr(it)}</small></td><td class="r nw">${yen(it.price)}</td><td class="r">${st}</td><td class="r">${S.stock[n]||0}</td>
+  ${nos.map(n=>{ const it=ITEMS[n], st=MK[n]||0; return `<tr><td class="nm">${iname(n)}${isTrend(n)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''}<br><small>${esc(it.info)}</small>${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}<br><small class="note">維持費 ${upkeepStr(it)}</small></td><td class="r nw">${yen(it.price)}</td><td class="r">${st}</td><td class="r">${S.stock[n]||0}</td>
      <td class="c">${st?`<input type="number" id="mq${n}" value="1" min="1" max="${st}" style="width:52px"><button onclick="buyMarket(${n})">買う</button>`:'<small>品切れ</small>'}</td></tr>`; }).join('')||'<tr><td colspan=5 class="c">この種類は市場に入荷しません</td></tr>'}
   </table></div>
   <div class="c note">原料や上級の装備は市場に入荷しません。地図や本を使って自分で調達・製作するか，<a onclick="go('port')">港</a>から船で島へ探索に行きましょう。</div>`;
 };
-function buyMarket(n){
-  const it=ITEMS[n]; const q=Math.min(S.market[n]||0,Math.max(1,parseInt($('#mq'+n).value)||1));
+async function buyMarket(n){
+  const it=ITEMS[n]; const q=Math.min(mktNow()[n]||0,Math.max(1,parseInt($('#mq'+n).value)||1));
+  if(q<=0){ setFlash('品切れです',1); render(); return; }
   const t=Math.round((20+q/3)*(has(24)?0.5:1)), unit=Math.round(it.price*(100-myDisc())/100), c=unit*q;
   if(S.money<c){ setFlash('資金が足りません',1); render(); return; }
-  if(!spendTime(t)){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
-  S.money-=c; addPay(c); S.market[n]-=q; add(n,q);
+  if(S.time<t){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
+  if(NET.online){
+    if(MKBUSY) return; MKBUSY=true;
+    const mk=mktScale();
+    let r=null; try{ r=await dbTx(MKT_PATH,d=>{ const m=d||mktInit(mk); mktFlow(m,Date.now(),mk); const h=Math.floor(m.st[n]||0); if(h<q) return {set:m,ret:{ok:false,h}}; m.st[n]=Math.round((m.st[n]-q)*100)/100; return {set:m,ret:{ok:true}}; }); }catch(e){ netErr(e); }
+    MKBUSY=false;
+    if(!r||!r.ret){ setFlash('通信に失敗しました。もう一度お試しください',1); render(); return; }
+    if(!r.ret.ok){ setFlash(`ほかのお店に先に買われてしまいました（いまの在庫：${r.ret.h}${it.scale}）`,1); render(); return; }
+    if(S.money<c||!spendTime(t)){ setFlash('資金か持ち時間が足りなくなりました',1); render(); return; }
+    S.money-=c; addPay(c); add(n,q);
+  } else {
+    if(!spendTime(t)){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
+    S.money-=c; addPay(c); S.market[n]-=q; add(n,q);
+  }
   setFlash(`${it.name}を${q}${it.scale}仕入れました（${yen(c)}${myDisc()?`・爵位割引${myDisc()}%`:''}・${hm(t)}）`); save(); render();
 }
 
@@ -4974,11 +5081,12 @@ function tick(){
   if(!S||!NET.ready||NET.switching||NET.kicked||NET.paused) return;
   const before=day();
   const gap=nowClock()-S.clock;
-  if(gap>0){ if(gap>=60){ const r=simAway(gap); if(r.sold>0&&gap>=300) setFlash(`留守の間（${hm(gap/60)}）も営業し，${r.sold}個（${yen(r.sales)}）売れました。`); } else advance(gap); if(nowClock()>S.clock) S.clock=nowClock(); }
+  if(gap>0){ if(gap>=60){ const r=simAway(gap); if(r.sold>0&&gap>=300) setFlash(`留守の間（${hm(gap/60)}）も営業し，${r.sold}個（${yen(r.sales)}）売れました。`); if(r.px){ save(); publishShop(true); } } else advance(gap); if(nowClock()>S.clock) S.clock=nowClock(); }
   const st=$('#status'); if(st) st.innerHTML=statusLine();
   checkSettle();
   saveTick++;
   if(saveTick%10===0) save();
+  if(saveTick%120===45) pxRun();
   if(saveTick%60===0){ saveRemote(); publishShop(); }
   if(saveTick%60===30) checkNetAuctions();
   if(saveTick%60===45) checkMyJobs();
