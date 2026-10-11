@@ -2769,9 +2769,15 @@ function specialDesc(no,i){
   return '';
 }
 function bootsUsed(no){ return no===29&&S.bootsP===curPeriod(); }
+// 広告はどれも決算ごとに1回まで（自店・他店は自分ごと，ギルドの広告は金庫・GP・広告パックを合わせてギルドごとに1回）
+function guildAdUsed(){ if(NET.online){ const g=myGuildDoc(); return !!(g&&g.adPer===curPeriod()); } return S.gadPer===curPeriod(); }
+function adUsed(i){ return i===2? guildAdUsed() : ((S.adPer||{})[i]===curPeriod()); }
+function markAd(i){ if(i===2){ if(NET.online&&S.guild) guildTx(S.guild,g=>{ g.adPer=curPeriod(); return 'ok'; }); else S.gadPer=curPeriod(); } else { S.adPer=S.adPer||{}; S.adPer[i]=curPeriod(); } }
+const AD_USED_MSG=['自店の広告は決算ごとに1回までです。次の決算のあとに出せます','他店の広告は決算ごとに1回までです。次の決算のあとに出せます','ギルドの広告は決算ごとに1回までです（金庫・GP・広告パックを合わせて，ギルドで1回）'];
 function doUse(no,i){
   const it=ITEMS[no], u=it.uses[i];
   if(bootsUsed(no)){ setFlash('おしゃれブーツは決算ごとに1回までです。次の決算のあとに使えます',1); render(); return; }
+  if(no===62&&adUsed(i)){ setFlash(AD_USED_MSG[i]||'今回の決算ではもう広告を出しました',1); render(); return; }
   if(!u.use.every(([n,x])=>has(x,n))){ setFlash('材料が足りません',1); render(); return; }
   if(u.needexp && (S.exp[no]||0)<u.needexp){ setFlash('熟練度が足りません',1); render(); return; }
   const t=useTime(u,no);
@@ -2818,7 +2824,7 @@ function pickTarget(k,no,i,t){ const tg=REFS[k]; closeModal();
   if(no===80) duelMark(tg);
   execUse(no,i,tg); }
 // まとめて使えるか（戦闘・相手を選ぶもの・陳列棚キット・転職は1回ずつ）
-function canMulti(no,i){ if(no===80||no===63||no===78||no===29) return false; if((no===62&&i===1)||(no===65&&i<2)) return false; return true; }
+function canMulti(no,i){ if(no===80||no===62||no===63||no===78||no===29) return false; if((no===62&&i===1)||(no===65&&i<2)) return false; return true; }
 function maxTimes(no,i){
   const u=ITEMS[no].uses[i]; let m=99;
   u.use.forEach(([n,x])=>{ m=Math.min(m,Math.floor((S.stock[x]||0)/n)); });
@@ -2896,6 +2902,7 @@ function special(no,i,target,msgs){
   if(no===13){ const g=Math.round((i===0?6000:15000)*rr(0.8,1.2)); S.money+=g; addIncome(g); msgs.push(`がんばって働き，${yen(g)}を稼いだ`); }
   else if(no===63){ const n=i+1; while(S.cases.length<n) S.cases.push(null); S.cases=S.cases.slice(0,n); S.ncase=n; msgs.push(`陳列棚を${n}つにしました（維持費 ${yen(CASECOST[n])}/日）`); add(63,1); }
   else if(no===62){
+    markAd(i);
     if(i===0){ S.pop=clamp(S.pop+Math.max(3,Math.round(20*(1-S.pop/110))),0,100); msgs.push('街中に広告を出した！人気が上がった'); }
     if(i===1){ const n=S.npcs[target]; n.pop=clamp(n.pop+20,0,100); n.friend+=5; msgs.push(`${esc(n.shop)}の広告を出してあげた`); letter(n.owner,'kao'+n.kao,'広告を出してくださったそうで，ありがとうございます！'); }
     if(i===2){ const gi=guildInfo(S.guild); if(gi&&gi.g){ Object.keys(gi.g.members||{}).forEach(u=>{ if(u===NET.uid) S.pop=clamp(S.pop+8,0,100); else sendMail(u,{kind:'gpop',amount:8,gname:gi.name}); }); msgs.push(`ギルド「${esc(gi.name)}」の広告を出した！ 加盟店みんなの人気が上がった`); } else if(gi){ S.pop=clamp(S.pop+8,0,100); S.npcs.filter(n=>n.guild===S.guild).forEach(n=>n.pop=clamp(n.pop+8,0,100)); msgs.push('ギルドの広告を出した！'); } else msgs.push('ギルドに所属していないので効果がなかった…'); }
@@ -4077,7 +4084,7 @@ function guildOnline(){
     const gp=my.gp||0, sellable=ITEMLIST.filter(it=>it.pop>0&&!it.noshow&&it.price>0);
     h+=`<div class="c"><big>ギルドポイントを使う</big>　<small>（いま <b>${gp.toLocaleString()} GP</b>・押すと確認が出ます）</small></div>`;
     if(manage) h+=`<div class="tbl"><table class="t" style="width:100%">
-      <tr><th>ギルド広告</th><td><button ${gp<30?'disabled':''} onclick="gpAd()">30GPで広告</button><br><small>加盟店みんなの人気+10</small></td></tr>
+      <tr><th>ギルド広告</th><td><button ${gp<30||guildAdUsed()?'disabled':''} onclick="gpAd()">30GPで広告</button><br><small>加盟店みんなの人気+10${guildAdUsed()?'<br><span class="red">今回の決算では広告済み</span>':'（決算ごとに1回）'}</small></td></tr>
       <tr><th>看板商品</th><td><select id="gpF">${sellable.map(it=>`<option value="${it.no}">${esc(it.name)}</option>`).join('')}</select> <button ${gp<20?'disabled':''} onclick="gpFeature()">20GPで決算3回分</button><br><small>加盟店がその品を売ると売れ行き+30%，人気も上がりやすい</small></td></tr>
       <tr><th>共同仕入れ</th><td><button ${gp<25?'disabled':''} onclick="gpBulk()">25GPで決算3回分</button><br><small>加盟店は市場で10%引き</small></td></tr>
       <tr><th>倉庫の拡張</th><td><button ${gp<15?'disabled':''} onclick="gpStore()">15GPで+100個</button><br><small>いまの容量 ${my.storeCap||100}個</small></td></tr>
@@ -4098,7 +4105,7 @@ function guildOnline(){
     </table></div>
     <div class="c"><button onclick="guildSettings()">設定を保存</button></div>
     <div class="c"><big>金庫を使う</big>　<small>（金庫 ${yen(my.fund||0)}）</small></div>
-    <div class="c toolbar"><button onclick="guildAd()">ギルド広告を出す（金庫から¥50,000）</button></div>
+    <div class="c toolbar"><button ${guildAdUsed()?'disabled':''} onclick="guildAd()">ギルド広告を出す（金庫から¥50,000）</button>${guildAdUsed()?'<br><small class="red">今回の決算ではギルド広告を出し済みです（決算ごとに1回）</small>':''}</div>
     <div class="c note">加盟店みんなの人気が10上がります。</div>
     <div class="c"><input type="number" id="gDist" value="10000" min="1" style="width:120px"> 円ずつ <button onclick="guildDistribute()">加盟店に分配する</button></div>
     <div class="c"><big>加盟店の管理</big></div>
@@ -4145,7 +4152,7 @@ function questOptions(g){
 function gQuest(i){ const o=questOptions(myGuildDoc())[i]; guildTx(S.guild,g=>{ if(g.quest&&!g.quest.done&&g.quest.until>=curPeriod()) return 'busy'; g.quest={...o,prog:0,until:curPeriod()+3,done:false}; g.board.push({name:S.owner,kao:S.kao,d:day(),m:`ギルドクエスト「${ITEMS[o.no].name}を${o.target}個売る」を受けました！`,t:Date.now()}); g.board=g.board.slice(-30); }).then(r=>{ setFlash(r==='busy'?'進行中のクエストがあります':'クエストを受けました！ みんなで協力して売りましょう',r==='busy'); render(); }); }
 function gpSpend(cost,fn,okMsg){ return guildTx(S.guild,g=>{ if((g.gp||0)<cost) return 'poor'; g.gp-=cost; const r=fn(g); return r||'ok'; }).then(r=>{ if(r==='poor'){ setFlash('GPが足りません',1); render(); } return r; }); }
 function gpAd(){ confirmBox('<b>30GP</b>を使って，ギルド広告を出しますか？<br><small>加盟店みんなの人気が+10されます。</small>',()=>gpAd2()); }
-function gpAd2(){ gpSpend(30,g=>Object.keys(g.members)).then(r=>{ if(!Array.isArray(r)) return; const gi=guildInfo(S.guild); r.forEach(u=>{ if(u===NET.uid) S.pop=clamp(S.pop+10,0,100); else sendMail(u,{kind:'gpop',amount:10,gname:gi?gi.name:''}); }); news(`ギルド「${gi?gi.name:''}」が街中に広告を出した！`); setFlash('GPでギルド広告を出しました！'); save(); render(); }); }
+function gpAd2(){ guildTx(S.guild,g=>{ if(g.adPer===curPeriod()) return 'used'; if((g.gp||0)<30) return 'poor'; g.gp-=30; g.adPer=curPeriod(); return Object.keys(g.members); }).then(r=>{ if(r==='used'){ setFlash(AD_USED_MSG[2],1); render(); return; } if(r==='poor'){ setFlash('GPが足りません',1); render(); return; } if(!Array.isArray(r)) return; const gi=guildInfo(S.guild); r.forEach(u=>{ if(u===NET.uid) S.pop=clamp(S.pop+10,0,100); else sendMail(u,{kind:'gpop',amount:10,gname:gi?gi.name:''}); }); news(`ギルド「${gi?gi.name:''}」が街中に広告を出した！`); setFlash('GPでギルド広告を出しました！'); save(); render(); }); }
 function gpFeature(){ const no=+$('#gpF').value; confirmBox(`<b>20GP</b>を使って，看板商品を<b>${esc(ITEMS[no].name)}</b>にしますか？<br><small>決算3回分（約1日半），加盟店がこの品を売ると売れ行き+30%・人気も上がりやすくなります。</small>`,()=>gpFeature2(no)); }
 function gpFeature2(no){ gpSpend(20,g=>{ g.feature={no,until:curPeriod()+3}; }).then(r=>{ if(r==='ok'){ setFlash(`看板商品を${ITEMS[no].name}にしました（決算3回分）`); render(); } }); }
 function gpBulk(){ confirmBox('<b>25GP</b>を使って，共同仕入れを始めますか？<br><small>決算3回分（約1日半），加盟店は市場で10%引きになります。</small>',()=>gpBulk2()); }
@@ -4219,7 +4226,8 @@ function guildReq(k,ok){ const u=REFS[k]; guildTx(S.guild,g=>{ const m=g.reqs[u]
 function guildSettings(){ const fee=+$('#gsFee').value, open=$('#gsOpen').value==='1', msg=$('#gsMsg').value.trim(), icon=(document.querySelector('input[name=gsIcon]:checked')||{}).value||'guildprize'; guildTx(S.guild,g=>{ g.fee=fee; g.open=open; g.msg=msg; g.icon=icon; }).then(()=>{ setFlash('ギルドの設定を保存しました'); render(); }); }
 function guildAd(){ confirmBox('金庫の<b>¥50,000</b>を使って，ギルド広告を出しますか？<br><small>加盟店みんなの人気が+10されます。</small>',()=>guildAd2()); }
 function guildAd2(){
-  guildTx(S.guild,g=>{ if((g.fund||0)<50000) return 'poor'; g.fund-=50000; return Object.keys(g.members); }).then(r=>{
+  guildTx(S.guild,g=>{ if(g.adPer===curPeriod()) return 'used'; if((g.fund||0)<50000) return 'poor'; g.fund-=50000; g.adPer=curPeriod(); return Object.keys(g.members); }).then(r=>{
+    if(r==='used'){ setFlash(AD_USED_MSG[2],1); render(); return; }
     if(r==='poor'){ setFlash('金庫のお金が足りません',1); render(); return; }
     if(Array.isArray(r)){ const gi=guildInfo(S.guild); r.forEach(u=>{ if(u===NET.uid) S.pop=clamp(S.pop+10,0,100); else sendMail(u,{kind:'gpop',amount:10,gname:gi?gi.name:''}); }); news(`ギルド「${gi?gi.name:''}」が街中に広告を出した！`); setFlash('ギルド広告を出しました！ 加盟店みんなの人気が上がります'); }
     save(); render();
