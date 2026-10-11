@@ -924,7 +924,12 @@ async function checkNiku(){
       if(n.target.key===myKey()) def=myDefense();
       else if(NET.online&&NET.shops[n.target.key]){ const s=NET.shops[n.target.key], st=s.st||{attack:0,defence:0,tech:0}; def=(s.soldiers||0)*10+Math.round((st.attack+st.defence+st.tech)/2); }
       else if(String(n.target.key).startsWith('npc:')){ const x=(S.npcs||[])[+String(n.target.key).slice(4)]; const st=(x&&x.st)||{attack:50,defence:50,tech:50}; def=Math.round((st.attack+st.defence+st.tech)/2); }
-      const win=def>=pow;
+      // 豪将リキーヤが用心棒として駆けつけることがある（3割）。NPCの店も守る。用心棒代は割高（資産の8%・最低10万円・最高500万円）
+      const guard=Math.random()<0.3; let fee=0;
+      if(guard){ const isNpc=String(n.target.key).startsWith('npc:'); const row=(NET.online?ranking():allShops()).find(r=>r.key===n.target.key)||{};
+        fee=isNpc?300000:Math.min(5000000,Math.max(100000,Math.round((row.money||0)*0.08)));
+        t.rikiGuard=(t.rikiGuard||0)+1; t.rikiEarn=(t.rikiEarn||0)+fee; t.rikiToday=(t.rikiToday||0)+fee; }
+      const win=guard||def>=pow;
       // 勝ったら（撃退されなかったら）点数・人気・爵位を奪う
       let steal=null;
       if(!win){ const row=(NET.online?ranking():allShops()).find(r=>r.key===n.target.key)||{};
@@ -933,8 +938,8 @@ async function checkNiku(){
         if(String(n.target.key).startsWith('npc:')){ t.nikuStolen=t.nikuStolen||{}; t.nikuStolen[n.target.key]=now+12*3600000; if(steal.dig){ t.npcDigLoss=t.npcDigLoss||{}; t.npcDigLoss[n.target.key]=(t.npcDigLoss[n.target.key]||0)+1; } } }
       if(!t.nikuHit||t.nikuHit.p!==curPeriod()) t.nikuHit={p:curPeriod(),keys:[]};
       t.nikuHit.keys.push(n.target.key);
-      t.nikuLast={id:n.at,target:n.target,pow,def,win,at:now,steal};
-      logs.push(win?`【襲撃】${NIKU}が${n.target.shop}を襲撃！ しかし，守りを固めていた${n.target.name}に撃退された！（防衛力${def}／襲撃${pow}）`
+      t.nikuLast={id:n.at,target:n.target,pow,def,win,guard,fee,at:now,steal};
+      logs.push(guard?`【防衛】${NIKU}が${n.target.shop}を襲撃！ そこへ用心棒の豪将リキーヤが駆けつけ，一喝して追い払った！ 用心棒代${yen(fee)}をきっちり請求していった（リキーヤの防衛${t.rikiGuard}回目）`:win?`【襲撃】${NIKU}が${n.target.shop}を襲撃！ しかし，守りを固めていた${n.target.name}に撃退された！（防衛力${def}／襲撃${pow}）`
                    :`【襲撃】${NIKU}が${n.target.shop}を襲撃！ 点数${steal.pt.toLocaleString()}・人気${steal.pop}${steal.dig?'・爵位ポイント1':''}を奪っていった…（防衛力${def}／襲撃${pow}）`);
       t.niku=null;
     }
@@ -954,9 +959,10 @@ function applyNikuResult(){
   const L=T().nikuLast; if(!L||S.nikuSeen===L.id) return;
   S.nikuSeen=L.id;
   if(L.target.key===myKey()){
-    if(L.win){ S.nikuRepel=(S.nikuRepel||0)+1; S.pop=clamp(S.pop+3,0,100); S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.8)); add(151,1); letter('傭兵隊長','kaoarmy',`${NIKU}の襲撃を見事に撃退しました！ 人気+3。兵士の2割が負傷しました。現場に「呪いの骨片」が1つ残されていました……。`); }
+    if(L.guard){ const fee=L.fee||0; S.pop=clamp(S.pop+1,0,100); S.money-=fee; addPay(fee); letter('豪将リキーヤ','kaoriki',`${NIKU}のやつがお前の店を狙っておったから，俺が追い払っておいたぞ！ 用心棒代として${yen(fee)}をいただいていく。命と店の値段と思えば安いもんだろう？ がっはっは！（人気+1・資金−${yen(fee)}）`); }
+    else if(L.win){ S.nikuRepel=(S.nikuRepel||0)+1; S.pop=clamp(S.pop+3,0,100); S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.8)); add(151,1); letter('傭兵隊長','kaoarmy',`${NIKU}の襲撃を見事に撃退しました！ 人気+3。兵士の2割が負傷しました。現場に「呪いの骨片」が1つ残されていました……。`); }
     else { const sp=Math.round(S.pop*0.1), sd=S.dig>0?1:0; S.pop=clamp(S.pop-sp,0,100); S.dig=Math.max(0,S.dig-sd); S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.7)); letter('傭兵隊長','kaoarmy',`${NIKU}にお店を襲われてしまいました…。人気−${sp}${sd?'・爵位ポイント−1':''}。点数も奪われました（お金は取られていません）。`); }
-  } else if(String(L.target.key).startsWith('npc:')&&!NET.online){ const x=S.npcs[+String(L.target.key).slice(4)]; if(x&&!L.win){ x.pop=clamp(Math.round(x.pop*0.9),5,100); if(x.dig>0) x.dig--; } }
+  } else if(String(L.target.key).startsWith('npc:')&&!NET.online){ const x=S.npcs[+String(L.target.key).slice(4)]; if(x&&L.guard){ x.money=Math.max(0,(x.money||0)-(L.fee||0)); } if(x&&!L.win){ x.pop=clamp(Math.round(x.pop*0.9),5,100); if(x.dig>0) x.dig--; } }
   save();
 }
 function nikuHtml(){
@@ -1268,7 +1274,9 @@ function calcPoint(pop,wins,profit3,todayNet){
   const r=0.5+(5/((wins||0)+10));
   if(p>10) p=15-(50/p);
   if(p<1) p=1/(2-p);
-  return Math.max(0,Math.floor(Math.round(pop*100)*r*p));
+  // 人気が0でも，利益があればその分だけ少し点数がつく（人気10相当まで）
+  const extra=Math.min(1000,Math.max(0,(profit3*3+todayNet)/3000));
+  return Math.max(0,Math.floor((Math.round(pop*100)+extra)*r*p));
 }
 // 元の商人物語と同じく「利益」＝売上−税−支出（仕入れなど）で点数が決まる
 function addPay(v){ if(!S) return; S.today.pay=(S.today.pay||0)+Math.round(v); }
