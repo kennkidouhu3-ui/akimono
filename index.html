@@ -2745,7 +2745,7 @@ function specialDesc(no,i){
   if(no===63) return '陳列棚が'+(i+1)+'つに';
   if(no===62) return ['自店の人気大幅アップ','指定した店の人気アップ','ギルド所属店の人気アップ'][i];
   if(no===65) return ['他店の人気ダウン','他店の商品を盗む','同業種の人気ダウン'][i];
-  if(no===80) return ['他店主と決闘','魔物退治（低）','魔物退治（中）','魔物退治（上）','最上級の魔物（勝てば賞金）'][i];
+  if(no===80) return ['他店主と決闘','魔物退治（低）','魔物退治（中）','魔物退治（上）','最上級の魔物（勝てば賞金・人気2消費）'][i];
   if(no===78) return JOBS[JOBCHANGE[i]].name+'になる';
   if(no===25) return i===0?'ミノ牛乳×10':i===1?'ミノ牛乳×20〜40（逃げることも）':'';
   if(FOOD_EFFECT[no]&&it0(no,i)) return Object.entries(FOOD_EFFECT[no]).map(([k,v])=>`${STATNAME[k]}+${v}`).join('・')+'（ずっと）';
@@ -2768,18 +2768,23 @@ function doUse(no,i){
   if(!spendTime(t)){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
   execUse(no,i,null);
 }
+// 最上級の魔物への挑戦は人気を2消費（勝てば1戻る・負ければ戻らない）
+const TOP_POP=2;
+function payTopPop(){ S.pop=clamp(S.pop-TOP_POP,0,100); }
 function chooseMonster(mode,t){
   const list=mode===4? TOP_MONS.map((m,k)=>({m,k,top:1})) : MONS.slice((mode-1)*15,(mode-1)*15+15).map((m,k)=>({m,k:(mode-1)*15+k}));
   const ms=myStat();
   const rows=list.map(({m,k,top})=>{ const mat=top?146+k:101+k; const hp=Math.round(ms.life*m.hp/100);
     const pw=m.atk+m.def+m.tech, mine=ms.attack+ms.defence+ms.tech, lv=pw>mine*1.3?'<span class="red">とても強い</span>':pw>mine*0.9?'<span class="red">強い</span>':pw>mine*0.6?'互角':'<span class="blue">楽勝</span>';
     return `<tr><td>${im('no-'+m.img,'','width=36 height=46'+(m.fx?` style="${m.fx}"`:''))}</td><td><b>${esc(m.name)}</b><br><small>HP${hp} 攻${m.atk} 防${m.def} 技${m.tech}<br>手ごたえ：${lv}${ITEMS[mat]?`<br>はぎ取り：${esc(ITEMS[mat].name)}`:''}<br>賞金${yen(m.prize||0)}</small></td><td><button onclick="pickMonster(${mode},${k},${t})">選ぶ</button></td></tr>`; }).join('');
-  modal(`<div class="c"><big>戦う魔物を選ぶ</big></div><div class="c note">持ち時間 ${hm(t)}・バトルチケット1枚</div><div class="tbl"><table class="t" style="width:100%">${rows}</table></div><div class="c"><button onclick="closeModal()">やめる</button></div>`);
+  modal(`<div class="c"><big>戦う魔物を選ぶ</big></div><div class="c note">持ち時間 ${hm(t)}・バトルチケット1枚${mode===4?'・<b class="red">人気2</b>':''}</div>${mode===4?`<div class="flash err" style="text-align:left">⚠ <b>最上級の魔物への挑戦には，お店の人気を2消費します。</b><br>勝てば人気が1戻ります（差し引き−1）。負けると戻りません（−2のまま）。<br>人気が2未満のときは挑めません。（いまの人気：${Math.round(S.pop)}）</div>`:''}<div class="tbl"><table class="t" style="width:100%">${rows}</table></div><div class="c"><button onclick="closeModal()">やめる</button></div>`);
 }
 function pickMonster(mode,k,t){
   closeModal();
   if(!has(80)){ setFlash('バトルチケットがありません',1); render(); return; }
+  if(mode===4&&S.pop<TOP_POP){ setFlash(`最上級の魔物に挑むには人気が${TOP_POP}必要です（いまの人気：${Math.round(S.pop)}）`,1); render(); return; }
   if(!spendTime(t)){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
+  if(mode===4) payTopPop();
   execUse(80,mode,k);
 }
 function chooseTarget(no,i,t){
@@ -2982,7 +2987,7 @@ function battleMenu(b){
   const again=b&&b.mode!==9? `<button onclick="quickBattle(${b.mode},true)" ${tk&&b.mode!==9?'':'disabled'} style="font-weight:bold">同じ戦いをもう一度</button>`:'';
   return `<div class="c"><big>次の戦い</big>　<small>バトルチケット 残り<b>${tk}</b>枚・持ち時間 ${hm(S.time)}</small></div>
   <div class="c toolbar">${again}</div>
-  <div class="c toolbar">${[0,1,2,3,4].map(m=>`<button ${tk?'':'disabled'} onclick="quickBattle(${m},false)">${['決闘','魔物（低）','魔物（中）','魔物（上）','<span class=red>最上級</span>'][m]}<br><small>${hm(useTime(u[m],80))}</small></button>`).join('')}</div>
+  <div class="c toolbar">${[0,1,2,3,4].map(m=>`<button ${tk?'':'disabled'} onclick="quickBattle(${m},false)">${['決闘','魔物（低）','魔物（中）','魔物（上）','<span class=red>最上級</span>'][m]}<br><small>${hm(useTime(u[m],80))}${m===4?'・人気2':''}</small></button>`).join('')}</div>
   ${tk?'':`<div class="c"><a onclick="go('market',{type:10})">市場でバトルチケットを買う</a></div>`}
   ${(S.eqSets||[]).some(Boolean)?`<div class="c"><small>マイセット：</small>${(S.eqSets||[]).map((st,i)=>st?`<button onclick="eqSetLoad(${i})">${esc(st.name)}</button>`:'').join('')}</div>`:''}
   <div class="c"><a onclick="go('status')">ステータス・装備を見る</a>　<a onclick="go('army')">傭兵所（訓練・戦法）</a></div>`;
@@ -2993,7 +2998,9 @@ function quickBattle(mode,same){
   if(mode===0 && !(same&&BT&&BT.target!=null)){ return chooseTarget(80,0,t); }
   if(mode===0 && same && duelCount(BT.target)>=DUEL_LIMIT){ setFlash('この相手とは今回の決算ではもう決闘しました。ほかの相手を選んでください',1); return chooseTarget(80,0,t); }
   if(mode>=1 && mode<=4 && !(same&&BT&&BT.target!=null&&BT.mode===mode)){ return chooseMonster(mode,t); }
+  if(mode===4&&S.pop<TOP_POP){ setFlash(`最上級の魔物に挑むには人気が${TOP_POP}必要です（いまの人気：${Math.round(S.pop)}）`,1); render(); return; }
   if(!spendTime(t)){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
+  if(mode===4) payTopPop();
   if(mode===0&&same&&BT) duelMark(BT.target);
   execUse(80,mode,(same&&BT)?BT.target:null);
 }
@@ -3015,7 +3022,7 @@ function finishBattle(){
     if(b.mon){ const tm=petTame(b.mon,!!b.foe.top); if(tm) res.push(tm); }
     if(b.mon){ const mi=b.foe.top? 146+TOP_MONS.indexOf(b.mon) : 101+MONS.indexOf(b.mon); if(ITEMS[mi]){ const fx1=skillFx(); let k=(b.foe.top?1:1+rnd(2))+(fx1.mat||0); if(fx1.hunter) k*=2; if(evActive('meteor')) k*=2; add(mi,k); res.push(`はぎ取り！ ${iname(mi)}×${k}を手に入れた`); } }
     if(b.mon&&!b.foe.top&&b.mon.prize){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0))); S.money+=pz; addIncome(Math.round(pz*0.1)); res.push(`賞金 ${yen(pz)} を手に入れた`); }
-    if(b.foe.top){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0))); S.money+=pz; addIncome(Math.round(pz*0.1)); S.pop=clamp(S.pop+3,0,100); res.push(`<b class="red">最上級の魔物を討ち取った！ 賞金${yen(Math.round(b.mon.prize*(1+(skillFx().prize||0))))}を得た！ 人気+3</b>`); news(`${S.owner}（${S.shop}）が最上級の魔物「${b.mon.name}」を討ち取った！`); }
+    if(b.foe.top){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0))); S.money+=pz; addIncome(Math.round(pz*0.1)); S.pop=clamp(S.pop+1,0,100); res.push(`<b class="red">最上級の魔物を討ち取った！ 賞金${yen(Math.round(b.mon.prize*(1+(skillFx().prize||0))))}を得た！ 人気が1戻った（挑戦で−2・差し引き−1）</b>`); news(`${S.owner}（${S.shop}）が最上級の魔物「${b.mon.name}」を討ち取った！`); }
     if(b.npc){ const up=(b.npc.strong||b.npc.warrior||b.npc.tyrant)?4:2; S.pop=clamp(S.pop+up,0,100); b.npc.pop=clamp(b.npc.pop-1,b.npc.popBase?b.npc.popBase-15:0,100); res.push(`<span class="blue">勝利で人気+${up}</span>／${esc(b.npc.shop)}の人気-1`); if(b.npc.tyrant||b.npc.strong||b.npc.warrior){
       // 賞金は相手との力の差に比例（自分がずっと強ければ少なめ）。点数への反映はごく少なめ
       const pw=s=>s.life/5+s.attack+s.defence+s.tech, mine=pw(myStat()), foe=pw(b.npc.st||{life:0,attack:0,defence:0,tech:0});
@@ -3032,6 +3039,7 @@ function finishBattle(){
   } else {
     S.blose++;
     res.push(`<b class="red">${esc(b.me.name)}は${esc(b.foe.name)}に敗北した…</b>`);
+    if(b.foe&&b.foe.top) res.push('<span class="red">挑戦で使った人気2は戻りませんでした</span>');
     { const e=Math.max(1,Math.round((b.mon? b.mon.exp : 40)*0.2)); S.bexp=(S.bexp||0)+e; res.push(`${im('ability-no-0','i16')}負けても経験値を ${e} 手に入れた`); }
     [1,2,3,4].forEach(s=>{ const n=S.eq[s]; if(n&&Math.random()<0.12){ add(n,-1); if(!has(n)) S.eq[s]=0; res.push(`<span class="red">${esc(ITEMS[n].name)}がボロボロになって壊れた…</span>`); } });
     if(b.npc){ S.pop=clamp(S.pop-1,0,100); b.npc.pop=clamp(b.npc.pop+1,0,100); res.push(`<span class="red">敗北で人気-1</span>／${esc(b.npc.shop)}の人気+1`); news(`${S.owner}が${b.npc.owner}に決闘を挑み，敗北しました`); }
@@ -3591,7 +3599,7 @@ const GUIDE=[
  ['爵位（しゃくい）',`爵位は，平民→士爵→男爵→子爵→伯爵→侯爵→公爵→大公 の順に上がります。上がるほど<b>決算ごとの年金</b>や<b>市場の割引</b>などの特典がつきます。<br>ランキング1位・王様の依頼（[宮殿]）・レイドの撃退などで爵位ポイントが増えます。【情報】→[爵位名鑑]で確認できます。`],
  ['戦闘',`「<b>バトルチケット</b>」（市場で買えます）を使うと，魔物退治や決闘ができます。<br>
   勝つと<b>経験値</b>が入り，【自店】→[ステータス]の「修練」で<b>体力・攻撃・防御・技量</b>を好きに強化できます。能力は<b>リセットして振り分け直す</b>こともできます。装備（剣・鎧・盾・装飾）はステータス画面で変えられ，<b>マイセット（5つ）</b>に登録すると一瞬で着替えられます。<br>
-  「最上級の魔物」はとても強いですが，勝てば大きな賞金がもらえます。`],
+  「最上級の魔物」はとても強いですが，勝てば大きな賞金がもらえます。ただし挑むたびに<b>人気を2消費</b>します（勝てば1戻り，負ければ戻りません）。`],
  ['山賊バルバロスの襲来（レイド）',`街のイベントとして，<b>日本時間の21時から1時間</b>，山賊バルバロスが街を襲います。予定日時はランキング画面の上に出ます。<br>
   【施設】→[傭兵所]から<b>討伐</b>に行くか，<b>声援・差し入れ・兵士</b>で応援しましょう。撃退すると賞金や，ここでしか手に入らない<b>ダイヤモンド原石</b>がもらえます。`],
  ['狩りと鍛冶（素材で装備を作る）',`バトルチケットで魔物を倒すと，その魔物ならではの<b>素材</b>を「はぎ取り」で手に入れられます。<br>素材を集めて【施設】→[<b>鍛冶工房</b>]に持っていくと，店では買えない<b>強い装備</b>（獣牙→魔獣→幻獣→覇竜）を作れます。<br>暴君にくべんき藩を退けると手に入る「呪いの骨片」からは，とても強いけれど<b>決算ごとに人気が下がる呪われた装備</b>が作れます。`],
