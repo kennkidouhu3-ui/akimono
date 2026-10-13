@@ -774,6 +774,7 @@ function newState(owner,shop,kaoNo){
   return s;
 }
 function migrate(s){
+  if(!s.createdAt) s.createdAt=Date.now()-Math.max(0,s.bankCount||0)*12*3600000;   // 開店日がない古いデータは，決算の回数から逆算
   if(!s) return s;
   if(s.soldiers==null) s.soldiers=0;
   if(s.bexp==null) s.bexp=0;
@@ -2329,7 +2330,7 @@ function rankTable(limit){
       <div class="rkm"><div class="rkf">${kao(r.kao)}<br>${im((JOBS[r.job]||JOBS['']).img,'','width=20 height=30')}</div>
         <div class="rki"><div class="rks">${guildIcon(r.guild)}${r.me?esc(r.shop):(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${tags}</div>
           ${r.wins?`<div class="rksub">${winIcons(r.wins)}</div>`:''}
-          <div class="rksub"><span class="nb">${esc(r.name)}</span><span class="nb">${(JOBS[r.job]||JOBS['']).name}</span><span class="nb">${digHtml(r.dig)}</span>${r.soldiers?`<span class="nb">兵${r.soldiers}</span>`:''}</div>
+          <div class="rksub"><span class="nb">${esc(r.name)}</span><span class="nb">${(JOBS[r.job]||JOBS['']).name}</span><span class="nb">${digHtml(r.dig)}</span>${r.soldiers?`<span class="nb">兵${r.soldiers}</span>`:''}${!r.npc&&r.found>0?`<span class="nb">🏪 営業<b>${Math.floor((Date.now()-r.found)/86400000)+1}</b>日目</span>`:''}</div>
           <div class="rksub">人気 ${popStars(r.pop)}</div></div></div>
       <div class="rkd">
         ${cs.length?`<div class="rkitems">${cs.map(c=>ii(c.no)).join('')}</div><div><span class="nb">${esc(ITEMS[first.no].name)} <b>${yen(first.price)}</b></span></div>`:''}
