@@ -772,7 +772,7 @@ function newState(owner,shop,kaoNo){
   S=s;
   refreshRequests(); refreshBarter(); refreshAuction();
   news('新しいお店「'+shop+'」が開店しました！');
-  letter('案内人','kaoguide','開店おめでとうございます！まずは【取引】の[市場]で「近くの山への地図」を買うか，倉庫のギフト券で地図セットと交換して，【自店】の[倉庫]から使ってみましょう。薬草が採れたら「薬調合入門」でポーションを作って陳列棚に並べるのが商売の第一歩です。詳しくは[図書館]へどうぞ。');
+  letter('案内人','kaoguide','開店おめでとうございます！まずは【取引】の[市場]で「近くの山への地図」を買うか，倉庫のギフト券で地図セットと交換して，【自店】の[倉庫]から使ってみましょう。薬草が採れたら「薬調合入門」でポーションを作って陳列棚に並べるのが商売の第一歩です。詳しくはトップの「📖 遊び方ガイド」へどうぞ。');
   return s;
 }
 function migrate(s){
@@ -3774,7 +3774,7 @@ SCREENS.guide=function(){
   ${talk('kaoguide','案内人','ようこそ商人の街へ！ 知りたい項目を押すと説明が開きます。はじめての方は<b>「最初の10分でやること」</b>から読んでみてくださいね。')}
   <div class="gtoc">${GUIDE_CATS.map(([k,ic,n])=>`<span onclick="document.getElementById('gc_${k}').scrollIntoView({behavior:'smooth'})">${ic} ${n}</span>`).join('')}</div>
   ${GUIDE_CATS.map(([k,ic,n])=>`<div class="gcat" id="gc_${k}">${ic} ${n}</div>${GUIDE.map((g,i)=>g[3]===k?card(g,i):'').join('')}`).join('')}
-  <div class="c note" style="margin-top:12px">もっとくわしくは【情報】→[図書館]もご覧ください。</div>
+  <div class="c note" style="margin-top:12px">アイテムや魔物のくわしいデータは【情報】→[図書館]の図鑑で見られます。</div>
   <div class="c"><button onclick="${S?"go('rank')":"route='rank';render()"}">トップへ戻る</button></div>`;
 };
 
@@ -3830,8 +3830,8 @@ SCREENS.dignity=function(){
 function GUILD_LVL(){ return digLevel(GUILD_DIG); }
 function dukeSay(){ if(digLevel(S.dig)<7) return; const msg=$('#dkMsg').value.trim(); townTx(t=>{ t.duke={key:NET.uid,name:S.owner,shop:S.shop,msg,t:Date.now()}; }).then(()=>{ setFlash('大公のお言葉を出しました'); render(); }); }
 SCREENS.library=function(){
-  const tab=sub.t||0;
-  const tabs=`<div class="tabs">${['遊び方','アイテム図鑑','魔物図鑑','スタッフロール','スキル一覧'].map((t,i)=>`<span class="${tab===i?'on':''}" onclick="sub.t=${i};render()">${t}</span>`).join('')}</div>`;
+  const tab=sub.t||1;   // 遊び方は「遊び方ガイド」にまとめたので，図書館は図鑑から
+  const tabs=`<div class="tabs">${['','アイテム図鑑','魔物図鑑','スキル一覧','スタッフロール'].map((t,i)=>t?`<span class="${tab===[0,1,2,4,3][i]?'on':''}" onclick="sub.t=${[0,1,2,4,3][i]};render()">${t}</span>`:'').join('')}<span onclick="GUIDE_OPEN=-1;go('guide')">📖 遊び方ガイド</span></div>`;
   if(tab===1){
     const tf=sub.type||0;
     return `<div class="c"><big>図書館</big></div>${tabs}
