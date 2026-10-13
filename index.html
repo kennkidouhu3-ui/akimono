@@ -167,6 +167,55 @@ hr{margin:12px auto;}
   .tcell{height:140px;}
   .tcell img.bld{max-height:118px;}
 }
+
+/* ---- 新聞 ---- */
+.nwf{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 8px;}
+.nwf span{padding:4px 11px;border:1px solid #c9b48a;border-radius:16px;background:#fffdf6;font-size:13px;cursor:pointer;color:#5a4320;}
+.nwf span.on{background:#8a5a1e;border-color:#8a5a1e;color:#fff;font-weight:bold;}
+.nwd{margin:12px 0 4px;padding:3px 10px;background:#e9dcc0;border-radius:6px;font-weight:bold;font-size:13px;color:#5a4320;text-align:left;}
+.nwl{background:#fff;border:1px solid #e0d2b4;border-radius:8px;overflow:hidden;text-align:left;}
+.nwi{display:flex;gap:8px;padding:8px 10px;border-bottom:1px solid #f0e6d2;border-left:4px solid #c9b48a;}
+.nwi:last-child{border-bottom:none;}
+.nwt{flex:0 0 40px;color:#8a7a60;font-size:12px;padding-top:2px;font-variant-numeric:tabular-nums;}
+.nwb{flex:1;font-size:14px;line-height:1.6;word-break:break-all;}
+.nwg{display:inline-block;color:#fff;border-radius:4px;padding:0 6px;font-size:11px;margin-right:5px;vertical-align:1px;font-weight:bold;}
+.nwmore{margin:8px 0;text-align:center;}
+/* ---- 遊び方ガイド ---- */
+.gtoc{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:6px 0 10px;}
+.gtoc span{padding:5px 12px;border-radius:16px;background:#fff7e6;border:1px solid #e0c48c;font-size:13px;cursor:pointer;}
+.gcat{margin:16px 0 6px;padding:4px 2px;font-weight:bold;font-size:16px;color:#6b4a1e;border-bottom:2px solid #e0c48c;text-align:left;}
+.gcard{background:#fff;border:1px solid #e3d3ad;border-radius:10px;margin:7px 0;overflow:hidden;text-align:left;box-shadow:0 1px 2px rgba(120,90,40,.08);}
+.ghead{display:flex;align-items:center;gap:10px;padding:11px 12px;cursor:pointer;font-weight:bold;font-size:15px;}
+.gcard.open .ghead{background:#fff4dc;}
+.ghead .gic{font-size:20px;width:26px;text-align:center;}
+.ghead .gar{margin-left:auto;color:#b09a70;font-size:13px;}
+.gbody{padding:10px 14px 12px;line-height:1.9;font-size:14.5px;border-top:1px dashed #e3d3ad;}
+.gol{margin:4px 0 4px 20px;padding:0;} .gol li{margin:3px 0;}
+.gtip{margin:8px 0 2px;padding:7px 10px;background:#eef7ea;border-left:4px solid #6aa84f;border-radius:4px;font-size:13.5px;}
+.gwarn{margin:8px 0 2px;padding:7px 10px;background:#fbeeee;border-left:4px solid #c44;border-radius:4px;font-size:13.5px;}
+.gtbl{width:100%;border-collapse:collapse;margin:6px 0;font-size:13.5px;}
+.gtbl th{background:#f6ecd6;white-space:nowrap;text-align:left;padding:5px 8px;border:1px solid #e3d3ad;vertical-align:top;}
+.gtbl td{padding:5px 8px;border:1px solid #e3d3ad;}
+.gnext{text-align:right;margin-top:8px;}
+
+/* ---- トップのランキング（カード表示） ---- */
+.rk{background:#fff;border:1px solid #e0d2b4;border-radius:10px;margin:8px 0;text-align:left;overflow:hidden;box-shadow:0 1px 2px rgba(120,90,40,.08);}
+.rk.me{border:2px solid #d9a441;background:#fffbef;}
+.rkh{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:6px 10px;background:#f6ecd6;}
+.rkn{font-weight:bold;font-size:16px;white-space:nowrap;}
+.rkp{color:#c0392b;font-weight:bold;font-size:19px;white-space:nowrap;}
+.rkp small{font-size:12px;color:#8a6;font-weight:normal;}
+.rkm{display:flex;gap:10px;padding:8px 10px 4px;}
+.rkf{flex:0 0 56px;text-align:center;}
+.rkf img:first-child{width:54px;height:auto;border-radius:6px;}
+.rki{flex:1;min-width:0;}
+.rks{font-weight:bold;font-size:15.5px;line-height:1.45;word-break:break-all;}
+.rksub{font-size:12.5px;color:#6a5a40;line-height:1.7;margin-top:2px;}
+.rkd{padding:2px 10px 9px;font-size:12.5px;line-height:1.75;color:#444;}
+.nb{white-space:nowrap;display:inline-block;margin-right:12px;}
+.rkitems{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.rkcm{margin:3px 0;padding:4px 8px;background:#f8f5ee;border-radius:6px;color:#555;}
+.rkst img{vertical-align:-3px;}
 </style>
 </head>
 <body>
@@ -975,16 +1024,17 @@ function nikuHtml(){
   return `<div class="flash err" style="text-align:center;background:#f7eaea">${im('kaoniku','','width=32 height=32')} <b>【襲撃予告】${esc(NIKU)}</b>が<br><b>${fmtReal(n.at)}ごろ</b>，<b>${esc(n.target.shop)}</b>を襲うと宣言！
   ${mine?`<br><small class="red">あなたのお店が狙われています！ 防衛力 <b>${myDefense()}</b>（兵士1人=10＋能力）。襲撃はおよそ${NIKU_POW[0]}〜${NIKU_POW[1]}。<a onclick="go('army')">傭兵所で兵士を雇う</a></small>`:''}</div>`;
 }
-/* ---------- NPCが自分から決闘を挑んでくる（3〜6時間ごと） ---------- */
+/* ---------- NPCが自分から決闘を挑んでくる（30分〜1時間半ごと） ---------- */
+function npcDuelGap(){ return (30+Math.random()*60)*60000; }
 function duelPower(st){ return st.attack*1.0+st.defence*0.7+st.tech*0.5+st.life/10; }
 async function checkNpcDuel(){
   const t0=T(), now=Date.now();
-  if(t0.npcDuelNext&&now<t0.npcDuelNext) return;
+  if(t0.npcDuelNext&&now<t0.npcDuelNext&&t0.npcDuelNext-now<=90*60000) return;
   const out=await townTx(t=>{
     const now=Date.now();
-    if(!t.npcDuelNext){ t.npcDuelNext=now+(3+Math.random()*3)*3600000; return null; }
+    if(!t.npcDuelNext||t.npcDuelNext-now>90*60000){ t.npcDuelNext=now+npcDuelGap(); return null; }   // 前の設定（3〜6時間後）が残っていたら短くする
     if(now<t.npcDuelNext) return null;
-    t.npcDuelNext=now+(3+Math.random()*3)*3600000;
+    t.npcDuelNext=now+npcDuelGap();
     const npcs=(NET.online?npcOnline():allShops().filter(r=>r.npc)).filter(r=>!r.warrior&&!r.tyrant);
     const targets=(NET.online?playerShops().filter(p=>!p.idle):[]).concat(S?[{...mySummaryRow(),st:myStat()}]:[]);
     if(!npcs.length||!targets.length) return null;
@@ -997,13 +1047,13 @@ async function checkNpcDuel(){
   if(!out) return;
   const m=out.npcWin?`【決闘】${out.a.shop}の${out.a.name}が${out.b.shop}に決闘を挑み，勝利した！`:`【決闘】${out.a.shop}の${out.a.name}が${out.b.shop}に決闘を挑んだが，返り討ちにあった！`;
   S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m}); newsNet(m);
-  const mail={kind:'npcduel',npc:out.a.name,shop:out.a.shop,win:!out.npcWin,prize:out.prize};
+  const nd=NPCDEF[+String(out.a.key).slice(4)]||{}; const mail={kind:'npcduel',npc:out.a.name,shop:out.a.shop,win:!out.npcWin,prize:out.prize,strong:!!(nd.strong||nd.warrior||nd.tyrant)};
   if(out.b.key===myKey()) applyNpcDuel(mail); else sendMail(out.b.key,mail);
-  if(!NET.online){ const n=S.npcs[+String(out.a.key).slice(4)]; if(n) n.pop=clamp(n.pop+(out.npcWin?2:-1),n.popBase?n.popBase-15:5,100); }
+  if(!NET.online){ const n=S.npcs[+String(out.a.key).slice(4)]; if(n) n.pop=clamp(n.pop+(out.npcWin?1:-1),n.popBase?n.popBase-15:5,100); }
   softRender();
 }
 function applyNpcDuel(m){
-  if(m.win){ S.pop=clamp(S.pop+2,0,100); if(m.prize){ S.money+=m.prize; addIncome(Math.round(m.prize*0.1)); } letter(m.npc,'kaoarmy',`${m.shop}の${m.npc}に決闘を挑まれたが，見事に返り討ちにした！ 人気+2${m.prize?`・賞金${yen(m.prize)}`:''}`); }
+  if(m.win){ const up=m.strong===false?1:2; S.pop=clamp(S.pop+up,0,100); if(m.prize){ S.money+=m.prize; addIncome(Math.round(m.prize*0.1)); } letter(m.npc,'kaoarmy',`${m.shop}の${m.npc}に決闘を挑まれたが，見事に返り討ちにした！ 人気+${up}${m.prize?`・賞金${yen(m.prize)}`:''}`); }
   else { S.pop=clamp(S.pop-1,0,100); letter(m.npc,'kaoarmy',`${m.shop}の${m.npc}に決闘を挑まれ，敗れてしまった…。人気−1。能力や装備を鍛えて備えよう。`); }
   save();
 }
@@ -1360,6 +1410,27 @@ async function newsNet(m){
     if(Math.random()<0.15){ const s=await NET.db.collection('news').orderBy('t','desc').limit(300).get(); s.docs.slice(80).forEach(d=>NET.db.doc('news/'+d.id).delete().catch(()=>{})); }
   }catch(e){ netErr(e); }
 }
+
+/* ---------- 新聞（見やすい表示） ---------- */
+const NEWS_CATS=[['all','すべて'],['battle','⚔ 決闘・戦い'],['danger','⚠ 襲撃・事件'],['settle','🏆 決算・表彰'],['town','🏪 商い・街']];
+function newsCat(m){ const mm=String(m||'').match(/^【([^】]+)】/); const lb=mm?mm[1]:'';
+  if(/決算|表彰/.test(lb)) return 'settle';
+  if(/襲撃|襲来|警報|万引き|政変|防衛|取り締まり/.test(lb)) return 'danger';
+  if(/決闘|レイド|討伐/.test(lb)||/決闘|魔物|討ち取|打ち倒|バルバロス/.test(m)) return 'battle';
+  return 'town'; }
+const NEWS_COL={settle:'#b8860b',danger:'#c33',battle:'#3a6fb0',town:'#5a9a4a'};
+function newsParts(n){ const ms=n.at||0; if(ms){ const d=new Date(ms+9*3600000); return {day:`${d.getUTCMonth()+1}/${d.getUTCDate()}（${'日月火水木金土'[d.getUTCDay()]}）`,hm:`${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`}; } return {day:n.d?fmtDay(n.d):'',hm:n.t||''}; }
+function newsItem(n,full){ const c=newsCat(n.m), col=NEWS_COL[c]; const s=esc(n.m); const mm=s.match(/^【([^】]+)】(.*)$/);
+  const body=mm?`<span class="nwg" style="background:${col}">${mm[1]}</span>${mm[2]}`:s;
+  return `<div class="nwi" style="border-left-color:${col}"><div class="nwt"${full?' style="flex-basis:46px"':''}>${full?`<small>${newsParts(n).day.replace(/（.*/,'')}</small><br>`:''}${newsParts(n).hm}</div><div class="nwb">${body}</div></div>`; }
+function newsBlock(list,withDays){
+  if(!list.length) return '<div class="nwl"><div class="nwi"><div class="nwb">まだ記事はありません</div></div></div>';
+  if(!withDays) return `<div class="nwl">${list.map(n=>newsItem(n,true)).join('')}</div>`;
+  let h='', cur=null, buf=[];
+  const flush=()=>{ if(buf.length) h+=`<div class="nwd">📅 ${cur}</div><div class="nwl">${buf.join('')}</div>`; buf=[]; };
+  list.forEach(n=>{ const d=newsParts(n).day; if(d!==cur){ flush(); cur=d; } buf.push(newsItem(n,false)); }); flush();
+  return h; }
+
 function newsLine(m){ const s=esc(m); const mm=s.match(/^【([^】]+)】(.*)$/); if(!mm) return s; const col=/襲来|警報|襲撃|万引き|政変/.test(mm[1])?'#c33':/決算|表彰/.test(mm[1])?'#b8860b':'#3a7abd'; return `<span style="display:inline-block;background:${col};color:#fff;border-radius:3px;padding:0 5px;font-size:12px;margin-right:4px">${mm[1]}</span><b>${mm[2]}</b>`; }
 function realStamp(ms){ const d=new Date(ms+9*3600000); return `${d.getUTCMonth()+1}/${d.getUTCDate()}(${'日月火水木金土'[d.getUTCDay()]}) ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`; }
 function newsTime(n){ if(n.at) return realStamp(n.at); if(n.d) return `${fmtDay(n.d)} ${n.t||''}`; return ''; }
@@ -2249,23 +2320,26 @@ function rankTable(limit){
   const expd=r=>r.st?`【${BTYPES[r.btype]||'普通'}】${Math.round((r.st.attack+r.st.defence+r.st.tech)/3)}exp　${im('ability-no-4','i16')}${r.st.life} ${im('ability-no-1','i16')}${r.st.attack} ${im('ability-no-2','i16')}${r.st.defence} ${im('ability-no-3','i16')}${r.st.tech}`:'';
   const pager=rankPager(all.length,PER);
   const mine=myIdx>=0&&(myIdx<off||myIdx>=off+PER)?`<div class="c"><small>あなたのお店は <b>${myIdx+1}位</b> です <a onclick="RANK_PAGE=${Math.floor(myIdx/PER)};render()">（表示する）</a></small></div>`:'';
-  return `${mine}<div class="tbl"><table class="t" style="width:100%"><tr><th>点数</th><th>店長</th><th>お店</th></tr>
-  ${rk.map((r,i)=>{
+  return `${mine}${rk.map((r,i)=>{
     const cs=(r.cases||[]).filter(c=>c&&c.stock>0&&ITEMS[c.no]);
-    const first=cs[0];
-    return `<tr ${r.me?'style="font-weight:bold"':''}>
-    <td class="r nw"><b>No.${off+i+1}</b>${off+i<6?im('rank'+(6-(off+i)),'i16'):''}<br>${updown(r,off+i)}<br><b class="red">${(r.point||0).toLocaleString()}</b>点</td>
-    <td class="c">${kao(r.kao)}<br>${im((JOBS[r.job]||JOBS['']).img,'','width=20 height=30')}</td>
-    <td>${guildIcon(r.guild)}${r.me?'<span class="span">'+esc(r.shop)+'</span>':(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${titleBadge(r.title)}${r.npc?' <span class="npctag">NPC</span>':''}${r.strong?' <span class="npctag strong">強豪</span>':''}${r.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${r.tyrant?' <span class=\"npctag strong\" style=\"background:#3a1010;border-color:#300;color:#fff\">暴君</span>':''}${((T().exposed||{})[r.key]||0)>Date.now()?' <span class="npctag" style="background:#fdd;border-color:#c33;color:#c33">取締中</span>':''}${L&&L.key===r.key?' <small class="red">[領主]</small>':''} ${winIcons(r.wins)}
-      <br><small>${esc(r.name)}・${(JOBS[r.job]||JOBS['']).name}・${digHtml(r.dig)}${r.soldiers?'・兵'+r.soldiers:''}</small>
-      <br><small>人気 ${popStars(r.pop)}</small>
-      ${cs.length?`<br><small>${cs.map(c=>ii(c.no)).join('')} ${esc(ITEMS[first.no].name)} ${yen(first.price)}</small>`:''}
-      ${r.comment?`<br><small>「${esc(r.comment)}」</small>`:''}
-      ${dukeBox(r)}
-      <br><small>今期売上 <b>${yen(r.sale||0)}</b>　資金 <b>${yen(r.money)}</b>　熟練 ${Math.floor((r.exps||0)/10)}%</small>
-      ${r.st?`<br><small>${expd(r)}</small>`:''}
-      ${r.t&&!r.me&&!String(r.key).startsWith('npc:')?`<br><small class="note">${r.idle?'<span class=red>休業中</span>・':''}${ago(r.t)}</small>`:''}</td></tr>`; }).join('')}
-  </table></div>${pager}
+    const first=cs[0], rank=off+i+1;
+    const tags=`${titleBadge(r.title)}${r.npc?' <span class="npctag">NPC</span>':''}${r.strong?' <span class="npctag strong">強豪</span>':''}${r.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${r.tyrant?' <span class="npctag strong" style="background:#3a1010;border-color:#300;color:#fff">暴君</span>':''}${((T().exposed||{})[r.key]||0)>Date.now()?' <span class="npctag" style="background:#fdd;border-color:#c33;color:#c33">取締中</span>':''}${L&&L.key===r.key?' <small class="red">[領主]</small>':''}`;
+    return `<div class="rk ${r.me?'me':''}">
+      <div class="rkh"><span class="rkn">No.${rank} ${rank<=6?im('rank'+(7-rank),'i16'):''} ${r.npc?'':updown(r,off+i)}</span><span class="rkp">${(r.point||0).toLocaleString()}<small>点</small></span></div>
+      <div class="rkm"><div class="rkf">${kao(r.kao)}<br>${im((JOBS[r.job]||JOBS['']).img,'','width=20 height=30')}</div>
+        <div class="rki"><div class="rks">${guildIcon(r.guild)}${r.me?esc(r.shop):(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${tags}</div>
+          ${r.wins?`<div class="rksub">${winIcons(r.wins)}</div>`:''}
+          <div class="rksub"><span class="nb">${esc(r.name)}</span><span class="nb">${(JOBS[r.job]||JOBS['']).name}</span><span class="nb">${digHtml(r.dig)}</span>${r.soldiers?`<span class="nb">兵${r.soldiers}</span>`:''}</div>
+          <div class="rksub">人気 ${popStars(r.pop)}</div></div></div>
+      <div class="rkd">
+        ${cs.length?`<div class="rkitems">${cs.map(c=>ii(c.no)).join('')}</div><div><span class="nb">${esc(ITEMS[first.no].name)} <b>${yen(first.price)}</b></span></div>`:''}
+        ${r.comment?`<div class="rkcm">「${esc(r.comment)}」</div>`:''}
+        ${dukeBox(r)}
+        <div><span class="nb">今期売上 <b>${yen(r.sale||0)}</b></span><span class="nb">資金 <b>${yen(r.money)}</b></span><span class="nb">熟練 ${Math.floor((r.exps||0)/10)}%</span></div>
+        ${r.st?`<div class="rkst"><span class="nb">【${BTYPES[r.btype]||'普通'}】${Math.round((r.st.attack+r.st.defence+r.st.tech)/3)}exp</span><span class="nb">${im('ability-no-4','i16')}${r.st.life}</span><span class="nb">${im('ability-no-1','i16')}${r.st.attack}</span><span class="nb">${im('ability-no-2','i16')}${r.st.defence}</span><span class="nb">${im('ability-no-3','i16')}${r.st.tech}</span></div>`:''}
+        ${r.t&&!r.me&&!String(r.key).startsWith('npc:')?`<div class="note">${r.idle?'<span class=red>休業中</span>・':''}${ago(r.t)}</div>`:''}
+      </div></div>`; }).join('')}
+  ${pager}
   <div class="c note"><span class="npctag">NPC</span> は街のコンピューター商人です（表彰されても賞品はもらえません）。<br>点数＝人気 × 利益（直近3日と今期の利益。利益＝売上＋収入−税−経費−仕入れ。売れたり稼いだりするとすぐ上がります）× 優勝回数による補正。優勝を重ねるほど点数は伸びにくくなります。</div>`;
 }
 function resultsHtml(left){
@@ -3057,7 +3131,7 @@ function finishBattle(){
     if(b.mon){ const mi=b.foe.top? 146+TOP_MONS.indexOf(b.mon) : 101+MONS.indexOf(b.mon); if(ITEMS[mi]){ const fx1=skillFx(); let k=(b.foe.top?1:1+rnd(2))+(fx1.mat||0); if(fx1.hunter) k*=2; if(evActive('meteor')) k*=2; add(mi,k); res.push(`はぎ取り！ ${iname(mi)}×${k}を手に入れた`); } }
     if(b.mon&&!b.foe.top&&b.mon.prize){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0))); S.money+=pz; addIncome(Math.round(pz*0.1)); res.push(`賞金 ${yen(pz)} を手に入れた`); }
     if(b.foe.top){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0))); S.money+=pz; addIncome(Math.round(pz*0.1)); S.pop=clamp(S.pop+1,0,100); res.push(`<b class="red">最上級の魔物を討ち取った！ 賞金${yen(Math.round(b.mon.prize*(1+(skillFx().prize||0))))}を得た！ 人気が1戻った（挑戦で−2・差し引き−1）</b>`); news(`${S.owner}（${S.shop}）が最上級の魔物「${b.mon.name}」を討ち取った！`); }
-    if(b.npc){ const up=(b.npc.strong||b.npc.warrior||b.npc.tyrant)?4:2; S.pop=clamp(S.pop+up,0,100); b.npc.pop=clamp(b.npc.pop-1,b.npc.popBase?b.npc.popBase-15:0,100); res.push(`<span class="blue">勝利で人気+${up}</span>／${esc(b.npc.shop)}の人気-1`); if(b.npc.tyrant||b.npc.strong||b.npc.warrior){
+    if(b.npc){ const up=(b.npc.strong||b.npc.warrior||b.npc.tyrant)?2:1; S.pop=clamp(S.pop+up,0,100); b.npc.pop=clamp(b.npc.pop-1,b.npc.popBase?b.npc.popBase-15:0,100); res.push(`<span class="blue">勝利で人気+${up}</span>／${esc(b.npc.shop)}の人気-1`); if(b.npc.tyrant||b.npc.strong||b.npc.warrior){
       // 賞金は相手との力の差に比例（自分がずっと強ければ少なめ）。点数への反映はごく少なめ
       const pw=s=>s.life/5+s.attack+s.defence+s.tech, mine=pw(myStat()), foe=pw(b.npc.st||{life:0,attack:0,defence:0,tech:0});
       const ratio=clamp(foe/Math.max(1,mine),0.05,1.5), f=Math.pow(Math.min(1,ratio),1.5);
@@ -3069,7 +3143,7 @@ function finishBattle(){
       if(b.npc.tyrant){ if(Math.random()<0.15){ add(151,1); res.push(`${iname(151)}を1つ手に入れた……`); } news(`${S.owner}（${S.shop}）がにくべんき藩を打ち倒した！`); }
       res.push(`<b class="red">${who}を打ち破った！ 賞金${yen(prize)}${dg?`と爵位ポイント+${dg}`:''}を得た！</b><br><small class="note">相手の強さ（あなたを100%として）：${Math.round(ratio*100)}%（相手が強いほど賞金が多くなります）</small>`);
     } news(`${S.owner}が${b.npc.owner}に決闘を挑み，勝利しました`); }
-    if(b.puid){ S.pop=clamp(S.pop+2,0,100); sendMail(b.puid,{kind:'duel',win:true}); res.push('<span class="blue">勝利で人気+2</span>／相手の人気-1'); news(`${S.owner}（${S.shop}）が${b.foe.name}に決闘を挑み，勝利しました`); }
+    if(b.puid){ S.pop=clamp(S.pop+1,0,100); sendMail(b.puid,{kind:'duel',win:true}); res.push('<span class="blue">勝利で人気+1</span>／相手の人気-1'); news(`${S.owner}（${S.shop}）が${b.foe.name}に決闘を挑み，勝利しました`); }
   } else {
     S.blose++;
     res.push(`<b class="red">${esc(b.me.name)}は${esc(b.foe.name)}に敗北した…</b>`);
@@ -3611,62 +3685,93 @@ function kingGive(){
    はじめての方へ（説明書）
    ============================================================ */
 let GUIDE_OPEN=0;
+const GUIDE_CATS=[['start','🔰','まずはここから'],['shop','🏪','お店を育てる'],['battle','⚔️','戦い・装備'],['town','🏰','街・イベント・仲間'],['other','📦','そのほか']];
 const GUIDE=[
- ['はじめに：どんなゲーム？',`剣と魔法の街で<b>自分のお店</b>を持ち，品物を仕入れたり作ったりして売り，<b>商人ランキング1位</b>を目指すゲームです。<br>ほかのプレイヤーやNPC（コンピューターの商人）と競い合いながら，戦闘・ギルド・領主・レースなども楽しめます。`],
- ['まず覚えること：持ち時間',`ほとんどの行動には<b>持ち時間</b>を使います（画面上部に表示）。持ち時間は時間とともに自然に貯まります（最大72時間）。<br>ゲームの中の時間は，<b>現実の1秒＝ゲーム内1分</b>で進みます。<b>決算</b>（売上や人気のしめ）は現実の時刻で<b>1日2回（日本時間の0時と12時）</b>です。`],
- ['最初の10分でやること',`<ol style="margin:4px 0 4px 18px;padding:0">
+ ['はじめに：どんなゲーム？',`剣と魔法の街で<b>自分のお店</b>を持ち，品物を仕入れたり作ったりして売り，<b>商人ランキング1位</b>を目指すゲームです。<br>ほかのプレイヤーやNPC（コンピューターの商人）と競い合いながら，戦闘・ギルド・領主・レースなども楽しめます。`,'👋','start'],
+ ['最初の10分でやること',`<ol class="gol">
   <li>【自店】→[倉庫]で「<b>ギフト券</b>」を使い，<b>地図セット</b>か<b>入門本セット</b>と交換する</li>
   <li>「<b>近くの山への地図</b>」を使って，<b>薬草</b>を集める（回数を入れてまとめて実行できます）</li>
   <li>「<b>薬調合入門</b>」を使って，薬草から<b>ポーション</b>を作る</li>
   <li>【自店】→[店内]の陳列棚の「変更」で，ポーションを<b>相場くらいの値段</b>で並べる</li>
-  <li>あとは時間とともにお客さんが買っていきます。売れたら，また作って並べましょう</li></ol>`],
- ['お店を大きくするには',`・<b>陳列棚キット</b>で棚を増やすと，たくさん並べられます（棚の維持費がかかります）<br>
-  ・熟練度が上がると，<b>もっと高い品</b>（剣・鎧・杖など）を作れるようになります<br>
-  ・[市場]では品物を仕入れられます。[港]からは船で島へ探索に行けます<br>
-  ・【取引】→[商店通り]の「<b>相場を調査する</b>」で，売れ筋を調べられます`],
- ['人気について（大切！）',`お店の<b>人気</b>が高いほど，お客さんが来て売れやすくなります。ただし人気は<b>放っておくと決算ごとに下がります</b>。<br>
-  ・<b>手に入りにくい品を，相場より少し安く</b>売ると上がる<br>
-  ・<b>どこにでもある品を高く</b>売ると下がる<br>
-  ・棚が空っぽ・ごみが溜まる（[お掃除]で片付け）と下がる<br>
-  前回の人気の変化の理由は，[収支]で見られます。`],
- ['ランキングの点数',`点数は「<b>人気 × 利益</b>」で決まります。利益＝売上＋そのほかの収入（依頼・賞金・レースなど）−税−経費−仕入れ。<br>
-  <b>売れたり稼いだりすると点数はすぐ上がり</b>，仕入れや出費が多いと下がります。今の点数は画面上部に出ています。<br>
-  決算ごと（1日2回）に<b>1位は爵位ポイント+1，2位は¥10万とギフト券5枚，3位は¥5万とギフト券3枚，4位はギフト券2枚，5位はギフト券1枚</b>がもらえます。`],
- ['爵位（しゃくい）',`爵位は，平民→士爵→男爵→子爵→伯爵→侯爵→公爵→大公 の順に上がります。上がるほど<b>決算ごとの年金</b>や<b>市場の割引</b>などの特典がつきます。<br>ランキング1位・王様の依頼（[宮殿]）・レイドの撃退などで爵位ポイントが増えます。【情報】→[爵位名鑑]で確認できます。`],
- ['戦闘',`「<b>バトルチケット</b>」（市場で買えます）を使うと，魔物退治や決闘ができます。<br>
-  勝つと<b>経験値</b>が入り，【自店】→[ステータス]の「修練」で<b>体力・攻撃・防御・技量</b>を好きに強化できます。能力は<b>リセットして振り分け直す</b>こともできます。装備（剣・鎧・盾・装飾）はステータス画面で変えられ，<b>マイセット（5つ）</b>に登録すると一瞬で着替えられます。<br>
-  「最上級の魔物」はとても強いですが，勝てば大きな賞金がもらえます。ただし挑むたびに<b>人気を2消費</b>します（勝てば1戻り，負ければ戻りません）。`],
- ['山賊バルバロスの襲来（レイド）',`街のイベントとして，<b>日本時間の21時から1時間</b>，山賊バルバロスが街を襲います。予定日時はランキング画面の上に出ます。<br>
-  【施設】→[傭兵所]から<b>討伐</b>に行くか，<b>声援・差し入れ・兵士</b>で応援しましょう。撃退すると賞金や，ここでしか手に入らない<b>ダイヤモンド原石</b>がもらえます。`],
- ['狩りと鍛冶（素材で装備を作る）',`バトルチケットで魔物を倒すと，その魔物ならではの<b>素材</b>を「はぎ取り」で手に入れられます。<br>素材を集めて【施設】→[<b>鍛冶工房</b>]に持っていくと，店では買えない<b>強い装備</b>（獣牙→魔獣→幻獣→覇竜）を作れます。<br>暴君にくべんき藩を退けると手に入る「呪いの骨片」からは，とても強いけれど<b>決算ごとに人気が下がる呪われた装備</b>が作れます。`],
- ['装備の強化（+1〜+20）',`【施設】→[鍛冶工房]の「⚒ 強化」で，持っている装備を強化できます。+1ごとに能力が8%上がり，+10・+15・+20ではさらに大きく伸びて，+20で約3.6倍になります。+10・+15・+20の装備には強化スキル（鍛錬の証・名工の業・不壊の極み）が付き，+20の装備はバトルに負けても壊れません。4つとも+20にすると「伝説の武具」が発動します。強化の素材は人に送ったりギルド倉庫に入れたりできません。<br>強化の素材（樫の補強材・なめし革の補強帯・魔木の芯材・竜革の補強帯）は，本「<b>木工細工入門</b>」「<b>革細工入門</b>」で作れます。+6からは失敗することもあります（失敗しても段階は下がりません）。`],
- ['装備のスキルとシリーズ',`鍛冶工房やダイヤ・海竜などの装備には，それぞれ<b>スキル</b>（攻撃UP・ガード・幸運・商才など）がついています。<br>同じシリーズの装備をそろえると<b>シリーズスキル</b>が発動します（獣牙・魔獣・幻獣・覇竜・ダイヤ・呪いは4つ，海竜は2つ）。発動中のスキルは[ステータス]で確認できます。`],
- ['肉屋・八百屋・魚屋',`市場で「<b>郊外の農園への地図</b>」（野菜・根菜・いちご）・「<b>釣り竿</b>」（魚・網漁でエビやイカ）・「<b>狩猟用の弓</b>」（鹿・猪・鳥）が買えます。<b>ミノタウロス</b>は乳しぼりのほか，<b>解体して肉</b>にもできます。<br>とれた食材はそのまま店で売れ（よく売れる安い品），本「<b>家庭料理入門</b>」で料理に，「<b>精肉・加工の手引き</b>」でソーセージ・ハム・干物などに加工すると，もっと高く売れます（食べものは売れ行き2倍）。<br>転職のススメで<b>肉屋・八百屋・魚屋</b>になると，それぞれの作業が早くなります。荘園の「野菜畑」「生け簀」「狩り場」からも決算ごとにとれます。`],
- ['船で島へ探索',`市場で買える本「<b>造船術</b>」で船を造り，【取引】→[<b>港</b>]から島へ探索に出発できます。現実の時間で1〜6時間たつと戻ってきて，<b>島でしか手に入らない品</b>（真珠・赤珊瑚・南国の果実・海竜の鱗・人魚の涙など）を持ち帰ります。<br>島の品からは，妙薬ネクター・真珠の首飾り・人魚のティアラ・海竜の剣と鎧などを，今ある本で作れます。遠い海ほど良い品がとれますが，難破の危険もあります。`],
- ['街のイベント',`<b>1日1回ほど</b>，次のイベントのどれかがランダムにやって来ます（同じものは続けて来にくい）。予定はランキング画面の上に出ます。<br>・<b>山賊バルバロス襲来</b>（21時〜1時間）：みんなで撃退するレイドバトル<br>・<b>幸運のドラゴン来訪</b>（19時〜3時間）：開拓+20・品が3倍売れる<br>・<b>流星群の夜</b>（22時〜2時間）：戦闘の経験値2倍・はぎ取り素材2倍<br>・<b>旅の大商隊</b>（12時〜2時間）：市場が品であふれ，仕入れ30%引き<br>・<b>収穫祭</b>（18時〜3時間）：人気+5・荘園の収穫がもう1回・売れ行き1.5倍<br>【情報】→[爵位名鑑]から，<b>爵位ポイントを使って好きなイベントを好きな時間に呼ぶ</b>こともできます（30〜50pt）。`],
- ['幸運のドラゴン来訪',`街のイベントとして<b>日本時間の19時から3時間</b>，幸運のドラゴンが街にやって来ます（予定はランキング画面の上に出ます）。<br>来るとすぐに<b>街の開拓が+20</b>され，来訪中の3時間は<b>プレイヤーもNPCも，どの店の品も3倍売れます</b>。棚に品をたっぷり並べて待ちましょう！`],
- ['毎日の楽しみ（流行・ログインボーナス・称号）',`・<b>流行</b>：毎日0時に，よく売れる品が3つ決まります（1.5倍売れる）。トップと新聞で発表されます。<br>・<b>ログインボーナス</b>：毎日はじめて開くとプレゼント。連続7日目は修行キットとギフト券×5！<br>・<b>称号</b>：いろいろな実績で称号が手に入り，[ステータス]で好きな称号を選ぶと，ランキングの名前の横に表示されます。`],
- ['相棒とギルド討伐戦',`・<b>相棒</b>：魔物を倒すと，まれに仲間になります（3匹まで。最上級の魔物はごくまれ）。連れている相棒は「戦闘で手伝う（全能力アップ）」か「店番をする（万引きを防ぐ）」を選べます。<br>・<b>ギルド討伐戦</b>：毎日，ギルドごとに巨大な魔物を倒す速さを競います（[ギルド]の「⚔ 討伐戦」）。上位3ギルドには翌日0時にごほうび。`],
- ['NPCからの決闘',`ときどき（3〜6時間ごと），NPCの商人が自分から決闘を挑んできます（豪将リキーヤとにくべんき藩は除く）。<br>勝つと人気+2と賞金，負けると人気−1。結果は新聞と手紙で知らされます。能力と装備を鍛えておきましょう。`],
- ['暴君「にくべんき藩」の襲撃',`街で最強の武力をもつNPC「にくべんき藩」が，ときどきお店（プレイヤーやNPC）を襲います。襲う日時と店は<b>前もって予告</b>され，ランキング画面の上と新聞に出ます。<br>狙われたら[傭兵所]で<b>兵士を雇って守りを固めましょう</b>（防衛力＝兵士1人10＋能力）。撃退できないと人気が大きく下がります。`],
- ['ギルド',`仲間と一緒にギルドに入ると，人気や売れ行きにボーナスがつきます。<b>ギルドポイント（GP）</b>を貯めて，広告・看板商品・共同仕入れ・クエストなどに使えます。ギルドを作るには男爵（爵位ポイント3）以上が必要です。`],
- ['NPCのギルド',`街には「黄金の天秤」「銀の月商会」「鉄槌同盟」など，NPCが作ったギルドもあります。だれでも自由に加盟でき，加盟したプレイヤーはギルドポイントの使い道も決められます。`],
- ['領主と街',`爵位のいちばん高い商人が<b>領主</b>になり，税率や街の開拓・治安を決めます。税は<b>街資金</b>に入り，街のために使われます。領主は兵士を集めた<b>反乱</b>で交代することもあります（[傭兵所]）。`],
- ['そのほかの楽しみ',`・[競技場]：スライムレース（賭け）・<b>ドラゴンレース</b>（ドラゴンを育てて賞金を狙う）<br>
-  ・[依頼所]・[求人]：注文に応えて報酬をもらう<br>
-  ・[質屋]：品物を売ってお金にする<br>
-  ・[荘園]：決算ごとに原料が届く土地／[住宅地]：持ち時間の上限が増える家<br>
-  ・[郵便局]・[掲示板]：ほかのプレイヤーとの交流`],
+  <li>あとは時間とともにお客さんが買っていきます。売れたら，また作って並べましょう</li></ol>
+  <div class="gtip">💡 棚を空っぽにしないのがいちばんのコツです。空いた棚があると人気が下がります。</div>`,'⏱','start'],
+ ['持ち時間と決算',`ほとんどの行動には<b>持ち時間</b>を使います（画面上部に表示）。持ち時間は時間とともに自然に貯まります（最大72時間。家や爵位で増えます）。<br>
+  ゲームの中の時間は，<b>現実の1秒＝ゲーム内1分</b>で進みます。<br>
+  <b>決算</b>（売上・経費・人気のしめ）は現実の時刻で<b>1日2回（日本時間の0時と12時）</b>です。`,'⌛','start'],
+ ['留守のあいだも営業中',`ゲームを閉じていても，<b>棚に並べた品は売れ続けます</b>（1週間まで）。留守中の決算もきちんと行われ，次に開いたときに「留守中に○個売れました」と表示されます。<br>
+  ほかのプレイヤーから見ても，あなたのお店の在庫や点数は留守中に動いていきます。<br>
+  <div class="gtip">💡 出かける前に，棚に品をたっぷり並べておきましょう。1週間以上開かないと「休業中」になり，売れなくなります。</div>`,'🌙','start'],
  ['困ったときは',`・アイテムの名前を押すと，くわしい説明（使い道・装備の能力・維持費）が見られます<br>
   ・【情報】→[図書館]には，全アイテム・全魔物の図鑑があります<br>
   ・画面上の【セーブ】でいつでも保存できます（自動でも保存されます）<br>
-  ・別の端末で遊ぶときは，店主名とパスワードでログインしてください`],
+  ・別の端末で遊ぶときは，店主名とパスワードでログインしてください`,'❓','start'],
+
+ ['人気について（大切！）',`お店の<b>人気</b>が高いほど，お客さんが来て売れやすくなり，ランキングの点数も上がります。ただし人気は<b>放っておくと決算ごとに下がります</b>。
+  <table class="gtbl"><tr><th>上がる</th><td>手に入りにくい品を相場より少し安く売る／広告（決算ごとに1回）／決闘に勝つ（+1，強豪なら+2）／依頼の達成</td></tr>
+  <tr><th>下がる</th><td>どこにでもある品を高く売る／棚が空っぽ／何も売れない／ごみが溜まる／決闘に負ける（−1）／最上級の魔物に挑む（−2，勝てば1戻る）</td></tr></table>
+  商いだけなら人気は60前後で落ち着きます。それ以上はギルドや広告の力も借りましょう。前回の変化の理由は[収支]で見られます。`,'⭐','shop'],
+ ['ランキングの点数',`点数は「<b>人気 × 利益</b>」で決まります。利益＝売上＋そのほかの収入−税−経費−仕入れ。人気が0でも，利益があれば少しだけ点数がつきます。<br>
+  バトルの賞金は点数には1割しか入りません。<b>商いで稼ぐのがいちばんの近道</b>です。<br>
+  決算ごとに<b>1位は爵位ポイント+1，2位は¥10万とギフト券5枚，3位は¥5万とギフト券3枚，4位はギフト券2枚，5位はギフト券1枚</b>がもらえます。`,'🏆','shop'],
+ ['お店を大きくするには',`・<b>陳列棚キット</b>で棚を増やすと，たくさん並べられます（棚の維持費がかかります）。8つ目の「特等席」は2倍売れます<br>
+  ・熟練度が上がると，<b>もっと高い品</b>（剣・鎧・杖など）を作れるようになり，作業も早くなります<br>
+  ・[市場]は<b>街のみんなで共有</b>です。人気の品は早い者勝ち！<br>
+  ・【取引】→[商店通り]の「<b>相場を調査する</b>」で，売れ筋を調べられます`,'📈','shop'],
+ ['熟練度',`品物を作ったり使ったりすると<b>熟練度</b>が上がり，作業が早く・成功しやすくなります（100%で作業時間が半分）。<br>
+  ただし熟練度は<b>決算ごとに少しずつ下がります</b>。高い熟練度が必要な品は，ときどき作って腕を保ちましょう。<br>
+  熟練度の合計が1000%を超えると，技術系のアクセサリ（鍛冶屋の技術など）をたまに失うことがあります。`,'🔨','shop'],
+ ['肉屋・八百屋・魚屋',`市場で「<b>郊外の農園への地図</b>」（野菜・根菜・いちご）・「<b>釣り竿</b>」（魚・網漁でエビやイカ）・「<b>狩猟用の弓</b>」（鹿・猪・鳥）が買えます。<b>ミノタウロス</b>は乳しぼりのほか，<b>解体して肉</b>にもできます。<br>
+  とれた食材はそのまま売れ，本「<b>家庭料理入門</b>」で料理に，「<b>精肉・加工の手引き</b>」でソーセージ・ハム・干物などにすると，もっと高く売れます（食べものは売れ行き2倍）。`,'🥩','shop'],
+ ['船で島へ探索',`本「<b>造船術</b>」で船を造り，【取引】→[<b>港</b>]から島へ探索に出発できます。現実の時間で数時間たつと戻ってきて，<b>島でしか手に入らない品</b>（真珠・赤珊瑚・海竜の鱗・人魚の涙など）を持ち帰ります。遠い海ほど良い品がとれますが，難破の危険もあります。`,'⛵','shop'],
+ ['爵位（しゃくい）',`平民→士爵→男爵→子爵→伯爵→侯爵→公爵→大公 の順に上がります。上がるほど<b>決算ごとの年金・市場の割引・持ち時間の上限</b>などの特典がつきます。<br>
+  ランキング1位・王様の依頼（[宮殿]）・レイドの撃退などで爵位ポイントが増えます。【情報】→[爵位名鑑]で確認できます。`,'👑','shop'],
+
+ ['戦闘',`「<b>バトルチケット</b>」（市場で買えます）を使うと，魔物退治や決闘ができます。<br>
+  勝つと<b>経験値</b>が入り，[ステータス]の「修練」で<b>体力・攻撃・防御・技量</b>を強化できます（リセットして振り分け直しも可）。装備は<b>マイセット（5つ）</b>に登録すると一瞬で着替えられます。
+  <div class="gwarn">⚠ 「最上級の魔物」は挑むたびに<b>人気を2消費</b>します（勝てば1戻り，負ければ戻りません）。</div>`,'⚔️','battle'],
+ ['決闘（NPC・ほかの店主）',`自分から決闘を挑めます（同じ相手とは決算ごとに1回）。勝つと<b>人気+1</b>（強豪・リキーヤ・にくべんき藩なら<b>+2</b>）と賞金，負けた側は<b>人気−1</b>です。<br>
+  NPCの商人も<b>30分〜1時間半ごと</b>にどんどん決闘を挑んできます。結果は新聞と手紙で知らされます。`,'🤺','battle'],
+ ['狩りと鍛冶（素材で装備を作る）',`魔物を倒すと，その魔物ならではの<b>素材</b>を「はぎ取り」で手に入れられます。素材を【施設】→[<b>鍛冶工房</b>]に持っていくと，店では買えない<b>強い装備</b>（獣牙→魔獣→幻獣→覇竜）を作れます。<br>
+  「呪いの骨片」からは，とても強いけれど<b>決算ごとに人気が下がる呪われた装備</b>が作れます。`,'🦴','battle'],
+ ['装備の強化（+1〜+20）',`[鍛冶工房]の「⚒ 強化」で装備を強化できます。+1ごとに能力が8%上がり，<b>+20で約3.6倍</b>になります（+6からは失敗することも）。
+  <table class="gtbl"><tr><th>+10</th><td>鍛錬の証（全能力+5%）</td></tr><tr><th>+15</th><td>名工の業（会心・ガード）</td></tr><tr><th>+20</th><td>不壊の極み（全能力+10%・<b>負けても壊れない</b>）</td></tr><tr><th>4つとも+20</th><td>伝説の武具（全能力+20%・賞金+30%）</td></tr></table>
+  強化の素材は本「<b>木工細工入門</b>」「<b>革細工入門</b>」で作れます。素材は人に送れません。`,'✨','battle'],
+ ['装備のスキルとシリーズ',`装備には<b>スキル</b>（攻撃UP・ガード・幸運・商才など）がついています。同じシリーズの装備をそろえると<b>シリーズスキル</b>が発動します（獣牙・魔獣・幻獣・覇竜・ダイヤ・呪いは4つ，海竜・北海は2つ）。発動中のスキルは[ステータス]で確認できます。`,'🛡','battle'],
+ ['相棒とギルド討伐戦',`・<b>相棒</b>：魔物を倒すと，まれに仲間になります（3匹まで）。「戦闘で手伝う」か「店番をする（万引きを防ぐ）」を選べます。<br>
+  ・<b>ギルド討伐戦</b>：毎日，ギルドごとに巨大な魔物を倒す速さを競います（[ギルド]の「⚔ 討伐戦」）。`,'🐾','battle'],
+
+ ['街のイベント',`<b>1日1回ほど</b>，次のどれかがやって来ます。予定はランキング画面の上に出ます。
+  <table class="gtbl"><tr><th>山賊バルバロス</th><td>21時〜1時間。みんなで撃退するレイド。報酬はダイヤ原石</td></tr>
+  <tr><th>幸運のドラゴン</th><td>19時〜3時間。開拓+20・どの店も3倍売れる</td></tr>
+  <tr><th>流星群の夜</th><td>22時〜2時間。経験値2倍・はぎ取り素材2倍</td></tr>
+  <tr><th>旅の大商隊</th><td>12時〜2時間。市場が品であふれ，仕入れ30%引き</td></tr>
+  <tr><th>収穫祭</th><td>18時〜3時間。人気+5・荘園の収穫がもう1回</td></tr></table>
+  [爵位名鑑]から，<b>爵位ポイントを使って好きなイベントを呼ぶ</b>こともできます。`,'🎉','town'],
+ ['暴君「にくべんき藩」の襲撃',`街で最強のNPC「にくべんき藩」が，ときどきお店を襲います。襲う日時と店は<b>前もって予告</b>されます。<br>
+  撃退できないと<b>点数・人気の1割と爵位ポイント1</b>を奪われます（お金は取られません）。[傭兵所]で兵士を雇って守りを固めましょう。<br>
+  <b>豪将リキーヤ</b>が用心棒として駆けつけてくれることもあります（3割）。ただし用心棒代は割高です。`,'👹','town'],
+ ['豪将リキーヤ',`街一番の武将。<b>用心棒</b>としてにくべんき藩から店を守ったり，[求人]で<b>持ち時間を売ってくれたり</b>（決算ごとに3件），お掃除を引き受けたりします。レイドにも気まぐれで助っ人に来てくれます。`,'💪','town'],
+ ['ギルド',`仲間と一緒にギルドに入ると，人気や売れ行きにボーナスがつきます。<b>ギルドポイント（GP）</b>で広告・看板商品・共同仕入れ・クエストなどができます。<br>
+  ギルドの広告は，金庫・GP・広告パックを合わせて<b>決算ごとに1回</b>までです。ギルドを作るには男爵以上が必要です。NPCのギルドにも自由に加盟できます。`,'🤝','town'],
+ ['領主と街',`爵位のいちばん高い商人が<b>領主</b>になり，税率や街の開拓・治安を決めます。治安が悪いと万引きが増え，山賊が領主の座を狙ってきます。領主は<b>反乱</b>で交代することもあります（[傭兵所]）。`,'🏰','town'],
+ ['毎日の楽しみ',`・<b>流行</b>：毎日0時に，よく売れる品が3つ決まります（1.5倍売れる）<br>
+  ・<b>ログインボーナス</b>：毎日はじめて開くとプレゼント。連続7日目は豪華！<br>
+  ・<b>称号</b>：実績で手に入り，[ステータス]で選ぶとランキングに表示されます`,'🎁','other'],
+ ['そのほかの施設',`・[競技場]：スライムレース（賭け）・<b>ドラゴンレース</b><br>
+  ・[依頼所]・[求人]：注文に応えて報酬をもらう<br>
+  ・[質屋]：品物を売ってお金にする<br>
+  ・[荘園]：決算ごとに原料が届く土地／[住宅地]：持ち時間の上限が増える家<br>
+  ・[郵便局]・[掲示板]：ほかのプレイヤーとの交流`,'🗺','other'],
 ];
 SCREENS.guide=function(){
-  return `<div class="c"><big>はじめての方へ　遊び方ガイド</big></div>
-  ${talk('kaoguide','案内人','ようこそ商人の街へ！ 知りたいところを押すと，説明が開きます。まずは「最初の10分でやること」から読んでみてくださいね。')}
-  ${GUIDE.map((g,i)=>`<div class="tbl"><table class="t" style="width:100%"><tr><th style="text-align:left;cursor:pointer" onclick="GUIDE_OPEN=${GUIDE_OPEN===i?-1:i};render()">${GUIDE_OPEN===i?'▼':'▶'} ${g[0]}</th></tr>${GUIDE_OPEN===i?`<tr><td style="line-height:1.8">${g[1]}</td></tr>`:''}</table></div>`).join('')}
-  <div class="c note">もっとくわしくは【情報】→[図書館]もご覧ください。</div>
+  const card=(g,i)=>{ const op=GUIDE_OPEN===i; const nx=GUIDE[i+1];
+    return `<div class="gcard ${op?'open':''}" id="gd${i}"><div class="ghead" onclick="GUIDE_OPEN=${op?-1:i};render();setTimeout(()=>{const e=document.getElementById('gd${i}');if(e&&${!op})e.scrollIntoView({block:'start',behavior:'smooth'});},30)"><span class="gic">${g[2]||'📘'}</span><span>${g[0]}</span><span class="gar">${op?'▲ 閉じる':'▼ 開く'}</span></div>
+    ${op?`<div class="gbody">${g[1]}${nx?`<div class="gnext"><button onclick="GUIDE_OPEN=${i+1};render();setTimeout(()=>{const e=document.getElementById('gd${i+1}');if(e)e.scrollIntoView({block:'start',behavior:'smooth'});},30)">次へ：${nx[0]} ▶</button></div>`:''}</div>`:''}</div>`; };
+  return `<div class="c"><big>📖 はじめての方へ　遊び方ガイド</big></div>
+  ${talk('kaoguide','案内人','ようこそ商人の街へ！ 知りたい項目を押すと説明が開きます。はじめての方は<b>「最初の10分でやること」</b>から読んでみてくださいね。')}
+  <div class="gtoc">${GUIDE_CATS.map(([k,ic,n])=>`<span onclick="document.getElementById('gc_${k}').scrollIntoView({behavior:'smooth'})">${ic} ${n}</span>`).join('')}</div>
+  ${GUIDE_CATS.map(([k,ic,n])=>`<div class="gcat" id="gc_${k}">${ic} ${n}</div>${GUIDE.map((g,i)=>g[3]===k?card(g,i):'').join('')}`).join('')}
+  <div class="c note" style="margin-top:12px">もっとくわしくは【情報】→[図書館]もご覧ください。</div>
   <div class="c"><button onclick="${S?"go('rank')":"route='rank';render()"}">トップへ戻る</button></div>`;
 };
 
@@ -3674,11 +3779,17 @@ SCREENS.guide=function(){
    情報：新聞・ランキング・図書館
    ============================================================ */
 SCREENS.log=function(){
-  return `<div class="c"><big>新聞</big>${NET.online?' <small class="blue">（街じゅうの出来事）</small>':''}</div>
+  const f=sub.nf||'all', lim=sub.nmore||40;
+  const all=newsList(); const list=f==='all'?all:all.filter(n=>newsCat(n.m)===f);
+  const cnt=k=>k==='all'?all.length:all.filter(n=>newsCat(n.m)===k).length;
+  const res=resultsHtml(true);
+  return `<div class="c"><big>📰 新聞</big>${NET.online?' <small class="blue">（街じゅうの出来事）</small>':''}</div>
   ${S?trendHtml():''}
-  ${resultsHtml(true)?`<div style="text-align:left;margin:6px 0"><big>決算の表彰</big></div>${resultsHtml(true)}`:''}
-  <div style="text-align:left;margin:6px 0"><big>出来事</big></div>
-  <div class="tbl"><table class="t">${newsList().map(n=>`<tr><td class="nw"><small>${newsTime(n)}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')||'<tr><td>まだ記事はありません</td></tr>'}</table></div>`;
+  ${res?`<div class="nwd" style="background:#f3e3b0">🏆 決算の表彰</div><div class="nwl" style="padding:6px 10px">${res}</div>`:''}
+  <div class="nwd" style="background:none;padding-left:2px;font-size:15px">出来事</div>
+  <div class="nwf">${NEWS_CATS.map(([k,n])=>`<span class="${f===k?'on':''}" onclick="sub.nf='${k}';sub.nmore=40;render()">${n}<small>（${cnt(k)}）</small></span>`).join('')}</div>
+  ${newsBlock(list.slice(0,lim),true)}
+  ${list.length>lim?`<div class="nwmore"><button onclick="sub.nmore=${lim+40};render()">もっと見る（あと${list.length-lim}件）</button></div>`:''}`;
 };
 SCREENS.rank=function(){
   const L=T().lord;
@@ -3690,8 +3801,8 @@ SCREENS.rank=function(){
   <div class="c"><big>商人ランキング</big> <small>（点数順・決算ごとに表彰）</small></div>
   ${rankTable()}
   <div class="c note">決算の表彰の結果は <a onclick="go('log')">【情報】→[新聞]</a> で見られます。決算ごとに，1位は<b>爵位ポイント+1</b>，2位は<b>¥100,000とギフト券5枚</b>，3位は<b>¥50,000とギフト券3枚</b>，4位は<b>ギフト券2枚</b>，5位は<b>ギフト券1枚</b>がもらえます。<br>現実の時間で1週間以上ゲームを開いていない店は「休業中」となり，表彰の対象外になって点数がゆっくり下がります。<br><a onclick="go('dignity')">爵位名鑑を見る</a></div>
-  <div class="tbl"><table class="t"><tr><th colspan="2">最新ニュース</th></tr>
-  ${newsList().slice(0,6).map(n=>`<tr><td class="nw"><small>${newsTime(n)}</small></td><td>${newsLine(n.m)}</td></tr>`).join('')||'<tr><td colspan=2>まだありません</td></tr>'}</table></div>`;
+  <div class="nwd" style="display:flex;justify-content:space-between">📰 最新ニュース <a onclick="go('log')" style="font-weight:normal">もっと見る ▶</a></div>
+  ${newsBlock(newsList().slice(0,6),false)}`;
 };
 SCREENS.dignity=function(){
   const list=ranking().slice().sort((a,b)=>(b.dig-a.dig)||(b.point-a.point));
