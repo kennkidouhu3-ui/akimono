@@ -1441,8 +1441,11 @@ async function sendMail(to,m){
   try{ await NET.db.collection('mail').add({...m,to,from:NET.uid,fromName:S?S.owner:'街の管理人',fromShop:S?S.shop:'',fromKao:S?S.kao:1,t:Date.now()}); return true; }
   catch(e){ netErr(e); return false; }
 }
+const NEWS_SENT={};
 async function newsNet(m){
   if(!NET.online||NET.readonly) return;
+  // 同じ記事を続けて2回出さない（news()とnewsNet()の両方から呼ばれることがあるため）
+  const now=Date.now(); if(NEWS_SENT[m]&&now-NEWS_SENT[m]<30000) return; NEWS_SENT[m]=now;
   try{
     await NET.db.collection('news').add({m,t:Date.now(),d:S?day():0,hm:S?hms(S.clock%1440):''});
     if(Math.random()<0.15){ const s=await NET.db.collection('news').orderBy('t','desc').limit(300).get(); s.docs.slice(80).forEach(d=>NET.db.doc('news/'+d.id).delete().catch(()=>{})); }
