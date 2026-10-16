@@ -660,10 +660,16 @@ const GUILDS = [
 const GUILD_ICONS=['guild-taisei','guildprize','guild-a','guild-b','item-no-68','item-no-44','item-no-61','item-no-56','item-no-27','item-no-11','item-no-8','item-no-33','item-no-70'];
 const GUILD_LV=[0,50000,200000,600000,1500000];
 const GUILD_COST=300000, GUILD_DIG=3;
-function guildLv(exp){ let l=1; GUILD_LV.forEach((v,i)=>{ if((exp||0)>=v) l=i+1; }); return l; }
+// ギルドレベルは最大1000。Lv5までは表のとおり，Lv6からはギルド経験値40万ごとに1上がる
+const GUILD_MAXLV=1000, GUILD_STEP=400000;
+function guildLv(exp){ exp=exp||0; if(exp>=GUILD_LV[4]) return Math.min(GUILD_MAXLV,5+Math.floor((exp-GUILD_LV[4])/GUILD_STEP)); let l=1; GUILD_LV.forEach((v,i)=>{ if(exp>=v) l=i+1; }); return l; }
+function guildNextExp(lv){ if(lv>=GUILD_MAXLV) return null; if(lv<5) return GUILD_LV[lv]; return GUILD_LV[4]+(lv-4)*GUILD_STEP; }
+// Lv5から：加盟店の店主の能力が「レベル×0.1%」アップ（Lv5で+0.5%，Lv1000でちょうど+100%）
+function guildStatBonus(lv){ lv=lv||0; return lv>=5? lv*0.001 : 0; }
+function myGuildStatBonus(){ if(!S||!S.guild) return 0; const gi=guildInfo(S.guild); return gi?guildStatBonus(gi.lv):0; }
 function guildInfo(id){
   if(!id) return null;
-  if(NET.online && NET.guilds && NET.guilds[id]){ const g=NET.guilds[id]; const lv=guildLv(g.exp); return {id,name:g.name,fee:g.fee||0,icon:g.icon||'guildprize',lv,bonus:0.5+lv*0.5,g}; }
+  if(NET.online && NET.guilds && NET.guilds[id]){ const g=NET.guilds[id]; const lv=guildLv(g.exp); return {id,name:g.name,fee:g.fee||0,icon:g.icon||'guildprize',lv,bonus:0.5+Math.min(lv,5)*0.5,g}; }
   const n=GUILDS.find(x=>x.id===id); if(n) return {id,name:n.name,fee:n.fee,icon:n.img,lv:1,bonus:n.bonus};
   if(id==='my'&&S&&S.myguild) return {id:'my',name:S.myguild.name,fee:S.myguild.fee,icon:'guildprize',lv:1,bonus:1};
   return null;
@@ -1308,7 +1314,7 @@ function activeSkills(){
 function seriesCount(){ const cnt={}; if(!S) return cnt; [1,2,3,4].forEach(s=>{ const it=ITEMS[S.eq[s]]; if(it&&it.series) cnt[it.series]=(cnt[it.series]||0)+1; }); return cnt; }
 function skillFx(){ const fx={}; activeSkills().forEach(a=>{ const f=SKILLS[a.k].fx; for(const k in f) fx[k]=(fx[k]||0)+f[k]; }); return fx; }
 function myStat(){
-  const t=totalStat(S.st,S.eq), fx=skillFx(), pb=petStatBonus();
+  const t=totalStat(S.st,S.eq), fx=skillFx(), pb=petStatBonus()+myGuildStatBonus();
   return {life:Math.round(t.life*(1+(fx.life||0)+pb)),attack:Math.round(t.attack*(1+(fx.atk||0)+pb)),defence:Math.round(t.defence*(1+(fx.def||0)+pb)),tech:Math.round(t.tech*(1+(fx.tech||0)+pb))};
 }
 const FX_WHERE={atk:'能力（攻撃）',life:'能力（HP）',def:'能力（防御）',tech:'能力（技量）',guard:'戦闘中：受けるダメージを減らす',avoid:'戦闘中：攻撃をよけやすくなる',crit:'戦闘中：会心の一撃が出やすくなる',regen:'戦闘中：自分の番ごとにHP回復',enemyHit:'戦闘中：相手の攻撃が当たりにくくなる',
@@ -3766,7 +3772,7 @@ const GUIDE=[
   <b>豪将リキーヤ</b>が用心棒として駆けつけてくれることもあります（3割）。ただし用心棒代は割高です。`,'👹','town'],
  ['豪将リキーヤ',`街一番の武将。<b>用心棒</b>としてにくべんき藩から店を守ったり，[求人]で<b>持ち時間を売ってくれたり</b>（決算ごとに3件），お掃除を引き受けたりします。レイドにも気まぐれで助っ人に来てくれます。`,'💪','town'],
  ['ギルド',`仲間と一緒にギルドに入ると，人気や売れ行きにボーナスがつきます。<b>ギルドポイント（GP）</b>で広告・看板商品・共同仕入れ・クエストなどができます。<br>
-  ギルドの広告は，金庫・GP・広告パックを合わせて<b>決算ごとに1回</b>までです。ギルドを作るには男爵以上が必要です。NPCのギルドにも自由に加盟できます。`,'🤝','town'],
+  ギルドの広告は，金庫・GP・広告パックを合わせて<b>決算ごとに1回</b>までです。<br>ギルドのレベルは<b>最大1000</b>。Lv5からは<b>加盟店の店主の能力が「レベル×0.1%」</b>上がります（Lv5で+0.5%，Lv1000で+100%）。ギルドを作るには男爵以上が必要です。NPCのギルドにも自由に加盟できます。`,'🤝','town'],
  ['領主と街',`爵位のいちばん高い商人が<b>領主</b>になり，税率や街の開拓・治安を決めます。治安が悪いと万引きが増え，山賊が領主の座を狙ってきます。領主は<b>反乱</b>で交代することもあります（[傭兵所]）。`,'🏰','town'],
  ['毎日の楽しみ',`・<b>流行</b>：毎日0時に，よく売れる品が3つ決まります（1.5倍売れる）<br>
   ・<b>ログインボーナス</b>：毎日はじめて開くとプレゼント。連続7日目は豪華！<br>
@@ -4196,10 +4202,10 @@ function guildOnline(){
       <td>${myId===r.id?'<small class="blue">所属中</small>':my?'':req?'<small>申請中</small>':`<button onclick="guildJoin(${R(r.id)})">${g.open?'加盟':'加盟申請'}</button>`}</td></tr>`; }).join('')||'<tr><td colspan=3 class="c">まだギルドはありません。最初のギルドを作ってみましょう！</td></tr>'}
     </table></div><div class="c note">点数は加盟店のランキング点数の合計です。ギルド名を押すと，くわしい様子が見られます。</div>`;
   } else if(gTab===1 && my){
-    const lv=guildLv(my.exp), next=GUILD_LV[lv];
+    const lv=guildLv(my.exp), next=guildNextExp(lv), lb=Math.min(lv,5);
     h+=`<div class="tbl"><table class="t" style="width:100%">
       <tr><th>ギルド</th><td>${im(my.icon||'guildprize','i16')} <b>${esc(my.name)}</b></td></tr>
-      <tr><th>レベル</th><td>Lv${lv} <small>（${next?`次のLvまで ${yen(next-(my.exp||0))}`:'最大'}）</small><br><small>ボーナス：人気 +${(0.5+lv*0.5).toFixed(1)}/日・売れ行き +${((0.5+lv*0.5)*3).toFixed(1)}%</small></td></tr>
+      <tr><th>レベル</th><td>Lv${lv} <small>/ ${GUILD_MAXLV}（${next?`次のLvまで ${yen(next-(my.exp||0))}`:'最大'}）</small><br><small>ボーナス：人気 +${(0.5+lb*0.5).toFixed(1)}/決算・売れ行き +${((0.5+lb*0.5)*3).toFixed(1)}%${lv>=5?`・<b class="blue">店主の能力 +${(guildStatBonus(lv)*100).toFixed(1)}%</b>`:''}</small><br><small class="note">Lv5からは加盟店の店主の能力（HP・攻撃・防御・技量）が「レベル×0.1%」上がります（Lv5で+0.5%，Lv${GUILD_MAXLV}で+100%）</small></td></tr>
       <tr><th>金庫</th><td>${yen(my.fund||0)}</td></tr>
       <tr><th>ギルドポイント</th><td><b>${(my.gp||0).toLocaleString()} GP</b> <small>（これまでに${(my.gpTotal||0).toLocaleString()}GP）</small></td></tr>
       <tr><th>看板商品</th><td>${gActive(my.feature)&&ITEMS[my.feature.no]?`${iname(my.feature.no)} <small>（${periodLabel(my.feature.until)}の決算まで・売れ行き+30%，人気が上がりやすい）</small>`:'<small class="note">なし</small>'}</td></tr>
