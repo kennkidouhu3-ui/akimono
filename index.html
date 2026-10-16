@@ -549,6 +549,31 @@ const EVENT_ONLY=[81,82,83,84,85,86,151,181,182,183,184];
 })();
 const ITEMS = {}; DATA.items.forEach(it=>{ if(it.no===80){ it.uses[0].time=180; } if(it.no===80 && !it.uses.some(u=>u.top)) it.uses.push({name:'最上級の魔物に挑む',time:240,action:'戦闘開始',info:'とてつもなく強い魔物に挑みます。勝てば賞金！',exp:1,use:[[1,80]],get:[],func:'_local_',top:1}); it.info=(it.info||'').replace(/<[^>]+>/g,''); ITEMS[it.no]=it; });
 const ITEMLIST = DATA.items;
+// ギフト券の交換品の見直し（1枚＝だいたい¥2万ぶんの価値にそろえる）
+(function giftRebalance(){
+  const G=ITEMS[79]; if(!G) return;
+  const find=n=>G.uses.find(u=>u.name===n);
+  const set=(n,cost,get,rename)=>{ const u=find(n); if(!u) return; u.use=[[cost,79]]; if(get) u.get=get.map(([k,no])=>[k,no,100]); if(rename) u.name=rename; };
+  set('入門本セットと引き換え',3);
+  set('修行キットと引き換え',1);
+  set('戦闘セットと引き換え',1,[[20,80],[10,31]]);
+  set('上級素材セットと引き換え',2,[[30,6],[20,7]]);
+  set('広告パックと引き換え',2,[[1,62]]);
+  set('宝くじ×5と引き換え',1);
+  set('こだわりのラム酒と引き換え',2);
+  set('転職のススメと引き換え',2);
+  set('修行キット×3と引き換え',3);
+  set('バトルチケット×12と引き換え',1,[[60,80]],'バトルチケット×60と引き換え');
+  set('オリハルコン塊×20と引き換え',2,[[40,7]],'オリハルコン塊×40と引き換え');
+  set('店番ロボットと引き換え',12);
+  // 新しい交換品：装備の強化素材
+  const base=find('地図セットと引き換え');
+  const mk=(name,cost,get,info)=>{ if(find(name)) return; G.uses.push({...JSON.parse(JSON.stringify(base)),name,info,use:[[cost,79]],get:get.map(([k,no])=>[k,no,100])}); };
+  if(ITEMS[273]&&ITEMS[275]) mk('強化素材セットと引き換え',1,[[10,273],[10,275]],'装備の強化（+1〜+10）に使う素材のセットです');
+  if(ITEMS[274]&&ITEMS[276]) mk('上級強化素材セットと引き換え',4,[[5,274],[5,276]],'装備の強化（+11〜+20）に使う素材のセットです');
+  const it=G.uses.find(u=>u.name==='広告パックと引き換え'); if(it) it.info='広告パック1つ（自店の広告は決算ごとに1回まで）';
+})();
+
 const MONS = DATA.monsters;
 // 魔物の賞金：レベル（低・中・上）ごとに，強さに応じて少しずつ
 (function(){ const RANGE=[[300,2000],[2000,8000],[8000,30000]];
