@@ -4131,7 +4131,7 @@ function guildDetail(k){
   ${g.msg?`<p class="c"><small>「${esc(g.msg)}」</small></p>`:''}
   <table class="t" style="width:100%">
     <tr><th>リーダー</th><td>${esc(g.leaderName||'')}</td></tr>
-    <tr><th>レベル</th><td>Lv${lv} <small>（加盟店の人気+${(0.5+lv*0.5).toFixed(1)}/日・売れ行き+${((0.5+lv*0.5)*3).toFixed(1)}%）</small></td></tr>
+    <tr><th>レベル</th><td>Lv${lv} <small>/ ${GUILD_MAXLV}</small><br><small>加盟店の人気+${(0.5+Math.min(lv,5)*0.5).toFixed(1)}/決算・売れ行き+${((0.5+Math.min(lv,5)*0.5)*3).toFixed(1)}%${lv>=5?`・店主の能力+${(guildStatBonus(lv)*100).toFixed(1)}%`:''}</small></td></tr>
     <tr><th>会費</th><td>売上の${g.fee}%</td></tr>
     <tr><th>加盟</th><td>${g.open?'自由加盟':'承認制'}</td></tr>
     <tr><th>金庫・GP</th><td>${yen(g.fund||0)}・${(g.gp||0).toLocaleString()}GP</td></tr>
