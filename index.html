@@ -1253,7 +1253,7 @@ function clockStr(){ return `${fmtDay(day())} ${hms(S.clock%1440)}`; }
 function news(t){ S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m:t}); S.news=S.news.slice(0,80); if(NET.online && (t.includes(S.shop)||t.includes(S.owner))) newsNet(t); }
 function letter(from,face,body,gift){ S.letters.unshift({d:day(),from,face,body,gift:gift||null,read:false}); S.letters=S.letters.slice(0,40); }
 function has(no,n){ return (S.stock[no]||0)>=(n||1); }
-function add(no,n){ S.stock[no]=(S.stock[no]||0)+n; if(S.stock[no]<=0) delete S.stock[no]; }
+function add(no,n){ S.stock[no]=(S.stock[no]||0)+n; if(S.stock[no]<=0){ delete S.stock[no]; if(S.enh&&S.enh[no]) delete S.enh[no]; } }
 function spendTime(t){ if(S.time<t){ return false;} S.time-=t; return true; }
 function setFlash(m,err){ flash={m,err}; }
 function digLevel(p){ let l=0; DIG_POINT.forEach((v,i)=>{ if((p||0)>=v) l=i; }); return l; }
@@ -1262,6 +1262,9 @@ function digIcon(p){ return im(DIG_ICON[digLevel(p)],'i16','title="'+DIGNITY[dig
 function digHtml(p){ const l=digLevel(p); return `${digIcon(p)}<span${l>=7?' style="color:#b8860b;font-weight:bold"':''}>${DIGNITY[l]}</span>`; }
 function myDisc(){ if(!S) return 0; const gd=myGuildDoc(); return Math.min(60,DIG_DISC[digLevel(S.dig)]+(gd&&gActive(gd.bulk)?10:0)+(evActive('caravan')?30:0)); }
 function enhLv(no){ return (S&&S.enh&&S.enh[no])||0; }
+// 強化した装備は「強化済み1つ」として，強化していない同じ装備とは別に扱う（売る・送る・材料に使うのは強化していない方から）
+function plainCount(no){ return Math.max(0,(S.stock[no]||0)-(enhLv(no)>0?1:0)); }
+function resv(no){ return ((S.fav||{})[no]?1:0)+(enhLv(no)>0?1:0); }
 function enhName(no){ const L=enhLv(no); return ITEMS[no]?ITEMS[no].name+(L?` +${L}`:''):''; }
 // 強化1段階ごとに+8%，さらに+10・+15・+20で大きく伸びる（+20で元の約3.6倍）
 function enhMult(lv){ lv=lv||0; return 1+0.08*lv+(lv>=10?0.2:0)+(lv>=15?0.3:0)+(lv>=20?0.5:0); }
@@ -1446,7 +1449,7 @@ function shopSummary(){
   return {title:S.title||null,manor:{...(S.manor||{})},uid:NET.uid,owner:S.owner,shop:S.shop,kao:S.kao,job:S.job,comment:S.comment,money:Math.round(S.money+S.bank-S.debt),
     pop:Math.round(S.pop),dig:S.dig,wins:S.wins,soldiers:S.soldiers,guild:S.guild,house:S.house,
     st:{life:t.life,attack:t.attack,defence:t.defence,tech:t.tech},btype:S.btype,weapon:w,
-    cases:S.cases.map(c=>c&&has(c.no)&&S.stock[c.no]-((S.fav||{})[c.no]?1:0)>0?{no:c.no,price:c.price,stock:S.stock[c.no]-((S.fav||{})[c.no]?1:0)}:null),day:day(),t:Date.now(),
+    cases:S.cases.map(c=>c&&has(c.no)&&S.stock[c.no]-resv(c.no)>0?{no:c.no,price:c.price,stock:S.stock[c.no]-resv(c.no)}:null),day:day(),t:Date.now(),
     point:myPoint(),ptEnd:S.ptEnd||null,pp:{wins:S.wins||0,p3:Math.round(myProfit3()),tn:Math.round(myTodayNet()),per:curPeriod()},sale:S.today.sales,exps:Math.round(expSum()),found:S.createdAt||0,rkY:S.rankY||0};
 }
 let lastPub='', pubBusy=false;
@@ -1511,7 +1514,7 @@ function pxApply(px,per){
   const keys=per==null?Object.keys(px.log):[String(per)];
   keys.forEach(kk=>{ const L=px.log[kk]; if(!L||L.done) return; L.done=1;
     for(const no in L.s){ const it=ITEMS[no]; if(!it) continue; const c=S.cases.find(x=>x&&x.no===+no); const price=c?c.price:it.price;
-      const k=Math.min(L.s[no],(S.stock[no]||0)-((S.fav||{})[no]?1:0)); if(k<=0) continue;
+      const k=Math.min(L.s[no],(S.stock[no]||0)-resv(no)); if(k<=0) continue;
       add(+no,-k); const g=price*k, tax=Math.round(g*taxRateFor(myKey())/100);
       S.money+=g-tax; S.today.sales+=g; S.today.count+=k; S.today.tax=(S.today.tax||0)+tax; S.today.items[no]=(S.today.items[no]||0)+k;
       S.trash+=k*0.25*(has(64)?0.5:1); S.today.popv=(S.today.popv||0)+0.25*Math.sqrt(k*price/500); } });
@@ -2036,14 +2039,14 @@ function simulate(dt){
     if(shelves.length&&Math.random()<p){
       if(Math.random()<petGuardRate()){ /* 相棒が追い払った */ }
       else if(has(64)){ if(Math.random()<0.05){ add(64,-1); letter('店番ロボット','kaoguide','ビビッ…万引き犯を追い払いましたが，もみ合いで店番ロボットが壊れてしまいました…。'); } }
-      else { const c=shelves[Math.floor(Math.random()*shelves.length)]; const k=Math.min(S.stock[c.no]-((S.fav||{})[c.no]?1:0),1+rnd(3)); if(k>0){ add(c.no,-k); S.today.theft=(S.today.theft||0)+k; if(AWAY){ S.awayTheft=(S.awayTheft||0)+k; } else { letter('店員','kaoguide',`万引きにあいました！ ${ITEMS[c.no].name}×${k}が盗まれてしまいました…。街の治安が悪いようです（店番ロボットがいれば防げます）。`); const nm=`【万引き】${S.shop}で${ITEMS[c.no].name}×${k}が盗まれた！ 街の治安の悪化が心配される`; S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m:nm}); newsNet(nm); } } }
+      else { const c=shelves[Math.floor(Math.random()*shelves.length)]; const k=Math.min(S.stock[c.no]-resv(c.no),1+rnd(3)); if(k>0){ add(c.no,-k); S.today.theft=(S.today.theft||0)+k; if(AWAY){ S.awayTheft=(S.awayTheft||0)+k; } else { letter('店員','kaoguide',`万引きにあいました！ ${ITEMS[c.no].name}×${k}が盗まれてしまいました…。街の治安が悪いようです（店番ロボットがいれば防げます）。`); const nm=`【万引き】${S.shop}で${ITEMS[c.no].name}×${k}が盗まれた！ 街の治安の悪化が心配される`; S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m:nm}); newsNet(nm); } } }
     } }
   S.cases.forEach((c,idx)=>{
     if(!c || !has(c.no)) return;
     const it=ITEMS[c.no];
     const rv=rivalsOf(c.no);
     const gd=myGuildDoc(), feat=gd&&gActive(gd.feature)&&gd.feature.no===c.no;
-    const avail=S.stock[c.no]-((S.fav||{})[c.no]?1:0);
+    const avail=S.stock[c.no]-resv(c.no);
     const k=Math.max(0,Math.min(avail, poisson(myRate(c,rv)*dt*pxF*gb*trashF*(feat?1.3:1)*CASE_BOOST(idx))));
     if(k>0){
       S.today.popv=(S.today.popv||0)+(popGain(c.price,c.no,rv)+(feat?0.4:0))*0.4*Math.sqrt(k*c.price/500);
@@ -2788,12 +2791,18 @@ SCREENS.stock=function(){
   const tabs=`<div class="tabs cattabs">${STOCK_CATS.map(c=>{ const n=cnt(c); return (n||c.k==='all')?`<span class="${ck===c.k?'on':''}" onclick="sub.cat='${c.k}';render()">${c.ic?im(c.ic,'','width=20 height=20 style="vertical-align:middle;margin-right:3px;image-rendering:pixelated"'):''}${c.n}<small>(${n})</small></span>`:''; }).join('')}</div>`;
   const tools=`<div class="c"><input id="stQ" value="${esc(q)}" placeholder="名前でさがす" style="width:45%" onkeydown="if(event.key==='Enter'&&!event.isComposing){sub.q=this.value;sub.cat='all';render();}"> <button onclick="sub.q=$('#stQ').value;sub.cat='all';render()">さがす</button>${q?` <button onclick="sub.q='';render()">×</button>`:''}
     <select onchange="sub.sort=this.value;render()">${[['type','種類順'],['name','名前順'],['many','数が多い順'],['value','合計の値打ち順'],['price','値段が高い順']].map(([v,l])=>`<option value="${v}" ${sort===v?'selected':''}>${l}</option>`).join('')}</select></div>`;
+  const enhRow=n=>{ const it=ITEMS[n], L=enhLv(n);
+    const eq=S.eq[it.soubi]===n?'<small class="blue">装備中</small>':`<button onclick="equip(${n})">装備</button>`;
+    return `<tr style="background:#fff8e6"><td>${iname(n)} <b class="red">+${L}</b> <span class="npctag strong">強化済み</span><br><small class="blue">${SOUBI[it.soubi]} ${statStr(itemStat(n,L))}</small>${it.skill?`<br><small>${sk(it.skill)}</small>`:''}<br><small class="note">強化済みの装備は棚に並ばず，人に送ったり材料に使ったりもされません</small>
+      <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${eq}<button onclick="go('forge',{t:5})">⚒ さらに強化</button></div></td><td class="r nw">1${it.scale}</td></tr>`; };
   let rows=nos.map(n=>{
     const it=ITEMS[n];
-    const eq=it.soubi? (S.eq[it.soubi]===n?'<small class="blue">装備中</small>':`<button onclick="equip(${n})">装備</button>`):'';
+    const L0=enhLv(n), pc=plainCount(n);
+    if(L0>0&&pc<=0) return enhRow(n);
+    const eq=it.soubi&&L0>0?'' : it.soubi? (S.eq[it.soubi]===n?'<small class="blue">装備中</small>':`<button onclick="equip(${n})">装備</button>`):'';
     const tag=it.fromMon?'<span class="npctag">素材</span>':it.island?'<span class="npctag">島</span>':it.food?'<span class="npctag">食</span>':it.eventOnly?'<span class="npctag strong">レア</span>':'';
-    return `<tr><td>${(S.fav||{})[n]?'<span class="red">★</span>':''}${iname(n)}${isTrend(n)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''}${enhLv(n)?` <b class="red">+${enhLv(n)}</b>`:''} ${tag}${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(itemStat(n,enhLv(n)))}</small>`:''}${it.skill?`<br><small>${sk(it.skill)}</small>`:''}<br><small class="note">${it.type}・維持費 ${upkeepStr(it)}</small>
-      <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${it.uses.length?`<button onclick="go('use',{no:${n}})">使う</button>`:''}${eq}${canDisplay(n)?`<button onclick="quickDisplay(${n})">${S.cases.some(c=>c&&c.no===n)?'棚を変更':'棚に並べる'}</button>`:''}<button onclick="toggleFav(${n})">${(S.fav||{})[n]?'★お気に入り中':'☆お気に入り'}</button><button onclick="discard(${n})">捨てる</button></div></td><td class="r nw">${S.stock[n]}${it.scale}</td></tr>`;
+    return `<tr><td>${(S.fav||{})[n]?'<span class="red">★</span>':''}${iname(n)}${isTrend(n)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''}${L0?' <small class="note">（強化なし）</small>':''} ${tag}${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(itemStat(n,0))}</small>`:''}${it.skill?`<br><small>${sk(it.skill)}</small>`:''}<br><small class="note">${it.type}・維持費 ${upkeepStr(it)}</small>
+      <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${it.uses.length?`<button onclick="go('use',{no:${n}})">使う</button>`:''}${eq}${canDisplay(n)?`<button onclick="quickDisplay(${n})">${S.cases.some(c=>c&&c.no===n)?'棚を変更':'棚に並べる'}</button>`:''}<button onclick="toggleFav(${n})">${(S.fav||{})[n]?'★お気に入り中':'☆お気に入り'}</button><button onclick="discard(${n})">捨てる</button></div></td><td class="r nw">${pc}${it.scale}</td></tr>`+(L0>0?enhRow(n):'');
   }).join('');
   return `<div class="c"><big>倉庫</big> <small>（${owned.length}種類）</small></div>${tabs}${tools}
   <div class="tbl"><table class="t" style="width:100%"><tr><th>商品・操作</th><th>数量</th></tr>${rows||`<tr><td colspan=2 class="c">${q?'見つかりません':'何もありません'}</td></tr>`}</table></div>
@@ -2801,8 +2810,9 @@ SCREENS.stock=function(){
 };
 function discard(n){
   const it=ITEMS[n];
-  askNum(`${esc(it.name)}を何${it.scale}捨てますか？（最大${S.stock[n]}）`, S.stock[n], q=>{
-    const k=Math.min(S.stock[n]||0,Math.max(0,q||0)); if(!k) return;
+  const mx=enhLv(n)>0&&plainCount(n)>0?plainCount(n):S.stock[n];   // 強化していない方から捨てる（強化済みだけのときはそれを捨てる）
+  askNum(`${esc(it.name)}${enhLv(n)>0&&plainCount(n)<=0?' +'+enhLv(n):''}を何${it.scale}捨てますか？（最大${mx}）`, mx, q=>{
+    const k=Math.min(mx,Math.max(0,q||0)); if(!k) return;
     add(n,-k); S.trash+=k*0.1; setFlash(`${it.name}を${k}${it.scale}捨てました`); save(); render();
   });
 }
@@ -2870,6 +2880,7 @@ function doUse(no,i){
   if(bootsUsed(no)){ setFlash('おしゃれブーツは決算ごとに1回までです。次の決算のあとに使えます',1); render(); return; }
   if(no===62&&adUsed(i)){ setFlash(AD_USED_MSG[i]||'今回の決算ではもう広告を出しました',1); render(); return; }
   if(!u.use.every(([n,x])=>has(x,n))){ setFlash('材料が足りません',1); render(); return; }
+  { const bad=u.use.find(([n,x])=>x!==no&&enhLv(x)>0&&plainCount(x)<n); if(bad){ setFlash(`強化済みの${ITEMS[bad[1]].name}（+${enhLv(bad[1])}）は材料に使えません。強化していない${ITEMS[bad[1]].name}を用意してください`,1); render(); return; } }
   if(u.needexp && (S.exp[no]||0)<u.needexp){ setFlash('熟練度が足りません',1); render(); return; }
   const t=useTime(u,no);
   // 特殊処理で対象選択が必要なもの
@@ -3152,7 +3163,7 @@ function finishBattle(){
     res.push(`<b class="red">${esc(b.me.name)}は${esc(b.foe.name)}に敗北した…</b>`);
     if(b.foe&&b.foe.top) res.push('<span class="red">挑戦で使った人気2は戻りませんでした</span>');
     { const e=Math.max(1,Math.round((b.mon? b.mon.exp : 40)*0.2)); S.bexp=(S.bexp||0)+e; res.push(`${im('ability-no-0','i16')}負けても経験値を ${e} 手に入れた`); }
-    [1,2,3,4].forEach(s=>{ const n=S.eq[s]; if(n&&enhLv(n)>=ENH_MAX){ return; } if(n&&Math.random()<0.12){ add(n,-1); if(!has(n)) S.eq[s]=0; res.push(`<span class="red">${esc(ITEMS[n].name)}がボロボロになって壊れた…</span>`); } });
+    [1,2,3,4].forEach(s=>{ const n=S.eq[s]; if(n&&enhLv(n)>=ENH_MAX){ return; } if(n&&Math.random()<0.12){ const L=enhLv(n); add(n,-1); if(L>0&&S.enh) delete S.enh[n]; if(!has(n)) S.eq[s]=0; res.push(`<span class="red">${esc(ITEMS[n].name)}${L?' +'+L:''}がボロボロになって壊れた…</span>${L&&has(n)?'<br><small>（強化していない同じ装備に持ちかえた）</small>':''}`); } });
     if(b.npc){ S.pop=clamp(S.pop-1,0,100); b.npc.pop=clamp(b.npc.pop+1,0,100); res.push(`<span class="red">敗北で人気-1</span>／${esc(b.npc.shop)}の人気+1`); news(`${S.owner}が${b.npc.owner}に決闘を挑み，敗北しました`); }
     if(b.puid){ S.pop=clamp(S.pop-1,0,100); sendMail(b.puid,{kind:'duel',win:false}); res.push('<span class="red">敗北で人気-1</span>／相手の人気+1'); news(`${S.owner}（${S.shop}）が${b.foe.name}に決闘を挑み，敗北しました`); }
   }
@@ -3487,7 +3498,7 @@ async function takeJob(k){
       if(x.end<=S.clock) return {ret:'closed'};
       if(x.kind==='time') return {ret:'gone'};   // プレイヤーどうしの時間の取引は廃止（リキーヤの分は継続）
       if(x.kind==='item'&&!canSend(x.no)) return {ret:'gone'};
-      if(x.kind==='item'&&!has(x.no,x.n)) return {ret:'noitem'};
+      if(x.kind==='item'&&plainCount(x.no)<x.n) return {ret:'noitem'};
       if(x.kind==='offer'){ if(S.money<x.reward) return {ret:'nomoney'}; if(S.time+x.hours*60>maxTime()) return {ret:'full'}; }
       else if(x.kind!=='item'&&S.time<x.hours*60) return {ret:'notime'};
       return {del:true,ret:'ok',x};
@@ -4248,7 +4259,7 @@ function guildOnline(){
     h+=`<div class="c"><big>ギルド倉庫</big>　<small>${used}/${cap}個</small></div>
     <div class="tbl"><table class="t" style="width:100%"><tr><th>品物</th><th>数</th><th></th></tr>${Object.entries(st).filter(([n,q])=>q>0&&ITEMS[n]).map(([n,q])=>`<tr><td>${iname(+n)}</td><td class="r">${q}</td><td class="nw"><input type="number" id="gsO${n}" value="1" min="1" max="${q}" style="width:60px"><button onclick="gStoreOut(${n})">取り出す</button></td></tr>`).join('')||'<tr><td colspan=3 class="c">空っぽです</td></tr>'}</table></div>
     <div class="c"><big>預ける</big></div>
-    <div class="c">${mine.length?`<select id="gsNo">${mine.filter(canSend).map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${S.stock[n]}）</option>`).join('')}</select> ×<input type="number" id="gsN" value="1" min="1" style="width:60px"> <button onclick="gStoreIn()">預ける</button>`:'<small class="note">預けられる品がありません</small>'}</div>
+    <div class="c">${mine.length?`<select id="gsNo">${mine.filter(n=>canSend(n)&&plainCount(n)>0).map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${plainCount(n)}）</option>`).join('')}</select> ×<input type="number" id="gsN" value="1" min="1" style="width:60px"> <button onclick="gStoreIn()">預ける</button>`:'<small class="note">預けられる品がありません</small>'}</div>
     <div class="c note">加盟店ならだれでも預けたり取り出したりできます。倉庫の品に維持費はかかりません。</div>`;
   } else if(gTab===6 && my){
     const q=my.quest, active=q&&!q.done&&q.until>=curPeriod();
@@ -4303,7 +4314,7 @@ function gpDefend2(n,side,sol){
 let GBUSY=false;
 function gStoreIn(){
   if(GBUSY) return;
-  const no=+$('#gsNo').value, n=Math.min(S.stock[no]||0,Math.max(1,parseInt($('#gsN').value)||1)); if(!n) return;
+  const no=+$('#gsNo').value, n=Math.min(plainCount(no),Math.max(1,parseInt($('#gsN').value)||1)); if(!n) return;
   if(!canSend(no)){ setFlash('武器強化の素材はギルド倉庫に入れられません',1); render(); return; }
   GBUSY=true; add(no,-n); save();
   guildTx(S.guild,g=>{ const st=g.store=g.store||{}; const used=Object.values(st).reduce((a,b)=>a+b,0); if(used+n>(g.storeCap||100)) return 'full'; st[no]=(st[no]||0)+n; return 'ok'; }).then(r=>{ GBUSY=false; if(r!=='ok'){ add(no,n); setFlash(r==='full'?`倉庫がいっぱいです（あと${Math.max(0,(myGuildDoc()?myGuildDoc().storeCap||100:100)-Object.values((myGuildDoc()||{}).store||{}).reduce((a,b)=>a+b,0))}個まで）`:'預けられませんでした。通信状態を確認してもう一度お試しください',1); } else setFlash(`${ITEMS[no].name}×${n}を預けました`); save(); render(); });
@@ -4790,7 +4801,7 @@ SCREENS.dwarf=function(){
     const mine=Object.keys(S.stock).map(Number).filter(n=>ITEMS[n]&&ITEMS[n].price>0);
     h+=`<div class="c note">街の商人には品物を買い取ってもらえるぞい（専門の品なら標準価格の9割，それ以外は6割）。★印のプレイヤーには贈り物として届けるぞい。</div>
     <div class="c">宛先 <select id="dwTo">${recipOpts()}</select><br>
-    ${mine.length?`<select id="dwNo">${mine.filter(canSend).map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${S.stock[n]}）</option>`).join('')}</select> ×<input type="number" id="dwN" value="1" min="1" style="width:60px"> <button onclick="sendDwarf()">送る（20分）</button>`:'<small>送れる品がありません</small>'}</div>`;
+    ${mine.length?`<select id="dwNo">${mine.filter(n=>canSend(n)&&plainCount(n)>0).map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${plainCount(n)}）</option>`).join('')}</select> ×<input type="number" id="dwN" value="1" min="1" style="width:60px"> <button onclick="sendDwarf()">送る（20分）</button>`:'<small>送れる品がありません</small>'}</div>`;
   } else if(tab===3){
     h+=tradeHtml();
   } else {
@@ -4893,7 +4904,7 @@ function checkVoyages(){
 }
 function orderImport(){ const no=+$('#imNo').value, n=clamp(parseInt($('#imN').value)||1,1,500); const c=Math.round(ITEMS[no].price*1.5)*n; if(S.money<c){ setFlash('資金が足りません',1); render(); return; } if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; } S.money-=c; addPay(c); S.imports.push({no,n,at:S.clock+480}); setFlash(`${ITEMS[no].name}×${n}を${yen(c)}で注文しました`); save(); render(); }
 function sendDwarf(){
-  const r=recip($('#dwTo').value), no=+$('#dwNo').value, n=Math.min(S.stock[no]||0,Math.max(1,parseInt($('#dwN').value)||1)); if(!n) return;
+  const r=recip($('#dwTo').value), no=+$('#dwNo').value, n=Math.min(plainCount(no),Math.max(1,parseInt($('#dwN').value)||1)); if(!n) return;
   if(!canSend(no)){ setFlash('武器強化の素材は人に送れません',1); render(); return; }
   if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; }
   if(r.uid){ add(no,-n); sendMail(r.uid,{kind:'item',no,n,note:`${S.owner}（${S.shop}）からの贈り物`}); setFlash(`${ITEMS[no].name}×${n}を贈りました`); save(); render(); return; }
