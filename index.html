@@ -1004,11 +1004,30 @@ async function checkRaid(){
 const NIKU='にくべんき藩', NIKU_POW=[6000,10000];
 function nikuTargets(t){ const hit=(t&&t.nikuHit&&t.nikuHit.p===curPeriod())?t.nikuHit.keys:[]; return (NET.online? ranking() : allShops()).filter(r=>!r.idle&&!r.tyrant&&!r.warrior&&!hit.includes(r.key)); }
 function myDefense(){ const st=myStat(); return (S.soldiers||0)*10+Math.round((st.attack+st.defence+st.tech)/2); }
+
+/* ---------- にくべんき藩の「解放」：爵位ポイントが100の倍数に届くたび，1決算のあいだ襲撃をやめて店の品を全部買い占める ---------- */
+function nikuDigNow(){ try{ const r=(NET.online?npcOnline():allShops()).find(x=>x.tyrant); return r?(r.dig||0):0; }catch(e){ return 0; } }
+function nikuFreeActive(t){ t=t||T(); return !!(t.nikuFree&&Date.now()<t.nikuFree.until); }
+function npcGainApply(t,key,amount){ amount=Math.round(amount||0); if(amount<=0) return; t.npcLoss=t.npcLoss||{}; const cp=curPeriod(); const L=t.npcLoss[key]; if(!L||L.per!==cp) t.npcLoss[key]={per:cp,v:0}; t.npcLoss[key].v-=Math.round(amount*0.45); t.npcMoneyLoss=t.npcMoneyLoss||{}; t.npcMoneyLoss[key]=(t.npcMoneyLoss[key]||0)-amount; }
 async function checkNiku(){
   const now=Date.now(), t0=T();
-  if(t0.niku&&t0.niku.at>now) return;
+  const dg0=nikuDigNow();
+  if(t0.niku&&t0.niku.at>now&&!(dg0>=100&&!nikuFreeActive(t0))) return;
   const out=await townTx(t=>{
     const now=Date.now(), logs=[];
+    // 爵位ポイントが100・200・300…に届いたら「解放」（次の決算まで）
+    // 爵位ポイントが100に届いたら「解放」：100ポイントを使い切り，次の決算まで買い占め。決算のあとは元の襲撃に戻る
+    { if(!nikuFreeActive(t)&&nikuDigNow()>=100){ t.nikuDig=(t.nikuDig||0)-100; t.nikuFreeN=(t.nikuFreeN||0)+1; t.nikuFree={until:(curPeriod()+1)*SETTLE_MS-JST,n:t.nikuFreeN}; if(t.niku) t.niku.buy=true;
+      logs.push(`【解放】${NIKU}の爵位ポイントが100に達した！ 爵位ポイント100を使い切り，次の決算まで襲撃をやめて，狙った店の品を「全部買い占める」と宣言した！（${t.nikuFreeN}回目の解放）`); } }
+    if(t.niku&&now>=t.niku.at&&(t.niku.buy||nikuFreeActive(t))){
+      const n=t.niku; let val=0;
+      if(String(n.target.key).startsWith('npc:')){ const x=(S.npcs||[])[+String(n.target.key).slice(4)]; val=x?(x.cases||[]).reduce((a,c)=>a+(c&&c.stock>0?c.price*c.stock:0),0):0; if(!val) val=500000; npcGainApply(t,n.target.key,val); }
+      if(!t.nikuHit||t.nikuHit.p!==curPeriod()) t.nikuHit={p:curPeriod(),keys:[]};
+      t.nikuHit.keys.push(n.target.key);
+      t.nikuLast={id:n.at,target:n.target,buy:true,at:now,val};
+      logs.push(`【買い占め】${NIKU}が${n.target.shop}に現れ，「ここの品を全部もらおう！」と棚の品を残らず買い占めていった！ 店主はびっくり仰天`);
+      t.niku=null;
+    }
     if(t.niku&&now>=t.niku.at){
       const n=t.niku; const pow=n.pow;
       let def=0;
@@ -1038,8 +1057,9 @@ async function checkNiku(){
       const cand=nikuTargets(t); if(cand.length){
         const tg=cand[Math.floor(Math.random()*cand.length)];
         const at=now+Math.round((1.5+Math.random())*3600000), pow=NIKU_POW[0]+Math.floor(Math.random()*(NIKU_POW[1]-NIKU_POW[0]));
-        t.niku={target:{key:tg.key,name:tg.name,shop:tg.shop,npc:!!tg.npc},at,pow};
-        logs.push(`【襲撃予告】${NIKU}が「${fmtReal(at)}ごろ，${tg.shop}を襲う」と宣言した！`);
+        const buy=nikuFreeActive(t);
+        t.niku={target:{key:tg.key,name:tg.name,shop:tg.shop,npc:!!tg.npc},at,pow,buy};
+        logs.push(buy?`【買い占め予告】${NIKU}が「${fmtReal(at)}ごろ，${tg.shop}の品を全部買ってやる」と宣言した！`:`【襲撃予告】${NIKU}が「${fmtReal(at)}ごろ，${tg.shop}を襲う」と宣言した！`);
       }
     }
     return logs;
@@ -1049,6 +1069,14 @@ async function checkNiku(){
 function applyNikuResult(){
   const L=T().nikuLast; if(!L||S.nikuSeen===L.id) return;
   S.nikuSeen=L.id;
+  if(L.buy){
+    if(L.target.key===myKey()){ let tot=0, cnt=0; const got=[];
+      S.cases.forEach(c=>{ if(!c||!has(c.no)) return; const k=(S.stock[c.no]||0)-resv(c.no); if(k<=0) return; add(c.no,-k); const g=c.price*k, tax=Math.round(g*taxRateFor(myKey())/100);
+        S.money+=g-tax; S.today.sales+=g; S.today.count+=k; S.today.tax=(S.today.tax||0)+tax; S.today.items[c.no]=(S.today.items[c.no]||0)+k; tot+=g; cnt+=k; got.push(`${ITEMS[c.no].name}×${k}`); });
+      S.pop=clamp(S.pop+2,0,100);
+      letter(NIKU,'kaoniku',tot?`がっはっは！ 今日のワシは機嫌がいい。この店の品は全部いただくぞ！ 代金${yen(tot)}だ，受け取れ！（${got.join('，')}・人気+2）`:`買い占めに来てやったのに，棚が空っぽではないか！ つまらん店だ！`); }
+    save(); return;
+  }
   if(L.target.key===myKey()){
     if(L.guard){ const fee=L.fee||0; S.pop=clamp(S.pop+1,0,100); S.money-=fee; addPay(fee); letter('豪将リキーヤ','kaoriki',`${NIKU}のやつがお前の店を狙っておったから，俺が追い払っておいたぞ！ 用心棒代として${yen(fee)}をいただいていく。命と店の値段と思えば安いもんだろう？ がっはっは！（人気+1・資金−${yen(fee)}）`); }
     else if(L.win){ S.nikuRepel=(S.nikuRepel||0)+1; S.pop=clamp(S.pop+3,0,100); S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.8)); add(151,1); letter('傭兵隊長','kaoarmy',`${NIKU}の襲撃を見事に撃退しました！ 人気+3。兵士の2割が負傷しました。現場に「呪いの骨片」が1つ残されていました……。`); }
@@ -1059,6 +1087,7 @@ function applyNikuResult(){
 function nikuHtml(){
   const t=T(), n=t.niku; if(!n) return '';
   const mine=S&&n.target.key===myKey();
+  if(n.buy||nikuFreeActive(t)) return `<div class="flash" style="text-align:center;background:#fff7e0;border-color:#d9a441">${im('kaoniku','','width=32 height=32')} <b>【買い占め予告】${esc(NIKU)}</b>（解放中・次の決算まで）が<br><b>${fmtReal(n.at)}ごろ</b>，<b>${esc(n.target.shop)}</b>の品を全部買うと宣言！${mine?'<br><small class="blue">あなたのお店です！ 棚に品をたっぷり並べておきましょう（定価で全部買ってくれます）</small>':''}</div>`;
   return `<div class="flash err" style="text-align:center;background:#f7eaea">${im('kaoniku','','width=32 height=32')} <b>【襲撃予告】${esc(NIKU)}</b>が<br><b>${fmtReal(n.at)}ごろ</b>，<b>${esc(n.target.shop)}</b>を襲うと宣言！
   ${mine?`<br><small class="red">あなたのお店が狙われています！ 防衛力 <b>${myDefense()}</b>（兵士1人=10＋能力）。襲撃はおよそ${NIKU_POW[0]}〜${NIKU_POW[1]}。<a onclick="go('army')">傭兵所で兵士を雇う</a></small>`:''}</div>`;
 }
@@ -3846,7 +3875,7 @@ const GUIDE=[
   [爵位名鑑]から，<b>爵位ポイントを使って好きなイベントを呼ぶ</b>こともできます。`,'🎉','town'],
  ['暴君「にくべんき藩」の襲撃',`街で最強のNPC「にくべんき藩」が，ときどきお店を襲います。襲う日時と店は<b>前もって予告</b>されます。<br>
   撃退できないと<b>点数・人気の1割と爵位ポイント1</b>を奪われます（お金は取られません）。[傭兵所]で兵士を雇って守りを固めましょう。<br>
-  <b>豪将リキーヤ</b>が用心棒として駆けつけてくれることもあります（3割）。ただし用心棒代は割高です。`,'👹','town'],
+  <b>豪将リキーヤ</b>が用心棒として駆けつけてくれることもあります（3割）。ただし用心棒代は割高です。<br>にくべんき藩の爵位ポイントが<b>100に届くたびに「解放」</b>。爵位ポイント100を使い切って，次の決算まで襲撃をやめ，狙った店の<b>棚の品を全部買い占めて</b>くれます。決算のあとは元の襲撃に戻ります。`,'👹','town'],
  ['豪将リキーヤ',`街一番の武将。<b>用心棒</b>としてにくべんき藩から店を守ったり，[求人]で<b>持ち時間を売ってくれたり</b>（決算ごとに3件），お掃除を引き受けたりします。レイドにも気まぐれで助っ人に来てくれます。`,'💪','town'],
  ['ギルド',`仲間と一緒にギルドに入ると，人気や売れ行きにボーナスがつきます。<b>ギルドポイント（GP）</b>で広告・看板商品・共同仕入れ・クエストなどができます。<br>
   ギルドの広告は，金庫・GP・広告パックを合わせて<b>決算ごとに1回</b>までです。<br>ギルドのレベルは<b>最大1000</b>。Lv5からは<b>加盟店の店主の能力が「レベル×0.1%」</b>上がります（Lv5で+0.5%，Lv1000で+100%）。ギルドを作るには男爵以上が必要です。NPCのギルドにも自由に加盟できます。`,'🤝','town'],
