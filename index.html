@@ -1872,7 +1872,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101704;
+const APP_VER=2026101705;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -3561,7 +3561,8 @@ SCREENS.market=function(){
   ${nos.map(n=>{ const it=ITEMS[n], st=MK[n]||0; return `<tr><td class="nm">${iname(n)}${isTrend(n)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''}<br><small>${esc(it.info)}</small>${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}<br><small class="note">維持費 ${upkeepStr(it)}</small></td><td class="r nw">${yen(it.price)}<br><small><span class="nb">在庫 ${st}</span><br><span class="nb">所持 ${S.stock[n]||0}</span></small></td>
      <td class="c nw">${st?`<input type="number" id="mq${n}" value="1" min="1" max="${st}" style="width:52px"><button onclick="buyMarket(${n})">買う</button>`:'<small>品切れ</small>'}</td></tr>`; }).join('')||'<tr><td colspan=3 class="c">この種類は市場に入荷しません</td></tr>'}
   </table></div>
-  <div class="c note">原料や上級の装備は市場に入荷しません。地図や本を使って自分で調達・製作するか，<a onclick="go('port')">港</a>から船で島へ探索に行きましょう。</div>`;
+  <div class="c note">原料や上級の装備は市場に入荷しません。地図や本を使って自分で調達・製作するか，<a onclick="go('port')">港</a>から船で島へ探索に行きましょう。</div>
+  ${pawnMktHtml()}`;
 };
 async function buyMarket(n){
   const it=ITEMS[n]; const q=Math.min(mktNow()[n]||0,Math.max(1,parseInt($('#mq'+n).value)||1));
@@ -3911,19 +3912,66 @@ function doBarter(i){ const b=S.barter[i]; if(!b||!has(b.give[0],b.give[1])) ret
 function doSpecial(i){ const e=SPECIAL_EXCH[i]; if(!e.need.every(([x,n])=>has(x,n))) return; e.need.forEach(([x,n])=>add(x,-n)); add(e.get[0],e.get[1]); setFlash(`「${e.name}」成立！ ${iname(e.get[0])}を手に入れた！`); news(`${S.shop}が特殊交換市で${ITEMS[e.get[0]].name}を手に入れた`); save(); render(); }
 SCREENS.pawn=function(){
   const mine=Object.keys(S.stock).map(Number).filter(n=>ITEMS[n]&&ITEMS[n].price>0);
-  const pw=Object.keys(S.pawn).map(Number).filter(n=>S.pawn[n]>0);
+  pawnNorm(); const pw=Object.keys(S.pawn).map(Number).filter(n=>S.pawn[n]>0);
   return `<div class="c"><big>質屋</big></div>
-  ${talk(21,'質屋の主人','いらなくなった品は標準価格の4割で買い取るよ。うちで買うなら標準価格の3割増しだ。')}
+  ${talk(21,'質屋の主人','いらなくなった品は標準価格の4割で買い取るよ。うちで買うなら標準価格の3割増しだ。<br>売られた品は1日たつと「質流れ品」として市場に流すからね。')}
   <div class="c"><big>買い取り</big></div>
   <div class="c">${mine.length?`<select id="pwNo">${mine.map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${S.stock[n]}・1${ITEMS[n].scale}${yen(Math.floor(ITEMS[n].price*0.4))}）</option>`).join('')}</select>
    ×<input type="number" id="pwN" value="1" min="1" style="width:60px"> <button onclick="pawnSell()">売る</button>`:'<small>売れる品がありません</small>'}</div>
   <div class="c"><big>質屋の品</big></div>
   <div class="tbl"><table class="t"><tr><th>品物</th><th>価格</th><th>在庫</th><th></th></tr>
-  ${pw.map(n=>`<tr><td>${iname(n)}</td><td class="r">${yen(Math.ceil(ITEMS[n].price*1.3))}</td><td class="r">${S.pawn[n]}</td><td><button onclick="pawnBuy(${n})">買う</button></td></tr>`).join('')||'<tr><td colspan=4 class="c">品物はありません</td></tr>'}
+  ${pw.map(n=>`<tr><td>${iname(n)}</td><td class="r">${yen(Math.ceil(ITEMS[n].price*1.3))}</td><td class="r">${S.pawn[n]}<br><small class="note">${pawnLeft(n)}</small></td><td><button onclick="pawnBuy(${n})">買う</button></td></tr>`).join('')||'<tr><td colspan=4 class="c">品物はありません</td></tr>'}
   </table></div>`;
 };
-function pawnSell(){ const no=+$('#pwNo').value, n=Math.min(plainCount(no),Math.max(1,parseInt($('#pwN').value)||1)); if(!n) return; add(no,-n); const g=Math.floor(ITEMS[no].price*0.4)*n; S.money+=g; addIncome(g); S.pawn[no]=(S.pawn[no]||0)+n; setFlash(`${ITEMS[no].name}×${n}を${yen(g)}で売りました`); save(); render(); }
-function pawnBuy(no){ const p=Math.ceil(ITEMS[no].price*1.3); if(S.money<p){ setFlash('資金が足りません',1); render(); return; } S.money-=p; addPay(p); S.pawn[no]--; add(no,1); setFlash(`${ITEMS[no].name}を買いました`); save(); render(); }
+/* ---------- 質流れ：質屋に売った品は1日（現実24時間）たつと市場に流れ，だれでも買えるようになる ---------- */
+const PAWN_KEEP=24*3600000, PAWN_CAP=300;
+function pawnNorm(){   // 古いデータ（個数だけ）を，売った時刻つきの束に直す
+  if(!S.pawnLots){ S.pawnLots=[]; Object.keys(S.pawn||{}).forEach(k=>{ const n=S.pawn[k]|0; if(n>0) S.pawnLots.push({no:+k,n,at:Date.now()-PAWN_KEEP+3600000}); }); }
+  const o={}; S.pawnLots.forEach(l=>{ if(l.n>0) o[l.no]=(o[l.no]||0)+l.n; }); S.pawn=o;
+}
+function pawnLeft(no){ const ls=(S.pawnLots||[]).filter(l=>l.no===no&&l.n>0); if(!ls.length) return ''; const at=Math.min(...ls.map(l=>l.at)); const h=Math.max(0,(at+PAWN_KEEP-Date.now())/3600000); return h<1?'まもなく市場へ':`あと約${Math.ceil(h)}時間で市場へ`; }
+let PAWNBUSY=false;
+async function pawnFlow(){
+  if(!S||PAWNBUSY) return; pawnNorm();
+  const now=Date.now(), due=S.pawnLots.filter(l=>l.n>0&&now-l.at>=PAWN_KEEP); if(!due.length) return;
+  const add2={}; due.forEach(l=>{ add2[l.no]=(add2[l.no]||0)+l.n; });
+  PAWNBUSY=true;
+  try{
+    if(NET.online){ const mk=mktScale(); await dbTx(MKT_PATH,d=>{ const m=d||mktInit(mk); m.pawn=m.pawn||{}; for(const k in add2) m.pawn[k]=Math.min(PAWN_CAP,(m.pawn[k]||0)+add2[k]); return {set:m}; }); }
+    else { S.mktPawn=S.mktPawn||{}; for(const k in add2) S.mktPawn[k]=Math.min(PAWN_CAP,(S.mktPawn[k]||0)+add2[k]); }
+    S.pawnLots=S.pawnLots.filter(l=>!due.includes(l)); pawnNorm(); save();
+  }catch(e){ netErr(e); }
+  PAWNBUSY=false;
+}
+function mktPawnNow(){ return NET.online?((NET.market&&NET.market.pawn)||{}):(S.mktPawn||{}); }
+async function buyPawnMkt(no){
+  const it=ITEMS[no]; if(!it) return; const have=mktPawnNow()[no]||0; const q=Math.min(have,Math.max(1,parseInt(($('#mpq'+no)||{}).value)||1));
+  if(q<=0){ setFlash('品切れです',1); render(); return; }
+  const t=Math.round(20+q/3), c=(it.price||0)*q;
+  if(S.money<c){ setFlash('資金が足りません',1); render(); return; }
+  if(S.time<t){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
+  if(NET.online){
+    if(MKBUSY) return; MKBUSY=true; let r=null;
+    try{ r=await dbTx(MKT_PATH,d=>{ const m=d||mktInit(mktScale()); m.pawn=m.pawn||{}; const h=m.pawn[no]||0; if(h<q) return {ret:{ok:false,h}}; m.pawn[no]=h-q; if(m.pawn[no]<=0) delete m.pawn[no]; return {set:m,ret:{ok:true}}; }); }catch(e){ netErr(e); }
+    MKBUSY=false;
+    if(!r||!r.ret){ setFlash('通信に失敗しました。もう一度お試しください',1); render(); return; }
+    if(!r.ret.ok){ setFlash(`ほかのお店に先に買われてしまいました（いまの在庫：${r.ret.h}${it.scale}）`,1); render(); return; }
+  } else { S.mktPawn[no]-=q; if(S.mktPawn[no]<=0) delete S.mktPawn[no]; }
+  if(!spendTime(t)) spendTime(Math.min(S.time,t));
+  S.money-=c; addPay(c); add(no,q);
+  setFlash(`質流れ品の${it.name}を${q}${it.scale}仕入れました（${yen(c)}・${hm(t)}）`); save(); render();
+}
+function pawnMktHtml(){
+  const P=mktPawnNow(), nos=Object.keys(P).map(Number).filter(n=>ITEMS[n]&&P[n]>0).sort((a,b)=>ITEMS[a].price-ITEMS[b].price);
+  return `<div class="c"><big>質流れ品</big></div>
+  <div class="c note">質屋に売られて1日たった品が流れてきます（だれが売った品でも買えます）。値段は標準価格です。</div>
+  <div class="tbl"><table class="t"><tr><th>商品</th><th>価格</th><th>仕入</th></tr>
+  ${nos.map(n=>{ const it=ITEMS[n], st=P[n]; return `<tr><td class="nm">${iname(n)}<br><small>${esc(it.info||'')}</small></td><td class="r nw">${yen(it.price)}<br><small><span class="nb">在庫 ${st}</span><br><span class="nb">所持 ${S.stock[n]||0}</span></small></td>
+    <td class="c nw"><input type="number" id="mpq${n}" value="1" min="1" max="${st}" style="width:52px"><button onclick="buyPawnMkt(${n})">買う</button></td></tr>`; }).join('')||'<tr><td colspan=3 class="c">いまは質流れ品はありません</td></tr>'}
+  </table></div>`;
+}
+function pawnSell(){ const no=+$('#pwNo').value, n=Math.min(plainCount(no),Math.max(1,parseInt($('#pwN').value)||1)); if(!n) return; add(no,-n); const g=Math.floor(ITEMS[no].price*0.4)*n; S.money+=g; addIncome(g); pawnNorm(); S.pawnLots.push({no,n,at:Date.now()}); pawnNorm(); setFlash(`${ITEMS[no].name}×${n}を${yen(g)}で売りました`); save(); render(); }
+function pawnBuy(no){ const p=Math.ceil(ITEMS[no].price*1.3); if(S.money<p){ setFlash('資金が足りません',1); render(); return; } pawnNorm(); const ls=S.pawnLots.filter(l=>l.no===no&&l.n>0).sort((a,b)=>b.at-a.at); if(!ls.length){ setFlash('品切れです',1); render(); return; } S.money-=p; addPay(p); ls[0].n--; S.pawnLots=S.pawnLots.filter(l=>l.n>0); pawnNorm(); add(no,1); setFlash(`${ITEMS[no].name}を買いました`); save(); render(); }
 SCREENS.palace=function(){
   const worth=S.money+S.bank-S.debt;
   const [msg,no,cnt]=KING_REQ[S.king.idx];
@@ -5629,6 +5677,7 @@ function tick(){
   if(saveTick%120===40) recordDevice();
   if(saveTick%30===17&&NET.online) softRender();   // 「いま遊んでいる人」の数をこまめに更新
   if(saveTick%10===3) checkVoyages();
+  if(saveTick%60===20) pawnFlow();
 }
 (function boot(){
   S=load();
