@@ -784,7 +784,8 @@ function taxRateFor(key){ const t=T(); const m=(t.taxmode||{})[key]; const base=
 function payTax(){ return taxRateFor(myKey())>0; }
 function taxModeName(key){ const m=(T().taxmode||{})[key]; return m==='free'?'免税':m==='double'?'倍税':'通常'; }
 // 街の発展ぶり（開拓）で，みんなのお店の売れ行きが変わる
-function townMult(){ const t=T(); return 0.85+0.3*(townVal(t,'develop',50)/100); }
+function lordFestOn(t){ t=t||T(); return !!(t.lordFest&&t.lordFest.until>Date.now()); }
+function townMult(){ const t=T(); return (0.85+0.3*(townVal(t,'develop',50)/100))*(lordFestOn(t)?1.2:1); }
 function rebelSum(t){ t=t||T(); return (t.bal?t.bal.n:0)+Object.values(t.riot||{}).reduce((a,r)=>a+(r.n||0),0); }
 function newState(owner,shop,kaoNo){
   const s={
@@ -1326,7 +1327,7 @@ function digLevel(p){ let l=0; DIG_POINT.forEach((v,i)=>{ if((p||0)>=v) l=i; });
 const DIG_ICON=['dig0','medal1','medal2','medal3','medal4','medal5','medal6','dig7'];   // 士爵〜公爵は元の商人物語のメダル
 function digIcon(p){ return im(DIG_ICON[digLevel(p)],'i16','title="'+DIGNITY[digLevel(p)]+'"'); }
 function digHtml(p){ const l=digLevel(p); return `${digIcon(p)}<span${l>=7?' style="color:#b8860b;font-weight:bold"':''}>${DIGNITY[l]}</span>`; }
-function myDisc(){ if(!S) return 0; const gd=myGuildDoc(); return Math.min(60,DIG_DISC[digLevel(S.dig)]+(gd&&gActive(gd.bulk)?10:0)+(evActive('caravan')?30:0)); }
+function myDisc(){ if(!S) return 0; const gd=myGuildDoc(); return Math.min(60,DIG_DISC[digLevel(S.dig)]+(gd&&gActive(gd.bulk)?10:0)+(evActive('caravan')?30:0)+((T().lordSub&&T().lordSub.until>Date.now())?10:0)); }
 function enhLv(no){ return (S&&S.enh&&S.enh[no])||0; }
 // 強化した装備は「強化済み1つ」として，強化していない同じ装備とは別に扱う（売る・送る・材料に使うのは強化していない方から）
 function plainCount(no){ return Math.max(0,(S.stock[no]||0)-(enhLv(no)>0?1:0)); }
@@ -1659,6 +1660,7 @@ function processMail(){
       else if(m.kind==='raidrew'){ applyRaidRew(m); }
       else if(m.kind==='npcduel'){ applyNpcDuel(m); }
       else if(m.kind==='admin'){ applyAdmin(m); }
+      else if(m.kind==='honor'){ const a=m.amount||10; S.pop=clamp(S.pop+a,0,100); letter(who,face,`領主${who}さまから勲章を授かりました！ お店の評判が広まり，人気が${a}上がりました。`); }
       else if(m.kind==='adpop'){ const a=m.amount||15; S.pop=clamp(S.pop+a,0,100); letter(who,face,`${who}さんが，あなたのお店の広告を出してくれました！ 人気が${a}上がりました。`); }
       else if(m.kind==='rumor'){ const a=m.amount||10; S.pop=clamp(S.pop-a,0,100); letter('街のうわさ好き','kaoguide',`あなたのお店について，よくない噂が広まっているようです…。人気が${a}下がりました。（だれかが禁断の書を使ったのかもしれません）`); }
       else if(m.kind==='robbed'){ const a=Math.min(m.amount||0,Math.max(0,S.money)); S.money-=a; addPay(Math.round(a/50));   /* 盗まれた額の1/50だけ点数が下がる */ letter('店員','kaoguide',`たいへんです！ お店の金庫から${yen(a)}が盗まれてしまいました…。だれかのしわざのようです。`); }
@@ -1971,6 +1973,12 @@ function townDaily(d){
       else if(t.guard<=0){ logs.push(`【政変】護衛軍が敗れ，山賊バルバロスが街を乗っ取って領主になってしまった！ 税率は15%に…。反乱を起こして取り戻そう！`); t.lord={key:'bandit',name:'山賊バルバロス',shop:'バルバロス一味'}; t.tax=15; t.guard=t.bal.n; t.bal=null; }
       else logs.push(`山賊バルバロス軍と護衛軍がぶつかった（護衛軍${t.guard}人・山賊${t.bal.n}人）`);
     }
+    { const ang=t.lordAnger||0; const lk=t.lord&&t.lord.key;
+      if(ang>=2 && lk && lk!=='bal' && lk!=='bandit' && !String(lk).startsWith('npc:') && Math.random()<Math.min(0.9,0.3*(ang-1))){
+        const cand=NPCDEF.map((x,i)=>({x,i})).filter(o=>!o.x.strong&&!o.x.tyrant); const o=pick(cand); const n=200+rnd(300)+ang*80;
+        t.riot['npc:'+o.i]={n:((t.riot['npc:'+o.i]||{}).n||0)+n,name:o.x.owner,shop:o.x.shop};
+        logs.push(`【反乱】領主の徴兵や臨時徴収に怒った${o.x.owner}（${o.x.shop}）が，${n}人を率いて反乱を起こした！`); }
+      t.lordAnger=Math.max(0,ang-1); }
     if(!NET.online && isLordMe(t) && t.tax>=7 && Math.random()<0.3){ const n=pick(S.npcs); t.riot['npc:'+n.id]={n:100+rnd(400),name:n.owner,shop:n.shop}; logs.push(`${n.owner}（${n.shop}）が重税に反発して反乱を起こした！`); }
     return logs;
   }).then(logs=>{
@@ -2246,7 +2254,7 @@ function settle(){
   let mo=[];
   const tw=T(), focus=tw.manorFocus||'', rentPer=townVal(tw,'manorRent',0);
   let plots=0;
-  MANOR.forEach(m=>{ const n=S.manor[m.id]||0; plots+=n; const mul=m.id===focus?1.5:1; if(n>0) m.out.forEach(([no,q])=>{ const k=Math.round(q*n*mul); add(no,k); mo.push(ITEMS[no].name+'×'+k); }); });
+  MANOR.forEach(m=>{ const n=S.manor[m.id]||0; plots+=n; const mul=(m.id===focus?1.5:1)*(tw.lordHarvestP===d?1.3:1); if(n>0) m.out.forEach(([no,q])=>{ const k=Math.round(q*n*mul); add(no,k); mo.push(ITEMS[no].name+'×'+k); }); });
   if(plots>0 && rentPer>0){ const rent=plots*rentPer; S.money-=rent; addPay(rent); townTx(t=>{ t.fund=(t.fund||0)+rent; t.inToday=(t.inToday||0)+rent; }); mo.push(`（地代 ${yen(rent)} を納めました）`); }
   if(mo.length) letter('荘園の管理人','kaokeeper','今日の収穫です：'+mo.join('，'));
   // 履歴
@@ -3882,7 +3890,7 @@ const GUIDE=[
  ['豪将リキーヤ',`街一番の武将。<b>用心棒</b>としてにくべんき藩から店を守ったり，[求人]で<b>持ち時間を売ってくれたり</b>（決算ごとに3件），お掃除を引き受けたりします。レイドにも気まぐれで助っ人に来てくれます。`,'💪','town'],
  ['ギルド',`仲間と一緒にギルドに入ると，人気や売れ行きにボーナスがつきます。<b>ギルドポイント（GP）</b>で広告・看板商品・共同仕入れ・クエストなどができます。<br>
   ギルドの広告は，金庫・GP・広告パックを合わせて<b>決算ごとに1回</b>までです。<br>ギルドのレベルは<b>最大1000</b>。Lv5からは<b>加盟店の店主の能力が「レベル×0.1%」</b>上がります（Lv5で+0.5%，Lv1000で+100%）。ギルドを作るには男爵以上が必要です。NPCのギルドにも自由に加盟できます。`,'🤝','town'],
- ['領主と街',`爵位のいちばん高い商人が<b>領主</b>になり，税率や街の開拓・治安を決めます。治安が悪いと万引きが増え，山賊が領主の座を狙ってきます。領主は<b>反乱</b>で交代することもあります（[傭兵所]）。`,'🏰','town'],
+ ['領主と街',`爵位のいちばん高い商人が<b>領主</b>になり，税率や街の開拓・治安を決めます。治安が悪いと万引きが増え，山賊が領主の座を狙ってきます。領主は<b>反乱</b>で交代することもあります（[傭兵所]）。<br>領主は政務室で<b>特別政策</b>（祭り・勲章・炊き出し・公共事業・隊商・補助金・豊作祈願・徴兵令・臨時徴収・恩赦）を，それぞれ決算ごとに1回ずつ行えます。`,'🏰','town'],
  ['毎日の楽しみ',`・<b>流行</b>：毎日0時に，よく売れる品が3つ決まります（1.5倍売れる）<br>
   ・<b>ログインボーナス</b>：毎日はじめて開くとプレゼント。連続7日目は豪華！<br>
   ・<b>称号</b>：実績で手に入り，[ステータス]で選ぶとランキングに表示されます`,'🎁','other'],
@@ -4027,7 +4035,7 @@ SCREENS.lord=function(){
   const people=Math.round(5000+dev*300+saf*100+nPl*500);
   const purpose= tax<3?'人民解放':((t.guard||0)*20*2>(t.devem||0)+(t.safem||0))?'軍事重視':'内政重視';
   const bar=(v,col)=>`<div class="hpbar" style="width:120px;display:inline-block"><div style="width:${v}%;background:${col}"></div></div> ${Math.round(v)}`;
-  let h=`<div class="c"><big>領主邸</big></div>${balForecastHtml()}${eventHtml()}`;
+  let h=`<div class="c"><big>領主邸</big></div>${balForecastHtml()}${eventHtml()}${lordFestOn(t)?`<div class="c" style="background:#fff3d6;border:1px solid #e0b040;border-radius:6px;padding:6px;margin:6px 0"><b>🎉 領主の祭りの最中！</b> 次の決算まで，すべての店の売れ行きが1.2倍です</div>`:''}`;
   h+= L? talk(face,'領主 '+L.name,`わしが領主の${esc(L.name)}（${esc(L.shop)}）じゃ。${L.key==='bal'?'この街はオレの物だ。ぐわっはっは！':''}${t.msg?'<br>告知：'+esc(t.msg):''}`) : talk('kaominister','大臣','現在，領主の座は空位です。次の決算で，爵位が最も高い商人が領主に選ばれます。');
   h+=`<div class="c"><big>内政状況</big></div>
   <div class="tbl"><table class="t" style="width:100%">
@@ -4036,6 +4044,7 @@ SCREENS.lord=function(){
     <tr><th>前期税収</th><td class="r">${yen(t.inPrev||0)}${t.npcTaxPrev?`<br><small>うちNPC ${yen(t.npcTaxPrev)}</small>`:''}</td><th>前期歳出</th><td class="r">${yen(t.outPrev||0)}</td></tr>
     <tr><th>開拓</th><td colspan="3">${bar(dev,'#9c6')} <small>（街の売れ行き ×${townMult().toFixed(2)}）</small></td></tr>
     <tr><th>治安</th><td colspan="3">${bar(saf,saf<50?'#d55':'#4a8')}</td></tr>
+    <tr><th>住民の不満</th><td colspan="3">${(t.lordAnger||0)>=2?`<span class="red">${t.lordAnger}（反乱の危険あり）</span>`:(t.lordAnger||0)}${(t.lordSub&&t.lordSub.until>Date.now())?'　<small>🏷️ 市場の補助金：仕入れ10%引き中</small>':''}${t.lordHarvestP===curPeriod()?'　<small>🌾 豊作祈願中</small>':''}</td></tr>
     <tr><th>開拓対策費</th><td class="r">${yen(t.devem||0)}/日</td><th>治安対策費</th><td class="r">${yen(t.safem||0)}/日</td></tr>
     <tr><th>免税店</th><td colspan="3"><small>${byMode('free')}</small></td></tr>
     <tr><th>倍税店</th><td colspan="3"><small>${byMode('double')}</small></td></tr>
@@ -4081,10 +4090,81 @@ function lordOffice(t,shops){
     <tr><th>区画の上限</th><td>1人${manorMax(t)}区画まで ${manorMax(t)<20?`<button onclick="lordManorOpen()">開墾する（街資金¥1,000,000で+1）</button>`:''}</td></tr>
   </table></div>
   <div class="c"><button onclick="lordManor()">荘園の方針を決定</button></div>
+  ${lordPolicyHtml(t,shops)}
   <div class="c"><big>領主報酬</big></div>
   <div class="c">${(t.payDay===curPeriod())?'<small class="note">今回（次の決算まで）の報酬は受け取り済みです</small>':`<button onclick="lordPay()">報酬を受け取る（決算ごとに1回・街資金の5%・最大¥300,000）</button>`}</div>`;
 }
 function lordNews(m){ news(m); }
+/* ---------- 領主の特別政策（それぞれ決算ごとに1回・費用は街資金から） ---------- */
+const LORD_POL=[
+  {id:'fest',  name:'祭りを開く',   icon:'🎉', cost:3000000, desc:'次の決算まで，街のすべての店の売れ行きが1.2倍になる'},
+  {id:'honor', name:'勲章を授ける', icon:'🏅', cost:500000,  desc:'選んだお店（自分以外）の人気が10上がる', target:true},
+  {id:'relief',name:'炊き出し',     icon:'🍲', cost:1000000, desc:'街の治安が10上がる'},
+  {id:'works', name:'公共事業',     icon:'🏗️', cost:2000000, desc:'街の開拓が8上がる'},
+  {id:'caravan',name:'隊商を呼ぶ',  icon:'🐫', cost:1500000, desc:'市場の在庫がいっぱいに補充される'},
+  {id:'subsidy',name:'市場に補助金', icon:'🏷️', cost:2000000, desc:'次の決算まで，市場での仕入れが全員10%引き'},
+  {id:'harvest',name:'豊作祈願',     icon:'🌾', cost:1000000, desc:'この決算の荘園の収穫が1.3倍になる'},
+  {id:'draft', name:'徴兵令',       icon:'⚔️', cost:180000,  desc:'護衛軍が300人増える（通常の半額）。ただし治安−8・住民の不満+1', bad:1},
+  {id:'levy',  name:'NPCから臨時徴収', icon:'💰', cost:0,    desc:'NPCの店から1店¥80,000ずつ集めて街資金にする。NPCの点数が下がり，治安−5・住民の不満+2', bad:2},
+  {id:'amnesty',name:'恩赦',        icon:'🕊️', cost:300000,  desc:'取り締まり中の店をすべて許し，倍税もすべて通常に戻す。治安が3上がる'},
+];
+function lordPolUsed(t,id){ const L=t.lordAct; return !!(L&&L.p===curPeriod()&&(L.used||[]).includes(id)); }
+function lordPolicyHtml(t,shops){
+  const opts=shops.filter(r=>!r.me&&r.key!==myKey()).map(r=>`<option value="${R(r.key)}">${esc(r.shop)}${r.npc?'［NPC］':''}</option>`).join('');
+  return `<div class="c"><big>特別政策</big></div>
+  <div class="tbl"><table class="t" style="width:100%">${LORD_POL.map(p=>{ const used=lordPolUsed(t,p.id), poor=(t.fund||0)<p.cost;
+    return `<tr><th style="white-space:nowrap">${p.icon} ${p.name}</th><td><small>${p.desc}<br>費用：${p.cost?'街資金 '+yen(p.cost):'なし'}</small>
+    ${p.target?`<br><select id="lPol_${p.id}">${opts}</select>`:''}</td>
+    <td style="white-space:nowrap">${used?'<small class="note">今回は実施済み</small>':poor?'<small class="note">街資金不足</small>':rebelSum(t)>0&&p.id!=='relief'?'<small class="note">反乱中</small>':`<button onclick="lordPolicy('${p.id}')">実施</button>`}</td></tr>`; }).join('')}</table></div>
+  <div class="c note">特別政策は，それぞれ決算ごとに1回まで実施できます（反乱中は炊き出しのみ）。<br>いまの住民の不満：<b class="${(t.lordAnger||0)>=2?'red':''}">${t.lordAnger||0}</b>　徴兵令や臨時徴収で不満がたまり，2以上だと決算のときにNPCが反乱を起こすことがあります。祭り・炊き出し・恩赦で不満が1減り，決算ごとにも1ずつ下がります。</div>`;
+}
+function lordPolicy(id){
+  const p=LORD_POL.find(x=>x.id===id); if(!p) return;
+  let tgt=null; if(p.target){ const sel=$('#lPol_'+id); if(!sel||sel.value===''){ setFlash('お店を選んでください',1); render(); return; } const key=REFS[+sel.value]; tgt=lordShops().find(x=>x.key===key); if(!tgt){ setFlash('お店が見つかりませんでした',1); render(); return; } }
+  confirmBox(`${p.icon}「${p.name}」を実施しますか？${p.cost?`（街資金${yen(p.cost)}）`:''}${tgt?`<br>対象：${esc(tgt.shop)}`:''}`,()=>{
+    const npcs=NET.online?npcOnline():S.npcs.map((n,i)=>({key:'npc:'+i}));
+    let levied=0;
+    townTx(t=>{
+      if(!isLordMe(t)) return 'notlord';
+      if(!t.lordAct||t.lordAct.p!==curPeriod()) t.lordAct={p:curPeriod(),used:[]};
+      if(t.lordAct.used.includes(id)) return 'used';
+      if(rebelSum(t)>0&&id!=='relief') return 'rebel';
+      if((t.fund||0)<p.cost) return 'poor';
+      t.fund-=p.cost; t.lordAct.used.push(id);
+      const S2=(v)=>{ t.safety=clamp(townVal(t,'safety',80)+v,0,100); };
+      if(id==='fest') t.lordFest={until:nextSettleMs()};
+      else if(id==='honor'){ if(String(tgt.key).startsWith('npc:')) npcPopApply(t,tgt.key,10); }
+      else if(id==='relief') S2(10);
+      else if(id==='works') t.develop=clamp(townVal(t,'develop',50)+8,0,100);
+      else if(id==='draft'){ t.guard=(t.guard||0)+300; S2(-8); }
+      else if(id==='levy'){ levied=0; npcs.forEach(n=>{ levied+=80000; if(NET.online) npcLossApply(t,n.key,80000,80000/50); }); t.fund=(t.fund||0)+levied; t.inToday=(t.inToday||0)+levied; S2(-5); }
+      else if(id==='subsidy') t.lordSub={until:nextSettleMs()};
+      else if(id==='harvest') t.lordHarvestP=curPeriod();
+      if(p.bad) t.lordAnger=(t.lordAnger||0)+p.bad;
+      if(['fest','relief','amnesty'].includes(id)) t.lordAnger=Math.max(0,(t.lordAnger||0)-1);
+      else if(id==='amnesty'){ t.exposed={}; Object.keys(t.taxmode||{}).forEach(k=>{ if(t.taxmode[k]==='double') delete t.taxmode[k]; }); S2(3); }
+      return 'ok';
+    }).then(res=>{
+      if(res!=='ok'){ setFlash({used:'この政策は今回の決算ではもう実施しました',poor:'街資金が足りません',rebel:'反乱中のため実施できません',notlord:'領主ではないので実施できません'}[res]||'実施できませんでした',1); render(); return; }
+      if(id==='honor'&&!String(tgt.key).startsWith('npc:')) sendMail(tgt.key,{kind:'honor',amount:10});
+      if(id==='honor'&&!NET.online&&String(tgt.key).startsWith('npc:')){ const n=S.npcs[+String(tgt.key).slice(4)]; if(n) n.pop=clamp((n.pop||0)+10,0,100); }
+      if(id==='levy'&&!NET.online) S.npcs.forEach(n=>{ n.money=Math.max(0,(n.money||0)-80000); });
+      if(id==='caravan'){ if(NET.online) mktCaravan(); else ITEMLIST.forEach(it=>{ if(it.plus>0&&it.price>0){ const cap=Math.max(3,Math.round(1440/it.plus*2)); S.market[it.no]=Math.max(S.market[it.no]||0,cap*2); } }); }
+      if(id==='amnesty'){ S.exposedUntil=0; }
+      const m={fest:`【祭り】領主${S.owner}が街で祭りを開いた！ 次の決算まで，すべての店がにぎわいます（売れ行き1.2倍）`,
+        honor:`【叙勲】領主${S.owner}が${tgt&&tgt.shop}に勲章を授けた（人気+10）`,
+        relief:`領主${S.owner}が街で炊き出しを行った（治安+10）`,
+        works:`領主${S.owner}が公共事業を行った（開拓+8）`,
+        caravan:`【隊商】領主${S.owner}が隊商を呼び寄せた！ 市場の品物がいっぱいに入荷しました`,
+        subsidy:`【補助金】領主${S.owner}が市場に補助金を出した。次の決算まで，市場の仕入れが10%引き！`,
+        harvest:`領主${S.owner}が豊作を祈願した。この決算の荘園の収穫が1.3倍に！`,
+        draft:`【徴兵】領主${S.owner}が徴兵令を出した。護衛軍+300人，住民の不満が高まっている（治安−8）`,
+        levy:`【臨時徴収】領主${S.owner}がNPCの店から合計${yen(levied)}を臨時徴収した（治安−5）`,
+        amnesty:`【恩赦】領主${S.owner}が恩赦を出した。取り締まりと倍税がすべて解かれた（治安+3）`}[id];
+      lordNews(m); setFlash(`${p.icon}「${p.name}」を実施しました`); save(); render();
+    });
+  });
+}
 function lordShops(){ return NET.online? ranking() : allShops(); }
 function lordMsg(){ const msg=$('#lMsg').value.trim(); townTx(t=>{ t.msg=msg; }).then(()=>{ setFlash(msg?'告知を変更しました':'告知を撤回しました'); render(); }); }
 function lordInside(){
@@ -4531,8 +4611,10 @@ SCREENS.slime=function(){
 function newRace(){
   const cols=['','filter:hue-rotate(90deg)','filter:hue-rotate(200deg)','filter:hue-rotate(300deg)','filter:grayscale(1) brightness(1.2)','filter:sepia(1) saturate(3)'];
   const sl=[0,1,2,3,4,5].map(i=>{ const pw=rr(0.7,1.3); return {pw,pos:0,col:cols[i],cond:pw>1.15?'絶好調':pw>1?'好調':pw>0.85?'普通':'不調'}; });
-  const tot=sl.reduce((a,s)=>a+Math.pow(s.pw,4),0);
-  sl.forEach(s=>s.odds=Math.max(1.2,Math.round(tot/Math.pow(s.pw,4)*0.8*10)/10));
+  // オッズは実際の勝ちやすさから計算する（同じ条件で2000回走らせて勝率を出し，還元率8割）
+  const wins=[0,0,0,0,0,0], N=2000;
+  for(let r=0;r<N;r++){ const pos=[0,0,0,0,0,0]; let fin=null; while(fin==null){ for(let i=0;i<6;i++){ pos[i]+=rr(0.5,3.2)*sl[i].pw; if(pos[i]>=100&&fin==null) fin=i; } } wins[fin]++; }
+  sl.forEach((s,i)=>{ const p=Math.max(wins[i],1)/N; s.p=p; s.odds=Math.min(100,Math.max(1.1,Math.floor(0.8/p*10)/10)); });
   race={sl,state:'bet',bet:null,result:''};
 }
 function betSlime(i){
@@ -4553,8 +4635,8 @@ function runRace(){
     if(fin!=null){
       clearInterval(t); race.state='done';
       const b=race.bet;
-      if(b.i===fin){ const w=Math.round(b.v*race.sl[fin].odds); S.money+=w; addIncome(w-b.v); race.result=`${fin+1}番の勝利！ 的中！ ${yen(w)}の払い戻し！`; if(w>=100000) news(`${S.shop}がスライムレースで大穴を当てた！`); }
-      else { race.result=`${fin+1}番の勝利！ 残念，はずれ…`; addPay(b.v); }
+      if(b.i===fin){ const w=Math.round(b.v*race.sl[fin].odds); S.money+=w; addIncome(Math.round((w-b.v)*0.1)); race.result=`${fin+1}番の勝利！ 的中！ ${yen(w)}の払い戻し！`; if(w>=100000) news(`${S.shop}がスライムレースで大穴を当てた！`); }
+      else { race.result=`${fin+1}番の勝利！ 残念，はずれ…`; addPay(Math.round(b.v*0.1)); }
       save(); render();
     }
   },120);
