@@ -216,6 +216,54 @@ hr{margin:12px auto;}
 .rkitems{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .rkcm{margin:3px 0;padding:4px 8px;background:#f8f5ee;border-radius:6px;color:#555;}
 .rkst img{vertical-align:-3px;}
+
+/* ===== スマホ・PC 両対応の操作性アップ ===== */
+.bnav{display:none;}
+.navsheet{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.32);display:flex;align-items:flex-end;justify-content:center;}
+.navsheet .sh{background:#fffdf8;width:100%;max-width:640px;border-radius:16px 16px 0 0;padding:12px 12px calc(84px + env(safe-area-inset-bottom,0px));box-shadow:0 -4px 14px rgba(0,0,0,.15);animation:shUp .16s ease-out;}
+@keyframes shUp{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+.navsheet .sht{font-weight:bold;color:#6b4a1e;margin:0 0 10px;font-size:16px;display:flex;justify-content:space-between;align-items:center;}
+.navsheet .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+.navsheet .grid a{display:flex;align-items:center;justify-content:center;text-align:center;min-height:52px;padding:8px 4px;border:1px solid #e0d2b4;border-radius:10px;background:#fff;font-size:15px;line-height:1.3;color:#5a4a8a;}
+.navsheet .grid a.on{background:#fff3c8;border-color:#d9a441;color:#c0392b;}
+.stchips{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 14px;}
+.stchips span{white-space:nowrap;}
+.pol{display:flex;flex-direction:column;gap:8px;margin:6px 0;text-align:left;}
+.polc{background:#fff;border:1px solid #d8d2e6;border-radius:10px;padding:9px 11px;display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;}
+.polc .pn{font-weight:bold;font-size:15.5px;flex:1 1 160px;}
+.polc .pd{flex:1 1 100%;font-size:13.5px;color:#555;line-height:1.6;order:3;}
+.polc .pa{order:2;margin-left:auto;}
+.polc select{order:4;flex:1 1 100%;}
+.polc.done{opacity:.6;}
+@media (min-width:721px){
+  .wrap{max-width:860px;}
+}
+@media (max-width:720px){
+  .bnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:70;background:#fffdf6;border-top:1px solid #d9c9a0;padding:4px 2px calc(4px + env(safe-area-inset-bottom,0px));box-shadow:0 -2px 8px rgba(0,0,0,.08);}
+  .bnav a{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11px;line-height:1.2;color:#7a6a4a;padding:3px 0;font-weight:bold;position:relative;min-height:46px;}
+  .bnav a:hover{top:0;text-decoration:none;}
+  .bnav a .ic{font-size:21px;line-height:1.15;}
+  .bnav a.on{color:#c0392b;}
+  .bnav a.on .ic{transform:scale(1.1);}
+  .bnav .dot{position:absolute;top:0;right:16%;background:#d0402a;color:#fff;border-radius:9px;font-size:10px;padding:0 5px;line-height:16px;}
+  .wrap{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px));}
+  .town{overflow:hidden;}
+  .bubble{max-width:150px;overflow:hidden;text-overflow:ellipsis;}
+}
+@media (max-width:540px){
+  button,.btn{white-space:normal;max-width:100%;line-height:1.35;}
+  table.t td button,.tabs button{white-space:nowrap;}
+  table.t td.c.nw input[type=number]{display:block;margin:0 auto 2px;}
+  select{max-width:100%;}
+  input:not([type=radio]):not([type=checkbox]){max-width:100%;}
+  table.t th{white-space:normal;word-break:keep-all;}
+  table.t td.nw{white-space:normal;}
+  table.t td select{max-width:46vw;}
+  table.t td,table.t th{padding:5px 6px;}
+  table.t{border-spacing:2px;}
+  .talk img.kao,img.kao{width:44px;height:44px;}
+  hr{margin:8px auto;}
+}
 </style>
 </head>
 <body>
@@ -2349,7 +2397,21 @@ const MENU=[
 ];
 let menuOpen=2;
 function menuGroupOf(r){ if(r==='use'||r==='battle') return 0; for(let i=0;i<MENU.length;i++){ if(MENU[i][1].some(x=>x[1]===r)) return i; } return 2; }
-function go(r,s){ route=r; sub=s||{}; menuOpen=menuGroupOf(r); render(); window.scrollTo(0,0); }
+function go(r,s){ closeNav(); route=r; sub=s||{}; menuOpen=menuGroupOf(r); render(); window.scrollTo(0,0); }
+const NAV_IC=['🏪','💰','📰','🏰','✉️'];
+function bottomNav(unread){
+  const cur=route==='rank'?-1:menuGroupOf(route);
+  return `<nav class="bnav"><a class="${cur===-1?'on':''}" onclick="go('rank')"><span class="ic">🏆</span>トップ</a>${MENU.map((m,i)=>`<a class="${cur===i?'on':''}" onclick="openNav(${i})"><span class="ic">${NAV_IC[i]||'・'}</span>${m[0]}${i===4&&unread?`<span class="dot">${unread}</span>`:''}</a>`).join('')}</nav>`;
+}
+function closeNav(){ const e=document.getElementById('navsheet'); if(e) e.remove(); }
+function openNav(i){
+  const ex=document.getElementById('navsheet'); if(ex){ const was=+ex.dataset.g; ex.remove(); if(was===i) return; }
+  const g=MENU[i], unread=S?S.letters.filter(l=>!l.read).length:0;
+  const d=document.createElement('div'); d.id='navsheet'; d.className='navsheet'; d.dataset.g=i;
+  d.innerHTML=`<div class="sh" onclick="event.stopPropagation()"><div class="sht"><span>${NAV_IC[i]||''} ${g[0]}</span><a onclick="closeNav()" style="font-size:14px">閉じる ✕</a></div><div class="grid">${g[1].map(x=>`<a class="${route===x[1]?'on':''}" onclick="closeNav();go('${x[1]}')">${x[0]}${x[1]==='letter'&&unread?' <span class=red>●'+unread+'</span>':''}</a>`).join('')}</div></div>`;
+  d.onclick=closeNav; document.body.appendChild(d);
+}
+
 function onlineNow(){
   const now=Date.now();
   const others=Object.values(NET.shops||{}).filter(s=>s&&s.uid&&s.uid!==NET.uid&&s.act!==false&&now-(s.t||0)<5*60000);
@@ -2370,12 +2432,12 @@ function header(){
   <div class="head">
     ${im(job.img,'','width=30 height=45')}
     <div>
-      <div class="menu"><a onclick="go('rank')" style="color:#3a7a3a">【トップ】</a> ${MENU.map((m,i)=>`<a onclick="menuOpen=${i};render()">【${m[0]}】</a>`).join(' ')} <a onclick="saveNow()" style="color:#d0402a">【セーブ】</a>${useLogin()?` <a onclick="headerLogout()" style="color:#d0402a">【ログアウト】</a>`:''}</div>
+      <div class="menu"><a class="grp" onclick="go('rank')" style="color:#3a7a3a">【トップ】</a> ${MENU.map((m,i)=>`<a class="grp" onclick="menuOpen=${i};render()">【${m[0]}】</a>`).join(' ')} <a onclick="saveNow()" style="color:#d0402a">【セーブ】</a>${useLogin()?` <a onclick="headerLogout()" style="color:#d0402a">【ログアウト】</a>`:''}</div>
       <div class="submenu"><big>${g[0]}</big> &gt; ${g[1].map(x=>`<a onclick="go('${x[1]}')" ${route===x[1]?'style="color:#d0402a"':''}>[${x[0]}${x[1]==='letter'&&unread?'<span class=red>●'+unread+'</span>':''}]</a>`).join('')}</div>
     </div>
   </div>
   <hr>
-  <div class="status" id="status">${statusLine()}</div>`;
+  <div class="status" id="status">${statusLine()}</div>${bottomNav(unread)}`;
 }
 function statusLine(){
   const saved = NET.lastSave? `最終セーブ ${new Date(NET.lastSave).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})}`:'';
@@ -2605,23 +2667,23 @@ SCREENS.main=function(){
   S.cases.forEach((c,i)=>{
     const it=c?ITEMS[c.no]:null;
     rows+=`<tr><td class="c">${i+1}${CASE_BOOST(i)>1?'<br><span class="red">★</span>':''}</td>
-      <td class="nw">${it?iname(c.no)+(isTrend(c.no)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''):'<span class="note">（空き）</span>'}${CASE_BOOST(i)>1?'<br><small class="red">★特等席・売れ行き2倍</small>':''}</td>
-      <td class="r">${it?(S.stock[c.no]||0)+it.scale:'-'}</td>
+      <td>${it?iname(c.no)+(isTrend(c.no)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''):'<span class="note">（空き）</span>'}${CASE_BOOST(i)>1?'<br><small class="red">★特等席・売れ行き2倍</small>':''}${it?`<br><small><span class="nb">在庫 <b>${(S.stock[c.no]||0)+it.scale}</b></span><span class="nb">今期 <b>${S.today.items[c.no]||0}</b>個売れた</span></small>`:''}</td>
       <td class="r nw">${it?yen(c.price)+'<br><small>相場'+yen(marketPrice(c.no))+'</small>':'-'}</td>
-      <td class="r">${it?(S.today.items[c.no]||0):'-'}</td>
-      <td class="nw"><button onclick="editCase(${i})">変更</button></td></tr>`;
+      <td class="c"><button onclick="editCase(${i})">変更</button></td></tr>`;
   });
   return `${trendHtml()}
   <div class="c"><big>${esc(S.shop)}</big> 店内　<small>店主 ${esc(S.owner)}（${(JOBS[S.job]||JOBS['']).name}・${digHtml(S.dig)}）</small></div>
   <div class="shopview"><div class="shopinner" id="shopinner"></div></div>
   ${talk(S.kao,S.owner,esc(S.comment))}
   <div class="tbl"><table class="t">
-    <tr><th>棚</th><th>商品</th><th>在庫</th><th>価格</th><th>本日販売</th><th></th></tr>${rows}
+    <tr><th>棚</th><th>商品</th><th>価格</th><th></th></tr>${rows}
   </table></div>
   <div class="c note">陳列の変更には持ち時間10分が必要です。価格が標準価格より安いほど売れやすく，高すぎると売れません。<br>8つ目の棚は<b>特等席</b>：維持費は高めですが，その棚の品は<b>2倍</b>売れます。</div>
   <div class="tbl"><table class="t">
-    <tr><th>今期の売上</th><td class="r">${yen(S.today.sales)}（${S.today.count}個）</td><th>ごみ</th><td>${trashMsg(S.trash)}</td></tr>
-    <tr><th>人気</th><td>${popStars(S.pop)}</td><th>陳列棚維持費</th><td class="r">${yen(CASECOST[S.ncase])}/決算</td></tr>
+    <tr><th>今期の売上</th><td class="r">${yen(S.today.sales)}（${S.today.count}個）</td></tr>
+    <tr><th>人気</th><td>${popStars(S.pop)}</td></tr>
+    <tr><th>ごみ</th><td>${trashMsg(S.trash)}</td></tr>
+    <tr><th>陳列棚維持費</th><td class="r">${yen(CASECOST[S.ncase])}/決算</td></tr>
   </table></div>`;
 };
 function mkInfo(no){ const rv=rivalsOf(no); const d=demandOf(no); return `相場 <b>${yen(marketPrice(no,rv))}</b>（${rv.length?'販売 '+rv.length+'店':'販売店舗なし'}）・需要 ${d>=1.15?'<span class=red>▲高い</span>':d<=0.85?'<span class=blue>▼低い</span>':'ふつう'}<br>手に入りにくい品を相場より安く売ると人気が上がり，どこにでもある品を高く売ると下がります。`; }
@@ -3457,9 +3519,9 @@ SCREENS.market=function(){
   return `<div class="c"><big>市場</big></div>${trendHtml()}
   ${talk('kaoguide','市場の案内係','市場では標準価格で商品を仕入れられます。入荷は時間とともに少しずつ。仕入れには <b>持ち時間 20分＋1個につき20秒</b> かかります。'+(myDisc()?`<br>${myDisc()?'いまは':''} <b>${myDisc()}%引き</b> でお求めいただけます（爵位・ギルドの共同仕入れ）。`:''))}
   ${tabs}
-  <div class="tbl"><table class="t"><tr><th>商品</th><th>価格</th><th>在庫</th><th>所持</th><th>仕入</th></tr>
-  ${nos.map(n=>{ const it=ITEMS[n], st=MK[n]||0; return `<tr><td class="nm">${iname(n)}${isTrend(n)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''}<br><small>${esc(it.info)}</small>${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}<br><small class="note">維持費 ${upkeepStr(it)}</small></td><td class="r nw">${yen(it.price)}</td><td class="r">${st}</td><td class="r">${S.stock[n]||0}</td>
-     <td class="c">${st?`<input type="number" id="mq${n}" value="1" min="1" max="${st}" style="width:52px"><button onclick="buyMarket(${n})">買う</button>`:'<small>品切れ</small>'}</td></tr>`; }).join('')||'<tr><td colspan=5 class="c">この種類は市場に入荷しません</td></tr>'}
+  <div class="tbl"><table class="t"><tr><th>商品</th><th>価格</th><th>仕入</th></tr>
+  ${nos.map(n=>{ const it=ITEMS[n], st=MK[n]||0; return `<tr><td class="nm">${iname(n)}${isTrend(n)?' <span class="npctag" style="background:#ffe2c8;border-color:#e07a2a;color:#c05a10">流行</span>':''}<br><small>${esc(it.info)}</small>${it.soubi?`<br><small class="blue">${SOUBI[it.soubi]} ${statStr(it)}</small>`:''}<br><small class="note">維持費 ${upkeepStr(it)}</small></td><td class="r nw">${yen(it.price)}<br><small><span class="nb">在庫 ${st}</span><br><span class="nb">所持 ${S.stock[n]||0}</span></small></td>
+     <td class="c nw">${st?`<input type="number" id="mq${n}" value="1" min="1" max="${st}" style="width:52px"><button onclick="buyMarket(${n})">買う</button>`:'<small>品切れ</small>'}</td></tr>`; }).join('')||'<tr><td colspan=3 class="c">この種類は市場に入荷しません</td></tr>'}
   </table></div>
   <div class="c note">原料や上級の装備は市場に入荷しません。地図や本を使って自分で調達・製作するか，<a onclick="go('port')">港</a>から船で島へ探索に行きましょう。</div>`;
 };
@@ -4087,7 +4149,7 @@ function lordOffice(t,shops){
   <div class="tbl"><table class="t">
     <tr><th>特産品</th><td><select id="lMf"><option value="">なし</option>${MANOR.map(m=>`<option value="${m.id}" ${t.manorFocus===m.id?'selected':''}>${m.name}</option>`).join('')}</select> <small>（収穫1.5倍）</small></td></tr>
     <tr><th>地代</th><td><select id="lMr">${[0,500,1000,2000,3000,5000].map(v=>`<option value="${v}" ${v===townVal(t,'manorRent',0)?'selected':''}>${v?yen(v):'なし'}</option>`).join('')}</select> <small>1区画あたり/日（街資金へ）</small></td></tr>
-    <tr><th>区画の上限</th><td>1人${manorMax(t)}区画まで ${manorMax(t)<20?`<button onclick="lordManorOpen()">開墾する（街資金¥1,000,000で+1）</button>`:''}</td></tr>
+    <tr><th>区画の上限</th><td>1人${manorMax(t)}区画まで ${manorMax(t)<20?`<button onclick="lordManorOpen()">開墾（街資金¥100万で+1）</button>`:''}</td></tr>
   </table></div>
   <div class="c"><button onclick="lordManor()">荘園の方針を決定</button></div>
   ${lordPolicyHtml(t,shops)}
@@ -4112,10 +4174,11 @@ function lordPolUsed(t,id){ const L=t.lordAct; return !!(L&&L.p===curPeriod()&&(
 function lordPolicyHtml(t,shops){
   const opts=shops.filter(r=>!r.me&&r.key!==myKey()).map(r=>`<option value="${R(r.key)}">${esc(r.shop)}${r.npc?'［NPC］':''}</option>`).join('');
   return `<div class="c"><big>特別政策</big></div>
-  <div class="tbl"><table class="t" style="width:100%">${LORD_POL.map(p=>{ const used=lordPolUsed(t,p.id), poor=(t.fund||0)<p.cost;
-    return `<tr><th style="white-space:nowrap">${p.icon} ${p.name}</th><td><small>${p.desc}<br>費用：${p.cost?'街資金 '+yen(p.cost):'なし'}</small>
-    ${p.target?`<br><select id="lPol_${p.id}">${opts}</select>`:''}</td>
-    <td style="white-space:nowrap">${used?'<small class="note">今回は実施済み</small>':poor?'<small class="note">街資金不足</small>':rebelSum(t)>0&&p.id!=='relief'?'<small class="note">反乱中</small>':`<button onclick="lordPolicy('${p.id}')">実施</button>`}</td></tr>`; }).join('')}</table></div>
+  <div class="pol">${LORD_POL.map(p=>{ const used=lordPolUsed(t,p.id), poor=(t.fund||0)<p.cost;
+    return `<div class="polc ${used?'done':''}"><span class="pn">${p.icon} ${p.name}</span>
+    <span class="pa">${used?'<small class="note">実施済み</small>':poor?'<small class="note">街資金不足</small>':rebelSum(t)>0&&p.id!=='relief'?'<small class="note">反乱中</small>':`<button onclick="lordPolicy('${p.id}')">実施</button>`}</span>
+    <span class="pd">${p.desc}<br>費用：${p.cost?'街資金 <b>'+yen(p.cost)+'</b>':'なし'}</span>
+    ${p.target?`<select id="lPol_${p.id}">${opts}</select>`:''}</div>`; }).join('')}</div>
   <div class="c note">特別政策は，それぞれ決算ごとに1回まで実施できます（反乱中は炊き出しのみ）。<br>いまの住民の不満：<b class="${(t.lordAnger||0)>=2?'red':''}">${t.lordAnger||0}</b>　徴兵令や臨時徴収で不満がたまり，2以上だと決算のときにNPCが反乱を起こすことがあります。祭り・炊き出し・恩赦で不満が1減り，決算ごとにも1ずつ下がります。</div>`;
 }
 function lordPolicy(id){
