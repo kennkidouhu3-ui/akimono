@@ -1695,7 +1695,7 @@ function processMail(){
     if(!S.mailDone.includes(id)){
       S.mailDone.push(id); S.mailDone=S.mailDone.slice(-300); changed=true;
       const who=m.fromName||'だれか', face='kao'+(m.fromKao||1), note=m.note?m.note+'：':'';
-      if(m.kind==='buy'){ const it=ITEMS[m.no]; if(it){ const k=Math.min(S.stock[m.no]||0,m.n); if(k>0) add(m.no,-k); const g=m.price*m.n; S.money+=g; S.today.sales+=g; S.today.count+=m.n; S.today.items[m.no]=(S.today.items[m.no]||0)+m.n; S.trash+=m.n*0.25; letter(who,face,`${m.fromShop||''}の${who}さんが，${it.name}を${m.n}${it.scale}お買い上げくださいました。（${yen(g)}）`); } }
+      if(m.kind==='buy'){ const it=ITEMS[m.no]; if(it){ const k=Math.min(S.stock[m.no]||0,m.n); if(k>0) add(m.no,-k); const g=m.price*m.n, tax=Math.round(g*taxRateFor(myKey())/100); S.money+=g-tax; S.today.tax=(S.today.tax||0)+tax; S.today.sales+=g; S.today.count+=m.n; S.today.items[m.no]=(S.today.items[m.no]||0)+m.n; S.trash+=m.n*0.25; letter(who,face,`${m.fromShop||''}の${who}さんが，${it.name}を${m.n}${it.scale}お買い上げくださいました。（${yen(g)}）`); } }
       else if(m.kind==='money'){ S.money+=m.amount; if(/返金|返却|お返し/.test(m.note||'')) addPay(-m.amount); else addIncome(m.amount); letter(who,face,`${note}${yen(m.amount)}が届きました。`); }
       else if(m.kind==='item'){ if(ITEMS[m.no]){ add(m.no,m.n); letter(who==='だれか'?'住み込みドワーフ':who,m.note?'kaodwarf':face,`${note}${ITEMS[m.no].name}×${m.n}が届いたぞい。倉庫に入れておいたからの。`); } }
       else if(m.kind==='letter'){ letter(who,face,m.body||''); }
@@ -3605,14 +3605,32 @@ function marketSurvey(){
   <div class="c note">需要は日によって変わります。販売店が多い品は，お客さんを取り合うので1軒あたりの売れ行きが下がります。</div>
   <div class="c"><a onclick="go('street')">商店通りへ戻る</a></div>`;
 }
-function buyPlayer(k,i){
-  const uid=REFS[k], p=NET.shops[uid]; if(!p) return; const c=(p.cases||[])[i]; if(!c) return;
-  const q=Math.min(c.stock,Math.max(1,parseInt($('#pq'+i).value)||1));
-  const cost=c.price*q, t=Math.round(20+q/3);
-  if(S.money<cost){ setFlash('資金が足りません',1); render(); return; }
-  if(!spendTime(t)){ setFlash('持ち時間が足りません',1); render(); return; }
+let PBUY=false;
+async function buyPlayer(k,i){
+  const uid=REFS[k], p=NET.shops[uid]; if(!p||PBUY) return; const c=(p.cases||[])[i]; if(!c) return;
+  const want=Math.min(c.stock,Math.max(1,parseInt(($('#pq'+i)||{}).value)||1));
+  const t0=Math.round(20+want/3);
+  if(S.money<c.price*want){ setFlash('資金が足りません',1); render(); return; }
+  if(S.time<t0){ setFlash('持ち時間が足りません',1); render(); return; }
+  // 相手のお店の文書を直接書きかえて，在庫を減らし，売上と点数をその場で反映する（ほかの人が同じ品を二重に買えないように）
+  PBUY=true; let r=null;
+  try{ r=await dbTx('shops/'+uid,d=>{
+    const cc=d&&d.cases&&d.cases[i];
+    if(!cc||cc.no!==c.no||cc.price!==c.price||!(cc.stock>0)) return {ret:{ok:false,left:cc&&cc.no===c.no?(cc.stock||0):0}};
+    const q=Math.min(want,cc.stock); cc.stock-=q; if(cc.stock<=0) d.cases[i]=null;
+    const g=cc.price*q, tax=Math.round(g*taxRateFor(uid)/100), per=curPeriod();
+    d.sale=(d.sale||0)+g;
+    if(!d.pp) d.pp={wins:d.wins||0,p3:0,tn:0,per:Math.floor(((d.t||Date.now())+JST)/SETTLE_MS),base:Math.max(0,(d.point||0)-calcPoint(d.pop||0,d.wins||0,0,0))};
+    if(d.pp.per<per){ d.ptEnd={d:d.pp.per,v:d.point||0}; d.pp.p3=Math.round(d.pp.p3*2/3+d.pp.tn); d.pp.tn=0; d.sale=g; d.pp.per=per; }
+    d.pp.tn=(d.pp.tn||0)+g-tax; d.point=calcPoint(d.pop||0,d.pp.wins||0,d.pp.p3||0,d.pp.tn)+(d.pp.base||0);
+    return {set:d,ret:{ok:true,q,doc:d}}; }); }catch(e){ netErr(e); }
+  PBUY=false;
+  if(!r||!r.ret){ setFlash('通信に失敗しました。もう一度お試しください',1); render(); return; }
+  if(!r.ret.ok){ setFlash(r.ret.left>0?`在庫が変わりました（いまの在庫：${r.ret.left}${ITEMS[c.no].scale}）。もう一度お試しください`:'ほかのお客さんに先に買われてしまいました',1); render(); return; }
+  const q=r.ret.q, cost=c.price*q, t=Math.round(20+q/3);
+  if(!spendTime(t)) spendTime(Math.min(S.time,t));
   S.money-=cost; addPay(cost); add(c.no,q);
-  const np=JSON.parse(JSON.stringify(p)); np.cases[i].stock-=q; NET.shops[uid]=np;
+  NET.shops[uid]=r.ret.doc;
   sendMail(uid,{kind:'buy',no:c.no,n:q,price:c.price});
   setFlash(`${p.shop}で${ITEMS[c.no].name}を${q}${ITEMS[c.no].scale}買いました（${yen(cost)}）`); save(); render();
 }
