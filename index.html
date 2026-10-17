@@ -1736,6 +1736,7 @@ function processMail(){
       else if(m.kind==='expose'){ S.pop=Math.round(S.pop*0.8); S.exposedUntil=Date.now()+12*3600000; letter('大臣','kaominister','領主の命令で，お店に軍隊の取り締まりが入りました…。人気が2割下がり，次の決算まではお客さんが少し減ります。'); }
       else if(m.kind==='drres'){ applyDrRes(m); }
       else if(m.kind==='niku'){ if(m.L) applyNikuResult(m.L); }
+      else if(m.kind==='parcelpaid'){ const g=m.amount||0, tax=Math.round(g*taxRateFor(myKey())/100); S.money+=g-tax; S.today.tax=(S.today.tax||0)+tax; S.today.sales+=g; S.today.count+=(m.n||0); letter('住み込みドワーフ','kaodwarf',`${m.toShop||who}が宅配便を受け取ったぞい。${ITEMS[m.no]?ITEMS[m.no].name:'品物'}×${m.n}の代金${yen(g)}を渡しておくぞ。`); }
       else if(m.kind==='raidrew'){ applyRaidRew(m); }
       else if(m.kind==='npcduel'){ applyNpcDuel(m); }
       else if(m.kind==='admin'){ applyAdmin(m); }
@@ -1882,7 +1883,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101802;
+const APP_VER=2026101803;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2007,10 +2008,11 @@ const PRIZE=[0,100000,50000];
 const GIFT_PRIZE=[0,0,5,3,2,1];   // 2〜5位にギフト券
 function prizeText(r){ return r===1?'爵位+1pt':[PRIZE[r-1]?yen(PRIZE[r-1]):'',GIFT_PRIZE[r]?`ギフト券${GIFT_PRIZE[r]}枚`:''].filter(Boolean).join('・'); }   // 2位・3位の賞金（1位は爵位ポイント+1）
 function townDaily(d){
-  let awards=[];
+  let awards=[], pback=[];
   townTx(t=>{
     if((t.day||0)>=d && (t.day||0)<=d+1) return null;
-    t.day=d; const logs=[]; awards=[];
+    t.day=d; const logs=[]; awards=[]; pback=[];
+    if(t.parcels){ const now=Date.now(); for(const k in t.parcels){ const q=t.parcels[k]; if(now-(q.t||0)>=PARCEL_KEEP){ pback.push(q); delete t.parcels[k]; } } }
     // ギルド対抗戦（7日ごと）
     let gwar=null;
     if(NET.online && d%14===0){ const gr=guildRows().slice(0,3); if(gr.length){ t.guildWar={d,top:gr.map(x=>({id:x.id,name:x.g.name,pt:x.pt}))}; gwar=gr.map((x,i)=>({id:x.id,name:x.g.name,members:Object.keys(x.g.members||{}),rank:i+1})); logs.push(`${periodLabel(d)}のギルド対抗戦：1位 ギルド「${gr[0].g.name}」`); } }
@@ -2077,6 +2079,7 @@ function townDaily(d){
     return logs;
   }).then(logs=>{
     if(logs) awards.forEach(a=>sendMail(a.key,{kind:'prize',rank:a.rank,day:d,point:a.point}));
+    if(logs) pback.forEach(q=>{ if(q.from===NET.uid){ add(q.no,q.n); letter('住み込みドワーフ','kaodwarf',`${q.toShop||'相手'}が3日たっても宅配便を受け取らなかったので，${ITEMS[q.no].name}×${q.n}を戻しておいたぞい。`); } else sendMail(q.from,{kind:'item',no:q.no,n:q.n,note:`${q.toShop||'相手'}が3日間受け取らなかったため返送`}); });
     if(logs&&NET.online) NPC_GUILDS.forEach(G=>{ if(NET.guilds[G.id]) guildTx(G.id,g=>{ g.gp=(g.gp||0)+3; g.gpTotal=(g.gpTotal||0)+3; g.exp=(g.exp||0)+20000; }); });
     const gw=NET.town&&NET.town._gwar; if(logs&&gw){ gw.forEach(x=>{ const add=[50,25,10][x.rank-1]; guildTx(x.id,g=>{ g.gp=(g.gp||0)+add; g.gpTotal=(g.gpTotal||0)+add; }); if(x.rank===1) x.members.forEach(u=>{ if(String(u).startsWith('npc:')) return; if(u===NET.uid){ S.money+=100000; addIncome(100000); } else sendMail(u,{kind:'money',amount:100000,note:'ギルド対抗戦1位の賞金'}); }); }); townTx(t=>{ delete t._gwar; }); }
     (logs||[]).forEach(m=>{ S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m}); newsNet(m); }); if(logs&&logs.length) softRender(); });
@@ -4207,7 +4210,7 @@ SCREENS.library=function(){
   ◆港と船　「造船術」で船を造り，[港]から島や遠くの町へ探索に出かけると，そこでしか手に入らない品を持ち帰ります。<br>
   ◆ギルド　加盟すると人気や売れ行きにボーナス。ギルドポイントで広告・看板商品・共同仕入れ・クエストなど。NPCのギルドもあります。<br>
   ◆ドラゴンレース　[競技場]でドラゴンを育て，決算2回に1度（1日1回）のレースに出走させます。結果は能力と作戦で決まります。<br>
-  ◆オンライン　ランキング・商店通り・掲示板・新聞・領主・ギルド・イベントはほかのプレイヤーと共通です。決闘・手紙・送金・宅配便でやりとりもできます。
+  ◆オンライン　ランキング・商店通り・掲示板・新聞・領主・ギルド・イベントはほかのプレイヤーと共通です。決闘・手紙・宅配便（相手が代金を払って受け取る方式）でやりとりもできます。
   </td></tr></table></div>`;
 };
 
@@ -5177,25 +5180,18 @@ SCREENS.trade=function(){
   <div class="c note">注文した品や代金の届き具合は，[宅配便]の「輸入予約」で確認できます。</div>`;
 };
 SCREENS.dwarf=function(){
+  if(sub.t===3||sub.t===2){ sub.t=1; }
   const tab=sub.t||0;
-  if(sub.t===3){ sub.t=0; }
-  const tabs=`<div class="tabs">${['輸入予約','宅配便を出す','送金'].map((t,i)=>`<span class="${tab===i?'on':''}" onclick="sub.t=${i};render()">${t}</span>`).join('')}</div>`;
+  const pin=NET.online?parcelsTo().length:0;
+  const tabs=`<div class="tabs">${['輸入予約','宅配便'+(pin?`（届いた荷物${pin}）`:'')].map((t,i)=>`<span class="${tab===i?'on':''}" onclick="sub.t=${i};render()">${t}</span>`).join('')}</div>`;
   let h=`<div class="c"><big>宅配便</big></div>${talk('kaodwarf','住み込みドワーフ','ドワーフ宅配便は由緒ある組織じゃ。ワシに頼んでくれれば，いつでも商品を送り届けるぞい。')}${tabs}`;
   if(tab===0){
     const pool=ITEMLIST.filter(importable);   // 市場で売っている品だけ
     h+=`<div class="c note">遠くの街から品物を取り寄せるぞい（市場で売っている品だけじゃ）。代金は標準価格の1.5倍，届くまで8時間じゃ。</div>
     <div class="c"><select id="imNo">${pool.map(it=>`<option value="${it.no}">${esc(it.name)}（${yen(Math.round(it.price*1.5))}）</option>`).join('')}</select> ×<input type="number" id="imN" value="10" min="1" max="500" style="width:60px"> <button onclick="orderImport()">注文する（20分）</button></div>
     <div class="tbl"><table class="t"><tr><th>${im('dwfsign4','i16')}到着待ち</th><th>到着まで</th></tr>${S.imports.map(o=>`<tr><td>${o.money?`${esc(o.town)}への輸出代金 ${yen(o.money)}`:iname(o.no)+'×'+o.n}</td><td>${hm(o.at-S.clock)}</td></tr>`).join('')||'<tr><td colspan=2 class="c">なし</td></tr>'}</table></div>`;
-  } else if(tab===1){
-    const mine=Object.keys(S.stock).map(Number).filter(n=>ITEMS[n]&&ITEMS[n].price>0);
-    h+=`<div class="c note">街の商人には品物を買い取ってもらえるぞい（専門の品なら標準価格の9割，それ以外は6割）。★印のプレイヤーには贈り物として届けるぞい。</div>
-    <div class="c">宛先 <select id="dwTo">${recipOpts()}</select><br>
-    ${mine.length?`<select id="dwNo">${mine.filter(n=>canSend(n)&&plainCount(n)>0).map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${plainCount(n)}）</option>`).join('')}</select> ×<input type="number" id="dwN" value="1" min="1" style="width:60px"> <button onclick="sendDwarf()">送る（20分）</button>`:'<small>送れる品がありません</small>'}</div>`;
-  } else if(tab===3){
-    h+=tradeHtml();
   } else {
-    h+=`<div class="c note">資金の50%まで，手数料なしで他の店主に送金できるぞい。仲良くなると贈り物が届くこともあるそうな。</div>
-    <div class="c">宛先 <select id="smTo">${recipOpts()}</select> <input type="number" id="smA" value="10000" style="width:100px"> <button onclick="sendMoney()">送金する</button></div>`;
+    h+=parcelHtml();
   }
   return h;
 };
@@ -5293,6 +5289,78 @@ function checkVoyages(){
 }
 function importable(it){ return !!(it&&it.plus>0&&it.price>0); }
 function orderImport(){ const no=+$('#imNo').value, n=clamp(parseInt($('#imN').value)||1,1,500); if(!importable(ITEMS[no])){ setFlash('その品は取り寄せできません（市場で売っている品だけです）',1); render(); return; } const c=Math.round(ITEMS[no].price*1.5)*n; if(S.money<c){ setFlash('資金が足りません',1); render(); return; } if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; } S.money-=c; addPay(c); S.imports.push({no,n,at:S.clock+480}); setFlash(`${ITEMS[no].name}×${n}を${yen(c)}で注文しました`); save(); render(); }
+/* ---------- 宅配便（プレイヤー同士）：送る側が値段を決め（標準価格の1/2〜2倍），受け取る側が承認して代金を払う ---------- */
+const PARCEL_KEEP=3*86400000, PARCEL_MAX=10;
+function parcelsAll(){ return Object.entries((T()&&T().parcels)||{}).map(([id,p])=>({id,...p})); }
+function parcelsTo(){ return parcelsAll().filter(p=>p.to===NET.uid); }
+function parcelsFrom(){ return parcelsAll().filter(p=>p.from===NET.uid); }
+function parcelRange(no){ const p=ITEMS[no].price||0; return [Math.max(1,Math.ceil(p/2)),Math.max(1,Math.floor(p*2))]; }
+function parcelHtml(){
+  if(!NET.online) return `<div class="c note">宅配便はオンラインのときだけ使えるぞい（ほかのプレイヤーに品物を送る仕組みじゃ）。</div>`;
+  const ps=playerShops().filter(p=>!p.idle);
+  const mine=Object.keys(S.stock).map(Number).filter(n=>ITEMS[n]&&ITEMS[n].price>0&&canSend(n)&&plainCount(n)>0);
+  const inbox=parcelsTo(), out=parcelsFrom();
+  const left=p=>{ const h=Math.max(0,(p.t+PARCEL_KEEP-Date.now())/3600000); return h<1?'まもなく返送':`あと約${Math.ceil(h)}時間`; };
+  let h=`<div class="c"><big>届いた荷物</big></div>
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>送り主</th><th>品物・代金</th><th></th></tr>
+  ${inbox.map(p=>`<tr><td>${esc(p.fromShop||'')}<br><small>${esc(p.fromName||'')}</small></td><td>${iname(p.no)}×${p.n}<br><small>1${ITEMS[p.no].scale}${yen(p.unit)}（標準${yen(ITEMS[p.no].price)}）</small><br><b>代金 ${yen(p.unit*p.n)}</b><br><small class="note">${left(p)}で返送</small></td>
+    <td class="c"><button onclick="acceptParcel(${R(p.id)})">払って受け取る</button><br><button onclick="declineParcel(${R(p.id)})">断る</button></td></tr>`).join('')||'<tr><td colspan=3 class="c">届いている荷物はありません</td></tr>'}</table></div>
+  <div class="c"><big>宅配便を出す</big></div>
+  <div class="c note">ほかのプレイヤーに品物を送るぞい。値段は<b>標準価格の半額〜2倍</b>の間で決めておくれ。相手が「払って受け取る」を押すと代金がおぬしに届く。断られたり，3日たっても受け取られなかったりしたら品物は戻ってくるぞい。</div>
+  ${ps.length&&mine.length?`<div class="c">宛先 <select id="dwTo">${ps.map(p=>`<option value="${R(p.uid)}">${esc(p.name)}（${esc(p.shop)}）</option>`).join('')}</select><br>
+    <select id="dwNo" onchange="parcelPriceHint()">${mine.map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${plainCount(n)}）</option>`).join('')}</select> ×<input type="number" id="dwN" value="1" min="1" style="width:60px"><br>
+    1個 <input type="number" id="dwP" value="${ITEMS[mine[0]].price}" style="width:100px"> 円 <small id="dwPh" class="note">（${yen(parcelRange(mine[0])[0])}〜${yen(parcelRange(mine[0])[1])}）</small><br>
+    <button onclick="sendParcel()">送る（20分）</button></div>`:`<div class="c note">${ps.length?'送れる品がありません':'送れる相手がいません'}</div>`}
+  ${out.length?`<div class="c"><big>相手の返事待ち</big></div><div class="tbl"><table class="t" style="width:100%">${out.map(p=>`<tr><td>${esc(p.toShop||'')}へ<br>${iname(p.no)}×${p.n}・代金${yen(p.unit*p.n)}<br><small class="note">${left(p)}で返送</small></td><td class="c"><button onclick="cancelParcel(${R(p.id)})">取り消す</button></td></tr>`).join('')}</table></div>`:''}`;
+  return h;
+}
+function parcelPriceHint(){ const no=+$('#dwNo').value; if(!ITEMS[no]) return; const [a,b]=parcelRange(no); $('#dwP').value=ITEMS[no].price; $('#dwPh').innerHTML=`（${yen(a)}〜${yen(b)}）`; }
+let PCBUSY=false;
+async function sendParcel(){
+  if(!NET.online||PCBUSY) return;
+  const uid=REFS[+$('#dwTo').value], to=NET.shops[uid]; const no=+$('#dwNo').value, it=ITEMS[no];
+  if(!to||!it){ setFlash('宛先か品物が正しくありません',1); render(); return; }
+  const n=Math.min(plainCount(no),Math.max(1,parseInt($('#dwN').value)||1)); const [lo,hi]=parcelRange(no); const unit=parseInt($('#dwP').value)||0;
+  if(!canSend(no)){ setFlash('武器強化の素材は人に送れません',1); render(); return; }
+  if(!n){ setFlash('品物が足りません',1); render(); return; }
+  if(unit<lo||unit>hi){ setFlash(`値段は標準価格の半額〜2倍（${yen(lo)}〜${yen(hi)}）の間で決めてください`,1); render(); return; }
+  if(S.time<20){ setFlash('持ち時間が足りません',1); render(); return; }
+  PCBUSY=true; add(no,-n); save();
+  const id='pc'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+  let r=null; try{ r=await townTx(t=>{ t.parcels=t.parcels||{}; if(Object.values(t.parcels).filter(p=>p.from===NET.uid).length>=PARCEL_MAX) return 'many';
+    t.parcels[id]={from:NET.uid,fromName:S.owner,fromShop:S.shop,to:uid,toShop:to.shop||'',no,n,unit,t:Date.now()}; return 'ok'; }); }catch(e){ netErr(e); }
+  PCBUSY=false;
+  if(r!=='ok'){ add(no,n); save(); setFlash(r==='many'?`返事待ちの荷物は${PARCEL_MAX}個までです`:'送れませんでした（通信エラー）',1); render(); return; }
+  spendTime(20);
+  sendMail(uid,{kind:'letter',body:`${S.shop}から宅配便が届いています：${it.name}×${n}（代金${yen(unit*n)}）。［交流］→［宅配便］で，払って受け取るか断るかを選んでください。3日たつと送り主に戻ります。`});
+  setFlash(`${esc(to.shop||'')}へ${it.name}×${n}を送りました（代金${yen(unit*n)}・相手の返事待ち）`); save(); render();
+}
+async function acceptParcel(k){
+  if(PCBUSY) return; const id=REFS[k], p=parcelsAll().find(x=>x.id===id); if(!p){ setFlash('この荷物はもうありません',1); render(); return; }
+  const cost=p.unit*p.n; if(S.money<cost){ setFlash(`資金が足りません（代金${yen(cost)}）`,1); render(); return; }
+  PCBUSY=true; let x=null;
+  try{ x=await townTx(t=>{ const q=t.parcels&&t.parcels[id]; if(!q||q.to!==NET.uid) return null; delete t.parcels[id]; return q; }); }catch(e){ netErr(e); }
+  PCBUSY=false;
+  if(!x){ setFlash('この荷物はもう受け取れません（取り消されたか，期限切れです）',1); render(); return; }
+  const c=x.unit*x.n; S.money-=c; addPay(c); add(x.no,x.n);
+  sendMail(x.from,{kind:'parcelpaid',no:x.no,n:x.n,amount:c,toShop:S.shop});
+  const tax=Math.round(c*taxRateFor(x.from)/100); shopDocTx(x.from,d=>{ d.money=(d.money||0)+c-tax; if(d.cash!=null) d.cash+=c-tax; shopDocNet(d,c-tax,c); });
+  setFlash(`${ITEMS[x.no].name}×${x.n}を受け取りました（代金${yen(c)}を払いました）`); save(); render();
+}
+async function declineParcel(k){
+  if(PCBUSY) return; const id=REFS[k]; PCBUSY=true; let x=null;
+  try{ x=await townTx(t=>{ const q=t.parcels&&t.parcels[id]; if(!q||q.to!==NET.uid) return null; delete t.parcels[id]; return q; }); }catch(e){ netErr(e); }
+  PCBUSY=false;
+  if(x) sendMail(x.from,{kind:'item',no:x.no,n:x.n,note:`${S.shop}が宅配便の受け取りを断ったため返送`});
+  setFlash(x?'受け取りを断りました（品物は送り主に戻ります）':'この荷物はもうありません',!x); render();
+}
+async function cancelParcel(k){
+  if(PCBUSY) return; const id=REFS[k]; PCBUSY=true; let x=null;
+  try{ x=await townTx(t=>{ const q=t.parcels&&t.parcels[id]; if(!q||q.from!==NET.uid) return null; delete t.parcels[id]; return q; }); }catch(e){ netErr(e); }
+  PCBUSY=false;
+  if(x){ add(x.no,x.n); save(); }
+  setFlash(x?`取り消しました（${ITEMS[x.no].name}×${x.n}が戻りました）`:'この荷物はもう取り消せません（相手が受け取ったか断りました）',!x); render();
+}
 function sendDwarf(){
   const r=recip($('#dwTo').value), no=+$('#dwNo').value, n=Math.min(plainCount(no),Math.max(1,parseInt($('#dwN').value)||1)); if(!n) return;
   if(!canSend(no)){ setFlash('武器強化の素材は人に送れません',1); render(); return; }
