@@ -1615,7 +1615,7 @@ function processMail(){
       else if(m.kind==='npcduel'){ applyNpcDuel(m); }
       else if(m.kind==='admin'){ applyAdmin(m); }
       else if(m.kind==='rumor'){ const a=m.amount||10; S.pop=clamp(S.pop-a,0,100); letter('街のうわさ好き','kaoguide',`あなたのお店について，よくない噂が広まっているようです…。人気が${a}下がりました。（だれかが禁断の書を使ったのかもしれません）`); }
-      else if(m.kind==='robbed'){ const a=Math.min(m.amount||0,Math.max(0,S.money)); S.money-=a; addPay(a); letter('店員','kaoguide',`たいへんです！ お店の金庫から${yen(a)}が盗まれてしまいました…。だれかのしわざのようです。`); }
+      else if(m.kind==='robbed'){ const a=Math.min(m.amount||0,Math.max(0,S.money)); S.money-=a; addPay(Math.round(a/20));   /* 盗まれた額の1/20だけ点数が下がる */ letter('店員','kaoguide',`たいへんです！ お店の金庫から${yen(a)}が盗まれてしまいました…。だれかのしわざのようです。`); }
       else if(m.kind==='stolen'){ const k=Math.min(m.n||0,Math.max(0,(S.stock[m.no]||0)-resv(m.no))); if(k>0) add(m.no,-k); letter('店員','kaoguide',`お店の棚から${ITEMS[m.no]?ITEMS[m.no].name:'品物'}×${k}が盗まれてしまいました…。だれかのしわざのようです。`); }
       else if(m.kind==='gpop'){ S.pop=clamp(S.pop+(m.amount||0),0,100); letter(who,face,`ギルド「${m.gname||''}」の広告が出されました。人気が${m.amount}上がりました！`); }
       else if(m.kind==='time'){ S.time=Math.min(maxTime(),S.time+(m.minutes||0)); letter(who,face,`求人「${m.title||'手伝い'}」を引き受けて，${hm(m.minutes||0)}働いてくれました。持ち時間が増えました。`); }
