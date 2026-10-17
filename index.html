@@ -1019,7 +1019,7 @@ async function checkNiku(){
       const guard=Math.random()<0.3; let fee=0;
       if(guard){ const isNpc=String(n.target.key).startsWith('npc:'); const row=(NET.online?ranking():allShops()).find(r=>r.key===n.target.key)||{};
         fee=isNpc?300000:Math.min(5000000,Math.max(100000,Math.round((row.money||0)*0.08)));
-        t.rikiGuard=(t.rikiGuard||0)+1; t.rikiEarn=(t.rikiEarn||0)+fee; t.rikiGuardToday=(t.rikiGuardToday||0)+fee; }   // 用心棒代は最終的に1/50が点数になる（¥50で1点）
+        t.rikiGuard=(t.rikiGuard||0)+1; if(isNpc) npcLossApply(t,n.target.key,fee); t.rikiEarn=(t.rikiEarn||0)+fee; t.rikiGuardToday=(t.rikiGuardToday||0)+fee; }   // 用心棒代は最終的に1/50が点数になる（¥50で1点）
       const win=guard||def>=pow;
       // 勝ったら（撃退されなかったら）点数・人気・爵位を奪う
       let steal=null;
@@ -1080,6 +1080,7 @@ async function checkNpcDuel(){
     const pa=duelPower(a.st||{attack:50,defence:40,tech:50,life:150}), pb=duelPower(b.st||{attack:50,defence:40,tech:50,life:150});
     const npcWin=Math.random()<pa*pa/(pa*pa+pb*pb);
     const prize=npcWin?0:Math.max(3000,Math.round(Math.min(1,pa/pb)*(a.strong?60000:20000)/1000)*1000);
+    if(prize>0) npcLossApply(t,a.key,prize);
     return {a:{key:a.key,shop:a.shop,name:a.name,strong:!!a.strong},b:{key:b.key,shop:b.shop,name:b.name},npcWin,prize};
   });
   if(!out) return;
@@ -1395,6 +1396,13 @@ function allShops(){
     .concat(S.npcs.map(n=>({me:false,npc:true,strong:!!n.strong,warrior:!!n.warrior,tyrant:!!n.tyrant,key:'npc:'+n.id,id:n.id,name:n.owner,shop:n.shop,money:n.money,dig:n.dig+(n.tyrant?(T().nikuDig||0):0),kao:n.kao,job:n.job,pop:Math.min(99,n.pop+(n.tyrant?(T().nikuPop||0):0)),wins:n.wins,guild:n.guild||null,soldiers:0,
       point:Math.round(calcPoint(n.pop,n.wins,(n.ph||[]).reduce((a,b)=>a+b,0),n.today*0.45)*(n.mult||1))+(n.tyrant?(T().nikuScore||0):0),sale:n.today,exps:0,comment:'',found:S.createdAt,rkY:n.rankY||0,st:totalStat(n.st,null),btype:n.btype,cases:n.cases})));
 }
+
+// NPCの支出・損失（盗まれた・用心棒代・決闘の賞金など）を点数と資金に反映する
+function npcLossApply(t,key,amount){ amount=Math.round(amount||0); if(amount<=0) return; t.npcLoss=t.npcLoss||{}; const cp=curPeriod(); const L=t.npcLoss[key]; if(!L||L.per!==cp) t.npcLoss[key]={per:cp,v:0}; t.npcLoss[key].v+=amount; t.npcMoneyLoss=t.npcMoneyLoss||{}; t.npcMoneyLoss[key]=(t.npcMoneyLoss[key]||0)+amount; }
+function npcLose(key,amount){ amount=Math.round(amount||0); if(amount<=0||!String(key).startsWith('npc:')) return;
+  if(NET.online){ townTx(t=>{ npcLossApply(t,key,amount); }); return; }
+  const n=(S.npcs||[])[+String(key).slice(4)]; if(n){ n.money=Math.max(0,(n.money||0)-amount); n.today=(n.today||0)-amount; } }
+function npcLossToday(key){ const L=(T().npcLoss||{})[key]; return (L&&L.per===curPeriod())?L.v:0; }
 const NPC_BASE_DAY=Math.floor((Date.UTC(2026,8,26)-EPOCH)/1000/1440)+1;
 function npcOnline(atDay){
   const D=atDay||Math.floor(nowClock()/1440)+1, dd=Math.max(0,D-NPC_BASE_DAY);
@@ -1408,8 +1416,8 @@ function npcOnline(atDay){
     const ex=(((T().exposed||{})['npc:'+i]||0)>Date.now()?0.8:1)*(((T().nikuStolen||{})['npc:'+i]||0)>Date.now()?0.9:1)*(((T().rumor||{})['npc:'+i]||0)>Date.now()?0.8:1);
     const tw=T(), nikuB=d.tyrant?{pt:tw.nikuScore||0,pop:tw.nikuPop||0,dig:tw.nikuDig||0}:{pt:0,pop:0,dig:0};
     return {me:false,npc:true,exposed:ex<1,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop:Math.min(99,Math.round(pop*ex)+nikuB.pop),wins,
-      dig:Math.max(0,(Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))))+nikuB.dig-((T().npcDigLoss||{})['npc:'+i]||0)),money:(Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3))+(d.warrior?(tw.rikiEarn||0):0),
-      point:Math.round(calcPoint(pop*ex,wins,profit3*ex,today*ex)*(d.mult||1))+nikuB.pt+(d.warrior?Math.round((tw.rikiPrev||0)/20+(tw.rikiToday||0)/20+((tw.rikiGuardPrev||0)+(tw.rikiGuardToday||0))/50):0),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
+      dig:Math.max(0,(Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))))+nikuB.dig-((T().npcDigLoss||{})['npc:'+i]||0)),money:(Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3))+(d.warrior?(tw.rikiEarn||0):0)-((tw.npcMoneyLoss||{})['npc:'+i]||0),
+      point:Math.round(calcPoint(pop*ex,wins,profit3*ex,today*ex-npcLossToday('npc:'+i))*(d.mult||1))+nikuB.pt+(d.warrior?Math.round((tw.rikiPrev||0)/20+(tw.rikiToday||0)/20+((tw.rikiGuardPrev||0)+(tw.rikiGuardToday||0))/50):0),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
       st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
   });
 }
@@ -3065,16 +3073,16 @@ function special(no,i,target,msgs){
       if(Math.random()<0.3){ S.pop=clamp(S.pop-10,0,100); msgs.push('<span class="red">噂の出どころがバレて自店の人気も下がった</span>'); } }
     if(i===1){
       const cs=isP?(pshop.cases||[]).filter(c=>c&&c.stock>0&&ITEMS[c.no]):(n?n.cases.filter(c=>c&&c.stock>0):[]);
-      if(cs.length&&Math.random()<0.6){ const c=pick(cs); const k=Math.min(c.stock,1+rnd(3)); if(!isP) c.stock-=k; add(c.no,k);
+      if(cs.length&&Math.random()<0.6){ const c=pick(cs); const k=Math.min(c.stock,1+rnd(3)); if(!isP){ c.stock-=k; npcLose('npc:'+n.id,(c.price||ITEMS[c.no].price)*k); } add(c.no,k);
         if(isP) sendMail(uid,{kind:'stolen',no:c.no,n:k});
         msgs.push(`${esc(tname)}から${iname(c.no)}×${k}を盗んだ…`); nw(`【万引き】${tname}で${ITEMS[c.no].name}×${k}が盗まれた！ 犯人はまだ見つかっていない`); }
       else { S.pop=clamp(S.pop-15,0,100); msgs.push('<span class="red">見つかってしまった！人気が下がった</span>'); nw(`【事件】${S.shop}の店主が${tname}で万引きしようとして捕まった！`); } }
     if(i===3){
       // 盗める額：相手の資金の3〜8%（最低¥1万・最高¥300万）。成功率5割
-      const base=isP?Math.max(0,pshop.money||0):(n?Math.max(0,n.money||300000):0);
+      const base=isP?Math.max(0,pshop.money||0):(n?Math.max(0,NET.online?((npcOnline().find(r=>r.key==='npc:'+n.id)||{}).money||0):(n.money||300000)):0);
       if(base>0&&Math.random()<0.5){ const g=Math.min(3000000,Math.max(10000,Math.round(base*rr(0.03,0.08)/1000)*1000));
         S.money+=g; addIncome(Math.round(g/50));   // 盗んだお金は1/50だけ点数に
-        if(isP) sendMail(uid,{kind:'robbed',amount:g}); else if(n) n.money=Math.max(0,(n.money||0)-g);
+        if(isP) sendMail(uid,{kind:'robbed',amount:g}); else if(n) npcLose('npc:'+n.id,g);
         msgs.push(`${esc(tname)}の金庫から${yen(g)}を盗み出した…`); nw(`【事件】${tname}の金庫から${yen(g)}が盗まれた！ 犯人はまだ見つかっていない`); }
       else { const fine=100000; S.money-=fine; addPay(fine); S.pop=clamp(S.pop-15,0,100); msgs.push(`<span class="red">見つかってしまった！ 罰金${yen(fine)}を払い，人気も下がった</span>`); nw(`【事件】${S.shop}の店主が${tname}の金庫を狙って捕まった！`); } }
     if(i===2){
@@ -3219,7 +3227,7 @@ function finishBattle(){
       const base=b.npc.tyrant?500000:b.npc.warrior?250000:150000;
       const prize=Math.max(5000,Math.round(base*f*(1+(skillFx().prize||0))/1000)*1000);
       const dg=0;
-      S.money+=prize; addIncome(Math.round(prize*0.1)); S.dig+=dg;
+      S.money+=prize; addIncome(Math.round(prize*0.1)); S.dig+=dg; npcLose('npc:'+b.npc.id,prize);
       const who=b.npc.tyrant?'にくべんき藩':b.npc.warrior?'豪将リキーヤ':'強豪';
       if(b.npc.tyrant){ if(Math.random()<0.15){ add(151,1); res.push(`${iname(151)}を1つ手に入れた……`); } news(`${S.owner}（${S.shop}）がにくべんき藩を打ち倒した！`); }
       res.push(`<b class="red">${who}を打ち破った！ 賞金${yen(prize)}${dg?`と爵位ポイント+${dg}`:''}を得た！</b><br><small class="note">相手の強さ（あなたを100%として）：${Math.round(ratio*100)}%（相手が強いほど賞金が多くなります）</small>`);
