@@ -549,6 +549,9 @@ const EVENT_ONLY=[81,82,83,84,85,86,151,181,182,183,184];
 })();
 const ITEMS = {}; DATA.items.forEach(it=>{ if(it.no===80){ it.uses[0].time=180; } if(it.no===80 && !it.uses.some(u=>u.top)) it.uses.push({name:'最上級の魔物に挑む',time:240,action:'戦闘開始',info:'とてつもなく強い魔物に挑みます。勝てば賞金！',exp:1,use:[[1,80]],get:[],func:'_local_',top:1}); it.info=(it.info||'').replace(/<[^>]+>/g,''); ITEMS[it.no]=it; });
 const ITEMLIST = DATA.items;
+// 禁断の書に「お金を盗む」を追加
+(function(){ const B=ITEMS[65]; if(!B||B.uses.some(u=>u.name==='お金を盗む')) return;
+  B.uses.push({...JSON.parse(JSON.stringify(B.uses[1])),name:'お金を盗む',action:'お金を盗む',info:'相手の店の資金を盗みます。成功すれば大金ですが，捕まると罰金と人気ダウン…',exp:25,exptime:480}); })();
 // ギフト券の交換品の見直し（1枚＝だいたい¥2万ぶんの価値にそろえる）
 (function giftRebalance(){
   const G=ITEMS[79]; if(!G) return;
@@ -1402,7 +1405,7 @@ function npcOnline(atDay){
     const profit3=Math.max(0,Math.round((600000+350000*s3+150000*s2)*(d.strong?1.7:1)));
     const today=Math.max(0,Math.round((120000+80000*s1)*(dragonActive()?3:1)));
     const loc=S&&S.npcs&&S.npcs[i];
-    const ex=(((T().exposed||{})['npc:'+i]||0)>Date.now()?0.8:1)*(((T().nikuStolen||{})['npc:'+i]||0)>Date.now()?0.9:1);
+    const ex=(((T().exposed||{})['npc:'+i]||0)>Date.now()?0.8:1)*(((T().nikuStolen||{})['npc:'+i]||0)>Date.now()?0.9:1)*(((T().rumor||{})['npc:'+i]||0)>Date.now()?0.8:1);
     const tw=T(), nikuB=d.tyrant?{pt:tw.nikuScore||0,pop:tw.nikuPop||0,dig:tw.nikuDig||0}:{pt:0,pop:0,dig:0};
     return {me:false,npc:true,exposed:ex<1,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop:Math.min(99,Math.round(pop*ex)+nikuB.pop),wins,
       dig:Math.max(0,(Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))))+nikuB.dig-((T().npcDigLoss||{})['npc:'+i]||0)),money:(Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3))+(d.warrior?(tw.rikiEarn||0):0),
@@ -1611,6 +1614,9 @@ function processMail(){
       else if(m.kind==='raidrew'){ applyRaidRew(m); }
       else if(m.kind==='npcduel'){ applyNpcDuel(m); }
       else if(m.kind==='admin'){ applyAdmin(m); }
+      else if(m.kind==='rumor'){ const a=m.amount||10; S.pop=clamp(S.pop-a,0,100); letter('街のうわさ好き','kaoguide',`あなたのお店について，よくない噂が広まっているようです…。人気が${a}下がりました。（だれかが禁断の書を使ったのかもしれません）`); }
+      else if(m.kind==='robbed'){ const a=Math.min(m.amount||0,Math.max(0,S.money)); S.money-=a; addPay(a); letter('店員','kaoguide',`たいへんです！ お店の金庫から${yen(a)}が盗まれてしまいました…。だれかのしわざのようです。`); }
+      else if(m.kind==='stolen'){ const k=Math.min(m.n||0,Math.max(0,(S.stock[m.no]||0)-resv(m.no))); if(k>0) add(m.no,-k); letter('店員','kaoguide',`お店の棚から${ITEMS[m.no]?ITEMS[m.no].name:'品物'}×${k}が盗まれてしまいました…。だれかのしわざのようです。`); }
       else if(m.kind==='gpop'){ S.pop=clamp(S.pop+(m.amount||0),0,100); letter(who,face,`ギルド「${m.gname||''}」の広告が出されました。人気が${m.amount}上がりました！`); }
       else if(m.kind==='time'){ S.time=Math.min(maxTime(),S.time+(m.minutes||0)); letter(who,face,`求人「${m.title||'手伝い'}」を引き受けて，${hm(m.minutes||0)}働いてくれました。持ち時間が増えました。`); }
       else if(m.kind==='wipe'){ NET.db.doc('mail/'+id).delete().catch(()=>{}); try{ localStorage.removeItem(SAVE); }catch(e){} S=null; lastPub=''; try{ localStorage.removeItem(UIDKEY); localStorage.setItem(LOGOUTKEY,'1'); }catch(e){} setFlash('管理人によってお店のデータがリセットされました。新しくお店を開いてください。',1); render(); return; }
@@ -2894,7 +2900,7 @@ function specialDesc(no,i){
   if(no===13) return i===0?'資金 ¥6,000前後':'資金 ¥15,000前後';
   if(no===63) return '陳列棚が'+(i+1)+'つに';
   if(no===62) return ['自店の人気大幅アップ','指定した店の人気アップ','ギルド所属店の人気アップ'][i];
-  if(no===65) return ['他店の人気ダウン','他店の商品を盗む','同業種の人気ダウン'][i];
+  if(no===65) return ['他店の人気ダウン','他店の商品を盗む','同業種の人気ダウン','他店のお金を盗む'][i];
   if(no===80) return ['他店主と決闘','魔物退治（低）','魔物退治（中）','魔物退治（上）','最上級の魔物（勝てば賞金・人気2消費）'][i];
   if(no===78) return JOBS[JOBCHANGE[i]].name+'になる';
   if(no===25) return i===0?'ミノ牛乳×10':i===1?'ミノ牛乳×20〜40（逃げることも）':'';
@@ -2920,7 +2926,7 @@ function doUse(no,i){
   if(u.needexp && (S.exp[no]||0)<u.needexp){ setFlash('熟練度が足りません',1); render(); return; }
   const t=useTime(u,no);
   // 特殊処理で対象選択が必要なもの
-  if((no===80&&i===0)||(no===62&&i===1)||(no===65&&i<2)){ return chooseTarget(no,i,t); }
+  if((no===80&&i===0)||(no===62&&i===1)||(no===65&&i!==2)){ return chooseTarget(no,i,t); }
   if(no===80&&i>=1&&i<=4){ return chooseMonster(i,t); }
   if(!spendTime(t)){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
   execUse(no,i,null);
@@ -2948,7 +2954,7 @@ function chooseTarget(no,i,t){
   const rows=[];
   const done=tg=>no===80&&duelCount(tg)>=DUEL_LIMIT;
   const btn=(tg,ref)=>done(tg)?'<small class="note">今回は<br>対戦済み</small>':`<button onclick="pickTarget(${ref},${no},${i},${t})">選ぶ</button>`;
-  if(no===80 && NET.online) playerShops().forEach(p=>rows.push(`<tr><td>${kao(p.kao)}</td><td>${esc(p.shop)}<br><small>${esc(p.name)}（プレイヤー）</small></td><td>${btn('p:'+p.uid,R('p:'+p.uid))}</td></tr>`));
+  if((no===80||(no===65&&i!==2)) && NET.online) playerShops().filter(p=>no===80||!p.idle).forEach(p=>rows.push(`<tr><td>${kao(p.kao)}</td><td>${esc(p.shop)}<br><small>${esc(p.name)}（プレイヤー）</small></td><td>${btn('p:'+p.uid,R('p:'+p.uid))}</td></tr>`));
   S.npcs.forEach(n=>rows.push(`<tr><td>${kao(n.kao)}</td><td>${esc(n.shop)}${n.strong?' <span class="npctag strong">強豪</span>':''}${n.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${n.tyrant?' <span class=\"npctag strong\" style=\"background:#3a1010;border-color:#300;color:#fff\">暴君</span>':''}<br><small>${esc(n.owner)}${no===80&&n.st?`・HP${n.st.life} 攻${n.st.attack}`:''}</small></td><td>${btn(n.id,R(n.id))}</td></tr>`));
   modal(`<div><big>相手を選ぶ</big></div>${no===80?`<div class="c note">同じ相手とは，決算ごとに${DUEL_LIMIT}回まで決闘できます。</div>`:''}<div class="tbl"><table class="t">${rows.join('')}</table></div><div class="c"><button onclick="closeModal()">やめる</button></div>`);
 }
@@ -2962,7 +2968,7 @@ function pickTarget(k,no,i,t){ const tg=REFS[k]; closeModal();
   if(no===80) duelMark(tg);
   execUse(no,i,tg); }
 // まとめて使えるか（戦闘・相手を選ぶもの・陳列棚キット・転職は1回ずつ）
-function canMulti(no,i){ if(no===80||no===62||no===63||no===78||no===29) return false; if((no===62&&i===1)||(no===65&&i<2)) return false; return true; }
+function canMulti(no,i){ if(no===80||no===62||no===63||no===78||no===29) return false; if((no===62&&i===1)||(no===65&&i!==2)) return false; return true; }
 function maxTimes(no,i){
   const u=ITEMS[no].uses[i]; let m=99;
   u.use.forEach(([n,x])=>{ m=Math.min(m,Math.floor((S.stock[x]||0)/n)); });
@@ -3046,10 +3052,35 @@ function special(no,i,target,msgs){
     if(i===2){ const gi=guildInfo(S.guild); if(gi&&gi.g){ Object.keys(gi.g.members||{}).forEach(u=>{ if(u===NET.uid) S.pop=clamp(S.pop+8,0,100); else sendMail(u,{kind:'gpop',amount:8,gname:gi.name}); }); msgs.push(`ギルド「${esc(gi.name)}」の広告を出した！ 加盟店みんなの人気が上がった`); } else if(gi){ S.pop=clamp(S.pop+8,0,100); S.npcs.filter(n=>n.guild===S.guild).forEach(n=>n.pop=clamp(n.pop+8,0,100)); msgs.push('ギルドの広告を出した！'); } else msgs.push('ギルドに所属していないので効果がなかった…'); }
   }
   else if(no===65){
-    const n=target!=null?S.npcs[target]:null;
-    if(i===0){ n.pop=clamp(n.pop-20,0,100); msgs.push(`${esc(n.shop)}の悪い噂を流した…`); news(`${n.shop}に関する悪い噂が広まっている`); if(Math.random()<0.3){ S.pop=clamp(S.pop-10,0,100); msgs.push('<span class="red">噂の出どころがバレて自店の人気も下がった</span>'); } }
-    if(i===1){ const cs=n.cases.filter(c=>c&&c.stock>0); if(cs.length&&Math.random()<0.6){ const c=pick(cs); const k=Math.min(c.stock,1+rnd(3)); c.stock-=k; add(c.no,k); msgs.push(`${esc(n.shop)}から${iname(c.no)}×${k}を盗んだ…`); } else { S.pop=clamp(S.pop-15,0,100); msgs.push('<span class="red">見つかってしまった！人気が下がった</span>'); } }
-    if(i===2){ S.npcs.filter(x=>x.job===S.job).forEach(x=>x.pop=clamp(x.pop-10,0,100)); msgs.push('同業種の悪い噂を流した…'); }
+    // 禁断の書：NPCにもプレイヤーにも使える（オンラインでは街全体に反映）
+    const isP=typeof target==='string'&&target.startsWith('p:'), uid=isP?target.slice(2):null;
+    const n=(!isP&&target!=null)?S.npcs[target]:null;
+    const pshop=isP?(NET.shops[uid]||{}):null, tname=isP?(pshop.shop||'ある店'):(n?n.shop:'');
+    const nw=m=>{ news(m); newsNet(m); };
+    const rumorNpc=(key,ms)=>{ if(NET.online) townTx(t=>{ t.rumor=t.rumor||{}; t.rumor[key]=Date.now()+ms; }); };
+    if(i===0){
+      if(isP){ sendMail(uid,{kind:'rumor',amount:10}); }
+      else if(n){ n.pop=clamp(n.pop-20,0,100); rumorNpc('npc:'+n.id,12*3600000); }
+      msgs.push(`${esc(tname)}の悪い噂を流した…`); nw(`【事件】${tname}に関する悪い噂が広まっている`);
+      if(Math.random()<0.3){ S.pop=clamp(S.pop-10,0,100); msgs.push('<span class="red">噂の出どころがバレて自店の人気も下がった</span>'); } }
+    if(i===1){
+      const cs=isP?(pshop.cases||[]).filter(c=>c&&c.stock>0&&ITEMS[c.no]):(n?n.cases.filter(c=>c&&c.stock>0):[]);
+      if(cs.length&&Math.random()<0.6){ const c=pick(cs); const k=Math.min(c.stock,1+rnd(3)); if(!isP) c.stock-=k; add(c.no,k);
+        if(isP) sendMail(uid,{kind:'stolen',no:c.no,n:k});
+        msgs.push(`${esc(tname)}から${iname(c.no)}×${k}を盗んだ…`); nw(`【万引き】${tname}で${ITEMS[c.no].name}×${k}が盗まれた！ 犯人はまだ見つかっていない`); }
+      else { S.pop=clamp(S.pop-15,0,100); msgs.push('<span class="red">見つかってしまった！人気が下がった</span>'); nw(`【事件】${S.shop}の店主が${tname}で万引きしようとして捕まった！`); } }
+    if(i===3){
+      // 盗める額：相手の資金の3〜8%（最低¥1万・最高¥300万）。成功率5割
+      const base=isP?Math.max(0,pshop.money||0):(n?Math.max(0,n.money||300000):0);
+      if(base>0&&Math.random()<0.5){ const g=Math.min(3000000,Math.max(10000,Math.round(base*rr(0.03,0.08)/1000)*1000));
+        S.money+=g; addIncome(Math.round(g/50));   // 盗んだお金は1/50だけ点数に
+        if(isP) sendMail(uid,{kind:'robbed',amount:g}); else if(n) n.money=Math.max(0,(n.money||0)-g);
+        msgs.push(`${esc(tname)}の金庫から${yen(g)}を盗み出した…`); nw(`【事件】${tname}の金庫から${yen(g)}が盗まれた！ 犯人はまだ見つかっていない`); }
+      else { const fine=100000; S.money-=fine; addPay(fine); S.pop=clamp(S.pop-15,0,100); msgs.push(`<span class="red">見つかってしまった！ 罰金${yen(fine)}を払い，人気も下がった</span>`); nw(`【事件】${S.shop}の店主が${tname}の金庫を狙って捕まった！`); } }
+    if(i===2){
+      S.npcs.filter(x=>x.job===S.job).forEach(x=>{ x.pop=clamp(x.pop-10,0,100); rumorNpc('npc:'+x.id,6*3600000); });
+      let np=0; if(NET.online) playerShops().filter(p=>!p.idle&&p.job===S.job).forEach(p=>{ sendMail(p.uid,{kind:'rumor',amount:5}); np++; });
+      msgs.push(`同業種（${(JOBS[S.job]||{}).name||''}）の悪い噂を流した…${np?`（プレイヤー${np}店にも）`:''}`); nw(`【事件】${(JOBS[S.job]||{}).name||'ある業種'}の店に関する悪い噂が広まっている`); }
   }
   else if(no===80){ startBattle(i,target); return 'battle'; }
   else if(no===78){ S.job=JOBCHANGE[i]; const g=JOBGIFT[i]; if(g){ add(g,1); msgs.push(`転職祝いに${iname(g)}をもらった`); } msgs.push(`${JOBS[S.job].name}になった！`); }
