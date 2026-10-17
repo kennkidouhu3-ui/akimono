@@ -5054,8 +5054,8 @@ SCREENS.dwarf=function(){
   const tabs=`<div class="tabs">${['輸入予約','宅配便を出す','送金'].map((t,i)=>`<span class="${tab===i?'on':''}" onclick="sub.t=${i};render()">${t}</span>`).join('')}</div>`;
   let h=`<div class="c"><big>宅配便</big></div>${talk('kaodwarf','住み込みドワーフ','ドワーフ宅配便は由緒ある組織じゃ。ワシに頼んでくれれば，いつでも商品を送り届けるぞい。')}${tabs}`;
   if(tab===0){
-    const pool=ITEMLIST.filter(it=>it.price>0&&it.price<=20000&&['原料','薬','剣','鎧','盾','杖','アクセサリ'].includes(it.type)&&it.no<81);
-    h+=`<div class="c note">遠くの街から品物を取り寄せるぞい。代金は標準価格の1.5倍，届くまで8時間じゃ。</div>
+    const pool=ITEMLIST.filter(importable);   // 市場で売っている品だけ
+    h+=`<div class="c note">遠くの街から品物を取り寄せるぞい（市場で売っている品だけじゃ）。代金は標準価格の1.5倍，届くまで8時間じゃ。</div>
     <div class="c"><select id="imNo">${pool.map(it=>`<option value="${it.no}">${esc(it.name)}（${yen(Math.round(it.price*1.5))}）</option>`).join('')}</select> ×<input type="number" id="imN" value="10" min="1" max="500" style="width:60px"> <button onclick="orderImport()">注文する（20分）</button></div>
     <div class="tbl"><table class="t"><tr><th>${im('dwfsign4','i16')}到着待ち</th><th>到着まで</th></tr>${S.imports.map(o=>`<tr><td>${o.money?`${esc(o.town)}への輸出代金 ${yen(o.money)}`:iname(o.no)+'×'+o.n}</td><td>${hm(o.at-S.clock)}</td></tr>`).join('')||'<tr><td colspan=2 class="c">なし</td></tr>'}</table></div>`;
   } else if(tab===1){
@@ -5163,7 +5163,8 @@ function checkVoyages(){
   });
   if(changed){ save(); softRender(); }
 }
-function orderImport(){ const no=+$('#imNo').value, n=clamp(parseInt($('#imN').value)||1,1,500); const c=Math.round(ITEMS[no].price*1.5)*n; if(S.money<c){ setFlash('資金が足りません',1); render(); return; } if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; } S.money-=c; addPay(c); S.imports.push({no,n,at:S.clock+480}); setFlash(`${ITEMS[no].name}×${n}を${yen(c)}で注文しました`); save(); render(); }
+function importable(it){ return !!(it&&it.plus>0&&it.price>0); }
+function orderImport(){ const no=+$('#imNo').value, n=clamp(parseInt($('#imN').value)||1,1,500); if(!importable(ITEMS[no])){ setFlash('その品は取り寄せできません（市場で売っている品だけです）',1); render(); return; } const c=Math.round(ITEMS[no].price*1.5)*n; if(S.money<c){ setFlash('資金が足りません',1); render(); return; } if(!spendTime(20)){ setFlash('持ち時間が足りません',1); render(); return; } S.money-=c; addPay(c); S.imports.push({no,n,at:S.clock+480}); setFlash(`${ITEMS[no].name}×${n}を${yen(c)}で注文しました`); save(); render(); }
 function sendDwarf(){
   const r=recip($('#dwTo').value), no=+$('#dwNo').value, n=Math.min(plainCount(no),Math.max(1,parseInt($('#dwN').value)||1)); if(!n) return;
   if(!canSend(no)){ setFlash('武器強化の素材は人に送れません',1); render(); return; }
