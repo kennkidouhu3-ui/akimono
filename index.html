@@ -1872,7 +1872,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101706;
+const APP_VER=2026101707;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2247,7 +2247,7 @@ function simulate(dt){
     });
   });
   // 市場入荷（オンラインでは街の共有市場が時間で入荷するので，ここでは何もしない）
-  if(!NET.online&&!S.mul39){ S.mul39=1; S.market[39]=Math.max(S.market[39]||0,Math.max(3,Math.round(1440/300*2))*100); }
+  if(!NET.online&&S.mulv!==MKT_MULV){ const old=(S.mulv||(S.mul39?'39':'')).split(','); S.mulv=MKT_MULV; Object.keys(MKT_MULT).forEach(no=>{ const it=ITEMS[no]; if(it&&!old.includes(no)) S.market[no]=Math.max(S.market[no]||0,(+no===25?20:Math.max(3,Math.round(1440/it.plus*2)))*mktMul(+no)); }); }
   if(!NET.online) ITEMLIST.forEach(it=>{
     if(it.plus>0 && it.price>0){
       const cap = (it.no===25? 20 : Math.max(3,Math.round(1440/it.plus*2)))*mktMul(it.no);
@@ -3537,13 +3537,14 @@ function closeShop(){ confirmBox('本当に閉店しますか？すべてのデ�
 const MKT_PATH='town/market';
 let MKBUSY=false;
 function mktScale(){ const now=Date.now(); const n=Object.values(NET.shops||{}).filter(x=>x&&x.uid&&now-(x.t||0)<IDLE_H*3600000).length; return Math.max(1,Math.round(Math.max(1,n)*0.6)); }
-const MKT_MULT={39:100};   // 市場の流通量の倍率（解体/梱包キットは100倍）
+const MKT_MULT={39:100,8:100};   // 市場の流通量の倍率（解体/梱包キット・魔石は100倍）
+const MKT_MULV=Object.keys(MKT_MULT).sort().join(',');
 function mktMul(no){ return MKT_MULT[no]||1; }
 function mktCap(it,mk){ return (it.no===25?20:Math.max(3,Math.round(1440/it.plus*2)))*mk*mktMul(it.no); }
 function mktInit(mk){ const st={}; ITEMLIST.forEach(it=>{ if(it.plus>0&&it.price>0) st[it.no]=mktCap(it,mk); }); return {st,t:Date.now()}; }
 function mktFlow(m,now,mk){
   if(!m.st) m.st={}; const dt=Math.max(0,(now-(m.t||now))/1000*RATE);
-  if(!m.mul39){ m.mul39=1; if(ITEMS[39]) m.st[39]=Math.max(m.st[39]||0,mktCap(ITEMS[39],mk)); }   // 流通量を増やしたときに一度だけ満タンにする
+  if(m.mulv!==MKT_MULV){ const old=(m.mulv||(m.mul39?'39':'')).split(','); m.mulv=MKT_MULV; Object.keys(MKT_MULT).forEach(no=>{ if(!old.includes(no)&&ITEMS[no]) m.st[no]=Math.max(m.st[no]||0,mktCap(ITEMS[no],mk)); }); }   // 流通量を増やしたときに一度だけ満タンにする
   if(dt>0) ITEMLIST.forEach(it=>{ if(it.plus>0&&it.price>0){ const cap=mktCap(it,mk), cur=m.st[it.no]||0; if(cur<cap) m.st[it.no]=Math.min(cap,Math.round((cur+dt/it.plus*6*mk*mktMul(it.no))*100)/100); } });
   m.t=now; return m;
 }
