@@ -1503,7 +1503,8 @@ async function newsNet(m){
 const NEWS_CATS=[['all','すべて'],['battle','⚔ 決闘・戦い'],['danger','⚠ 襲撃・事件'],['settle','🏆 決算・表彰'],['town','🏪 商い・街']];
 function newsCat(m){ const mm=String(m||'').match(/^【([^】]+)】/); const lb=mm?mm[1]:'';
   if(/決算|表彰/.test(lb)) return 'settle';
-  if(/襲撃|襲来|警報|万引き|政変|防衛|取り締まり/.test(lb)) return 'danger';
+  if(/襲撃|襲来|警報|万引き|政変|防衛|取り締まり|事件|買い占め|解放|反乱/.test(lb)) return 'danger';
+  if(!lb&&/取り締まり|反乱|盗まれ|盗んだ|悪い噂|捕まった|山賊/.test(m)) return 'danger';
   if(/決闘|レイド|討伐/.test(lb)||/決闘|魔物|討ち取|打ち倒|バルバロス/.test(m)) return 'battle';
   return 'town'; }
 const NEWS_COL={settle:'#b8860b',danger:'#c33',battle:'#3a6fb0',town:'#5a9a4a'};
@@ -1519,7 +1520,7 @@ function newsBlock(list,withDays){
   list.forEach(n=>{ const d=newsParts(n).day; if(d!==cur){ flush(); cur=d; } buf.push(newsItem(n,false)); }); flush();
   return h; }
 
-function newsLine(m){ const s=esc(m); const mm=s.match(/^【([^】]+)】(.*)$/); if(!mm) return s; const col=/襲来|警報|襲撃|万引き|政変/.test(mm[1])?'#c33':/決算|表彰/.test(mm[1])?'#b8860b':'#3a7abd'; return `<span style="display:inline-block;background:${col};color:#fff;border-radius:3px;padding:0 5px;font-size:12px;margin-right:4px">${mm[1]}</span><b>${mm[2]}</b>`; }
+function newsLine(m){ const s=esc(m); const mm=s.match(/^【([^】]+)】(.*)$/); if(!mm) return s; const col=/襲来|警報|襲撃|万引き|政変|事件|防衛|反乱/.test(mm[1])?'#c33':/決算|表彰/.test(mm[1])?'#b8860b':'#3a7abd'; return `<span style="display:inline-block;background:${col};color:#fff;border-radius:3px;padding:0 5px;font-size:12px;margin-right:4px">${mm[1]}</span><b>${mm[2]}</b>`; }
 function realStamp(ms){ const d=new Date(ms+9*3600000); return `${d.getUTCMonth()+1}/${d.getUTCDate()}(${'日月火水木金土'[d.getUTCDay()]}) ${String(d.getUTCHours()).padStart(2,'0')}:${String(d.getUTCMinutes()).padStart(2,'0')}`; }
 function newsTime(n){ if(n.at) return realStamp(n.at); if(n.d) return `${fmtDay(n.d)} ${n.t||''}`; return ''; }
 function newsList(){
