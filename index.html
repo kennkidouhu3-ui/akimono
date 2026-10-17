@@ -1399,10 +1399,10 @@ function allShops(){
 }
 
 // NPCの支出・損失（盗まれた・用心棒代・決闘の賞金など）を点数と資金に反映する
-function npcLossApply(t,key,amount){ amount=Math.round(amount||0); if(amount<=0) return; t.npcLoss=t.npcLoss||{}; const cp=curPeriod(); const L=t.npcLoss[key]; if(!L||L.per!==cp) t.npcLoss[key]={per:cp,v:0}; t.npcLoss[key].v+=amount; t.npcMoneyLoss=t.npcMoneyLoss||{}; t.npcMoneyLoss[key]=(t.npcMoneyLoss[key]||0)+amount; }
-function npcLose(key,amount){ amount=Math.round(amount||0); if(amount<=0||!String(key).startsWith('npc:')) return;
-  if(NET.online){ townTx(t=>{ npcLossApply(t,key,amount); }); return; }
-  const n=(S.npcs||[])[+String(key).slice(4)]; if(n){ n.money=Math.max(0,(n.money||0)-amount); n.today=(n.today||0)-amount; } }
+function npcLossApply(t,key,amount,ptAmt){ amount=Math.round(amount||0); if(amount<=0) return; const pv=Math.round(ptAmt==null?amount:ptAmt); t.npcLoss=t.npcLoss||{}; const cp=curPeriod(); const L=t.npcLoss[key]; if(!L||L.per!==cp) t.npcLoss[key]={per:cp,v:0}; t.npcLoss[key].v+=pv; t.npcMoneyLoss=t.npcMoneyLoss||{}; t.npcMoneyLoss[key]=(t.npcMoneyLoss[key]||0)+amount; }
+function npcLose(key,amount,ptAmt){ amount=Math.round(amount||0); if(amount<=0||!String(key).startsWith('npc:')) return; const pv=Math.round(ptAmt==null?amount:ptAmt);
+  if(NET.online){ townTx(t=>{ npcLossApply(t,key,amount,pv); }); return; }
+  const n=(S.npcs||[])[+String(key).slice(4)]; if(n){ n.money=Math.max(0,(n.money||0)-amount); n.today=(n.today||0)-pv; } }
 function npcLossToday(key){ const L=(T().npcLoss||{})[key]; return (L&&L.per===curPeriod())?L.v:0; }
 
 // NPCの人気の上下（決闘の勝ち負けなど）。その決算期のあいだ人気に反映し，点数もそのぶん変わる
@@ -1630,8 +1630,8 @@ function processMail(){
       else if(m.kind==='npcduel'){ applyNpcDuel(m); }
       else if(m.kind==='admin'){ applyAdmin(m); }
       else if(m.kind==='rumor'){ const a=m.amount||10; S.pop=clamp(S.pop-a,0,100); letter('街のうわさ好き','kaoguide',`あなたのお店について，よくない噂が広まっているようです…。人気が${a}下がりました。（だれかが禁断の書を使ったのかもしれません）`); }
-      else if(m.kind==='robbed'){ const a=Math.min(m.amount||0,Math.max(0,S.money)); S.money-=a; addPay(Math.round(a/20));   /* 盗まれた額の1/20だけ点数が下がる */ letter('店員','kaoguide',`たいへんです！ お店の金庫から${yen(a)}が盗まれてしまいました…。だれかのしわざのようです。`); }
-      else if(m.kind==='stolen'){ const k=Math.min(m.n||0,Math.max(0,(S.stock[m.no]||0)-resv(m.no))); if(k>0) add(m.no,-k); letter('店員','kaoguide',`お店の棚から${ITEMS[m.no]?ITEMS[m.no].name:'品物'}×${k}が盗まれてしまいました…。だれかのしわざのようです。`); }
+      else if(m.kind==='robbed'){ const a=Math.min(m.amount||0,Math.max(0,S.money)); S.money-=a; addPay(Math.round(a/50));   /* 盗まれた額の1/50だけ点数が下がる */ letter('店員','kaoguide',`たいへんです！ お店の金庫から${yen(a)}が盗まれてしまいました…。だれかのしわざのようです。`); }
+      else if(m.kind==='stolen'){ const k=Math.min(m.n||0,Math.max(0,(S.stock[m.no]||0)-resv(m.no))); if(k>0){ add(m.no,-k); addPay(Math.round((ITEMS[m.no]?ITEMS[m.no].price:0)*k/50)); } letter('店員','kaoguide',`お店の棚から${ITEMS[m.no]?ITEMS[m.no].name:'品物'}×${k}が盗まれてしまいました…。だれかのしわざのようです。`); }
       else if(m.kind==='gpop'){ S.pop=clamp(S.pop+(m.amount||0),0,100); letter(who,face,`ギルド「${m.gname||''}」の広告が出されました。人気が${m.amount}上がりました！`); }
       else if(m.kind==='time'){ S.time=Math.min(maxTime(),S.time+(m.minutes||0)); letter(who,face,`求人「${m.title||'手伝い'}」を引き受けて，${hm(m.minutes||0)}働いてくれました。持ち時間が増えました。`); }
       else if(m.kind==='wipe'){ NET.db.doc('mail/'+id).delete().catch(()=>{}); try{ localStorage.removeItem(SAVE); }catch(e){} S=null; lastPub=''; try{ localStorage.removeItem(UIDKEY); localStorage.setItem(LOGOUTKEY,'1'); }catch(e){} setFlash('管理人によってお店のデータがリセットされました。新しくお店を開いてください。',1); render(); return; }
@@ -3081,7 +3081,7 @@ function special(no,i,target,msgs){
       if(Math.random()<0.3){ const fm=payFine(); S.pop=clamp(S.pop-10,0,100); msgs.push(`<span class="red">噂の出どころがバレてしまった！ ${fm}自店の人気も下がった</span>`); nw(`【事件】${tname}の悪い噂を流していたのは${S.shop}の店主だった！ 罰金${yen(FINE)}`); } }
     if(i===1){
       const cs=isP?(pshop.cases||[]).filter(c=>c&&c.stock>0&&ITEMS[c.no]):(n?n.cases.filter(c=>c&&c.stock>0):[]);
-      if(cs.length&&Math.random()<0.6){ const c=pick(cs); const k=Math.min(c.stock,1+rnd(3)); if(!isP){ c.stock-=k; npcLose('npc:'+n.id,(c.price||ITEMS[c.no].price)*k); } add(c.no,k);
+      if(cs.length&&Math.random()<0.6){ const c=pick(cs); const k=Math.min(c.stock,1+rnd(3)); if(!isP){ c.stock-=k; npcLose('npc:'+n.id,(c.price||ITEMS[c.no].price)*k,(c.price||ITEMS[c.no].price)*k/50); } add(c.no,k);
         if(isP) sendMail(uid,{kind:'stolen',no:c.no,n:k});
         msgs.push(`${esc(tname)}から${iname(c.no)}×${k}を盗んだ…`); nw(`【万引き】${tname}で${ITEMS[c.no].name}×${k}が盗まれた！ 犯人はまだ見つかっていない`); }
       else { const fm=payFine(); S.pop=clamp(S.pop-15,0,100); msgs.push(`<span class="red">見つかってしまった！ ${fm}人気も下がった</span>`); nw(`【事件】${S.shop}の店主が${tname}で万引きしようとして捕まった！ 罰金${yen(FINE)}`); } }
@@ -3090,7 +3090,7 @@ function special(no,i,target,msgs){
       const base=isP?Math.max(0,pshop.money||0):(n?Math.max(0,NET.online?((npcOnline().find(r=>r.key==='npc:'+n.id)||{}).money||0):(n.money||300000)):0);
       if(base>0&&Math.random()<0.5){ const g=Math.min(3000000,Math.max(10000,Math.round(base*rr(0.03,0.08)/1000)*1000));
         S.money+=g; addIncome(Math.round(g/50));   // 盗んだお金は1/50だけ点数に
-        if(isP) sendMail(uid,{kind:'robbed',amount:g}); else if(n) npcLose('npc:'+n.id,g);
+        if(isP) sendMail(uid,{kind:'robbed',amount:g}); else if(n) npcLose('npc:'+n.id,g,g/50);
         msgs.push(`${esc(tname)}の金庫から${yen(g)}を盗み出した…`); nw(`【事件】${tname}の金庫から${yen(g)}が盗まれた！ 犯人はまだ見つかっていない`); }
       else { const fm=payFine(); S.pop=clamp(S.pop-15,0,100); msgs.push(`<span class="red">見つかってしまった！ ${fm}人気も下がった</span>`); nw(`【事件】${S.shop}の店主が${tname}の金庫を狙って捕まった！ 罰金${yen(FINE)}`); } }
     if(i===2){
