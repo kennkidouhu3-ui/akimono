@@ -1071,11 +1071,11 @@ async function checkNiku(){
       logs.push(`【解放】${NIKU}の爵位ポイントが100に達した！ 爵位ポイント100を使い切り，次の決算まで襲撃をやめて，狙った店の品を「全部買い占める」と宣言した！（${t.nikuFreeN}回目の解放）`); } }
     if(t.niku&&now>=t.niku.at&&(t.niku.buy||nikuFreeActive(t))){
       const n=t.niku; let val=0;
-      if(String(n.target.key).startsWith('npc:')){ const x=(S.npcs||[])[+String(n.target.key).slice(4)]; val=x?(x.cases||[]).reduce((a,c)=>a+(c&&c.stock>0?c.price*c.stock:0),0):0; if(!val) val=500000; npcGainApply(t,n.target.key,val); }
+      if(String(n.target.key).startsWith('npc:')){ const x=(S.npcs||[])[+String(n.target.key).slice(4)]; val=x?(x.cases||[]).reduce((a,c)=>a+(c&&c.stock>0?((ITEMS[c.no]&&ITEMS[c.no].price)||c.price)*c.stock:0),0):0; if(!val) val=500000; npcGainApply(t,n.target.key,val); }
       if(!t.nikuHit||t.nikuHit.p!==curPeriod()) t.nikuHit={p:curPeriod(),keys:[]};
       t.nikuHit.keys.push(n.target.key);
       t.nikuLast={id:n.at,target:n.target,buy:true,at:now,val};
-      logs.push(`【買い占め】${NIKU}が${n.target.shop}に現れ，「ここの品を全部もらおう！」と棚の品を残らず買い占めていった！ 店主はびっくり仰天`);
+      logs.push(`【買い占め】${NIKU}が${n.target.shop}に現れ，「ここの品を全部もらおう！」と棚の品を残らず標準価格で買い占めていった！ 店主はびっくり仰天`);
       t.niku=null;
     }
     if(t.niku&&now>=t.niku.at){
@@ -1121,10 +1121,10 @@ function applyNikuResult(){
   S.nikuSeen=L.id;
   if(L.buy){
     if(L.target.key===myKey()){ let tot=0, cnt=0; const got=[];
-      S.cases.forEach(c=>{ if(!c||!has(c.no)) return; const k=(S.stock[c.no]||0)-resv(c.no); if(k<=0) return; add(c.no,-k); const g=c.price*k, tax=Math.round(g*taxRateFor(myKey())/100);
+      S.cases.forEach(c=>{ if(!c||!has(c.no)) return; const k=(S.stock[c.no]||0)-resv(c.no); if(k<=0) return; add(c.no,-k); const g=(ITEMS[c.no].price||0)*k, tax=Math.round(g*taxRateFor(myKey())/100);
         S.money+=g-tax; S.today.sales+=g; S.today.count+=k; S.today.tax=(S.today.tax||0)+tax; S.today.items[c.no]=(S.today.items[c.no]||0)+k; tot+=g; cnt+=k; got.push(`${ITEMS[c.no].name}×${k}`); });
       S.pop=clamp(S.pop+2,0,100);
-      letter(NIKU,'kaoniku',tot?`がっはっは！ 今日のワシは機嫌がいい。この店の品は全部いただくぞ！ 代金${yen(tot)}だ，受け取れ！（${got.join('，')}・人気+2）`:`買い占めに来てやったのに，棚が空っぽではないか！ つまらん店だ！`); }
+      letter(NIKU,'kaoniku',tot?`がっはっは！ 今日のワシは機嫌がいい。この店の品は全部いただくぞ！ 値段は標準価格で払ってやる。代金${yen(tot)}だ，受け取れ！（${got.join('，')}・人気+2）`:`買い占めに来てやったのに，棚が空っぽではないか！ つまらん店だ！`); }
     save(); return;
   }
   if(L.target.key===myKey()){
