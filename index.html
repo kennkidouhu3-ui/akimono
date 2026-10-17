@@ -1063,8 +1063,9 @@ async function checkNiku(){
   const now=Date.now(), t0=T();
   const dg0=nikuDigNow();
   if(t0.niku&&t0.niku.at>now&&!(dg0>=100&&!nikuFreeActive(t0))) return;
+  let fired=null;
   const out=await townTx(t=>{
-    const now=Date.now(), logs=[];
+    const now=Date.now(), logs=[]; fired=null;
     // 爵位ポイントが100・200・300…に届いたら「解放」（次の決算まで）
     // 爵位ポイントが100に届いたら「解放」：100ポイントを使い切り，次の決算まで買い占め。決算のあとは元の襲撃に戻る
     { if(!nikuFreeActive(t)&&nikuDigNow()>=100){ t.nikuDig=(t.nikuDig||0)-100; t.nikuFreeN=(t.nikuFreeN||0)+1; t.nikuFree={until:(curPeriod()+1)*SETTLE_MS-JST,n:t.nikuFreeN}; if(t.niku) t.niku.buy=true;
@@ -1074,7 +1075,7 @@ async function checkNiku(){
       if(String(n.target.key).startsWith('npc:')){ const x=(S.npcs||[])[+String(n.target.key).slice(4)]; val=x?(x.cases||[]).reduce((a,c)=>a+(c&&c.stock>0?((ITEMS[c.no]&&ITEMS[c.no].price)||c.price)*c.stock:0),0):0; if(!val) val=500000; npcGainApply(t,n.target.key,val); }
       if(!t.nikuHit||t.nikuHit.p!==curPeriod()) t.nikuHit={p:curPeriod(),keys:[]};
       t.nikuHit.keys.push(n.target.key);
-      t.nikuLast={id:n.at,target:n.target,buy:true,at:now,val};
+      t.nikuLast={id:n.at,target:n.target,buy:true,at:now,val}; fired=t.nikuLast;
       logs.push(`【買い占め】${NIKU}が${n.target.shop}に現れ，「ここの品を全部もらおう！」と棚の品を残らず標準価格で買い占めていった！ 店主はびっくり仰天`);
       t.niku=null;
     }
@@ -1098,7 +1099,7 @@ async function checkNiku(){
         if(String(n.target.key).startsWith('npc:')){ t.nikuStolen=t.nikuStolen||{}; t.nikuStolen[n.target.key]=now+12*3600000; if(steal.dig){ t.npcDigLoss=t.npcDigLoss||{}; t.npcDigLoss[n.target.key]=(t.npcDigLoss[n.target.key]||0)+1; } } }
       if(!t.nikuHit||t.nikuHit.p!==curPeriod()) t.nikuHit={p:curPeriod(),keys:[]};
       t.nikuHit.keys.push(n.target.key);
-      t.nikuLast={id:n.at,target:n.target,pow,def,win,guard,fee,at:now,steal};
+      t.nikuLast={id:n.at,target:n.target,pow,def,win,guard,fee,at:now,steal}; fired=t.nikuLast;
       logs.push(guard?`【防衛】${NIKU}が${n.target.shop}を襲撃！ そこへ用心棒の豪将リキーヤが駆けつけ，一喝して追い払った！ 用心棒代${yen(fee)}をきっちり請求していった（リキーヤの防衛${t.rikiGuard}回目）`:win?`【襲撃】${NIKU}が${n.target.shop}を襲撃！ しかし，守りを固めていた${n.target.name}に撃退された！（防衛力${def}／襲撃${pow}）`
                    :`【襲撃】${NIKU}が${n.target.shop}を襲撃！ 点数${steal.pt.toLocaleString()}・人気${steal.pop}${steal.dig?'・爵位ポイント1':''}を奪っていった…（防衛力${def}／襲撃${pow}）`);
       t.niku=null;
@@ -1115,10 +1116,23 @@ async function checkNiku(){
     return logs;
   });
   if(out&&out.length){ out.forEach(m=>{ S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m}); newsNet(m); }); softRender(); }
+  // 狙われたのがほかのプレイヤーなら，手紙で確実に届ける（ログインしていなくても，次に開いたときに反映される）
+  if(fired&&NET.online&&fired.target&&!String(fired.target.key).startsWith('npc:')){
+    const L=JSON.parse(JSON.stringify(fired)), uid=L.target.key;
+    if(uid===myKey()) applyNikuResult(L);
+    else {
+      sendMail(uid,{kind:'niku',L});
+      // 買い占めは，相手のお店の公開データ（在庫・売上・点数）にもその場で反映する
+      if(L.buy) shopDocTx(uid,d=>{ let g=0; (d.cases||[]).forEach((c,i)=>{ if(c&&c.stock>0&&ITEMS[c.no]){ g+=(ITEMS[c.no].price||0)*c.stock; d.cases[i]=null; } }); if(!g) return false; const tax=Math.round(g*taxRateFor(uid)/100); d.money=(d.money||0)+g-tax; if(d.cash!=null) d.cash+=g-tax; d.pop=Math.min(100,(d.pop||0)+2); shopDocNet(d,g-tax,g); });
+    }
+  }
 }
-function applyNikuResult(){
-  const L=T().nikuLast; if(!L||S.nikuSeen===L.id) return;
-  S.nikuSeen=L.id;
+function applyNikuResult(Lp){
+  const L=Lp||T().nikuLast; if(!L||S.nikuSeen===L.id) return;
+  S.nikuDone=S.nikuDone||[]; const mine=L.target&&L.target.key===myKey();
+  if(mine&&S.nikuDone.includes(L.id)) return;   // 同じ出来事を2回反映しない（街の記録と手紙の両方で届くため）
+  if(!Lp) S.nikuSeen=L.id;
+  if(mine){ S.nikuDone.push(L.id); S.nikuDone=S.nikuDone.slice(-30); }
   if(L.buy){
     if(L.target.key===myKey()){ let tot=0, cnt=0; const got=[];
       S.cases.forEach(c=>{ if(!c||!has(c.no)) return; const k=(S.stock[c.no]||0)-resv(c.no); if(k<=0) return; add(c.no,-k); const g=(ITEMS[c.no].price||0)*k, tax=Math.round(g*taxRateFor(myKey())/100);
@@ -1706,6 +1720,7 @@ function processMail(){
       }
       else if(m.kind==='expose'){ S.pop=Math.round(S.pop*0.8); S.exposedUntil=Date.now()+12*3600000; letter('大臣','kaominister','領主の命令で，お店に軍隊の取り締まりが入りました…。人気が2割下がり，次の決算まではお客さんが少し減ります。'); }
       else if(m.kind==='drres'){ applyDrRes(m); }
+      else if(m.kind==='niku'){ if(m.L) applyNikuResult(m.L); }
       else if(m.kind==='raidrew'){ applyRaidRew(m); }
       else if(m.kind==='npcduel'){ applyNpcDuel(m); }
       else if(m.kind==='admin'){ applyAdmin(m); }
