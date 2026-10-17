@@ -1146,7 +1146,7 @@ function applyNikuResult(Lp){
     save(); return;
   }
   if(L.target.key===myKey()){
-    if(L.guard){ const fee=Math.min(L.fee||0,Math.max(0,S.money)); S.pop=clamp(S.pop+1,0,100); S.money-=fee; addPay(fee); letter('豪将リキーヤ','kaoriki',`${NIKU}のやつがお前の店を狙っておったから，俺が追い払っておいたぞ！ 用心棒代として${yen(fee)}をいただいていく。命と店の値段と思えば安いもんだろう？ がっはっは！（人気+1・資金−${yen(fee)}）`); }
+    if(L.guard){ const fee=Math.min(L.fee||0,Math.max(0,S.money)); S.pop=clamp(S.pop+1,0,100); S.money-=fee; addPay(fee,'use'); letter('豪将リキーヤ','kaoriki',`${NIKU}のやつがお前の店を狙っておったから，俺が追い払っておいたぞ！ 用心棒代として${yen(fee)}をいただいていく。命と店の値段と思えば安いもんだろう？ がっはっは！（人気+1・資金−${yen(fee)}）`); }
     else if(L.win){ S.nikuRepel=(S.nikuRepel||0)+1; S.pop=clamp(S.pop+3,0,100); S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.8)); add(151,1); letter('傭兵隊長','kaoarmy',`${NIKU}の襲撃を見事に撃退しました！ 人気+3。兵士の2割が負傷しました。現場に「呪いの骨片」が1つ残されていました……。`); }
     else { const sp=Math.round(S.pop*0.1), sd=S.dig>0?1:0; S.pop=clamp(S.pop-sp,0,100); S.dig=Math.max(0,S.dig-sd); S.soldiers=Math.max(0,Math.round((S.soldiers||0)*0.7)); letter('傭兵隊長','kaoarmy',`${NIKU}にお店を襲われてしまいました…。人気−${sp}${sd?'・爵位ポイント−1':''}。点数も奪われました（お金は取られていません）。`); }
   } else if(String(L.target.key).startsWith('npc:')&&!NET.online){ const x=S.npcs[+String(L.target.key).slice(4)]; if(x&&L.guard){ x.money=Math.max(0,(x.money||0)-(L.fee||0)); } if(x&&!L.win){ x.pop=clamp(Math.round(x.pop*0.9),5,100); if(x.dig>0) x.dig--; } }
@@ -1342,7 +1342,7 @@ function raidAttack(){
 }
 function raidCheer(kind){
   if(!raidActive()) return;
-  if(kind==='money'){ if(S.money<30000){ setFlash('資金が足りません',1); render(); return; } S.money-=30000; addPay(30000); }
+  if(kind==='money'){ if(S.money<30000){ setFlash('資金が足りません',1); render(); return; } S.money-=30000; addPay(30000,'use'); }
   else { if(!has(30,20)){ setFlash('ポーションが20個必要です',1); render(); return; } add(30,-20); }
   const up=kind==='money'?5:3;
   townTx(t=>{ const r=t.raid; if(!r||r.done) return 'closed'; r.buff=Math.min(100,(r.buff||0)+up); r.dmg=r.dmg||{}; const x=r.dmg[myKey()]||{name:S.owner,shop:S.shop,dmg:0}; x.dmg+=kind==='money'?6000:4000; x.cheer=(x.cheer||0)+1; r.dmg[myKey()]=x; return 'ok'; })
@@ -1470,8 +1470,18 @@ function skillHtml(it){ if(!it) return ''; const a=[]; if(it.skill&&SKILLS[it.sk
 function popStars(p){ const n=Math.round(p/20); return '★'.repeat(n)+'☆'.repeat(5-n)+` <small>(${Math.round(p)}%)</small>`; }
 function trashMsg(t){ return t<20?'きれい':t<50?'ちょっと汚れている':t<100?'散らかっている':t<200?'かなり汚い':'ゴミだらけ'; }
 // 点数：元の商人物語の GetDTPoint と同じ考え方（人気 × 優勝回数補正 × 利益補正）
-function calcPoint(pop,wins,profit3,todayNet){
-  let p=(profit3*3+todayNet)/1500000+1;   // 決算1回（現実12時間）ぶんの利益の目安
+// 仕入れ以外の出費は，稼いでいる店でも同じように点数が下がる（上位ほど減りにくい問題の調整）
+function pointOf(pop,wins,p3,tn,use){
+  const base=calcPoint(pop,wins,p3,tn); if(!(use>0)) return base;
+  const r=0.5+(5/((wins||0)+10)), lin=use*(Math.round(pop*100)+1000)*r/PT_DEN;   // 利益が少ない店と同じ割合で減らす
+  const actual=calcPoint(pop,wins,p3,tn+use)-base;                                 // ふつうの計算ですでに減った分
+  const praw=(p3*3+tn+use)/PT_DEN+1, f=Math.max(0,Math.min(1,(praw-2)/8));   // 稼いでいる店ほど（倍率が高いほど）しっかり減らす。始めたばかりの店はふつうの計算だけ
+  return Math.max(0,base-Math.max(0,Math.round((lin-actual)*f)));
+}
+// 点数の計算は元の商人物語と同じ式（利益50万円で倍率+1・倍率は15が上限・1位を取るほど補正が下がる）
+const PT_DEN=500000, NPC_DEN=1000000;
+function calcPoint(pop,wins,profit3,todayNet,den){
+  let p=(profit3*3+todayNet)/(den||PT_DEN)+1;
   const r=0.5+(5/((wins||0)+10));
   if(p>10) p=15-(50/p);
   if(p<1) p=1/(2-p);
@@ -1480,20 +1490,20 @@ function calcPoint(pop,wins,profit3,todayNet){
   return Math.max(0,Math.floor((Math.round(pop*100)+extra)*r*p));
 }
 // 元の商人物語と同じく「利益」＝売上−税−支出（仕入れなど）で点数が決まる
-function addPay(v){ if(!S) return; S.today.pay=(S.today.pay||0)+Math.round(v); }
+function addPay(v,kind){ if(!S) return; S.today.pay=(S.today.pay||0)+Math.round(v); if(kind==='use') S.today.use=Math.max(0,(S.today.use||0)+Math.round(v)); }   // use＝仕入れ以外の出費（用心棒代・罰金・寄付・家・兵士など）
 // 売上以外の稼ぎ（依頼・求人・賞金・レース・レイドなど）
 function addIncome(v){ if(!S) return; S.today.inc=(S.today.inc||0)+Math.round(v); }
 function myProfit3(){ return S.hist.slice(0,3).reduce((a,h)=>a+(h.sales+(h.inc||0)-h.cost-(h.pay||0)),0); }
 function myTodayNet(){ return S.today.sales+(S.today.inc||0)-(S.today.tax||0)-(S.today.pay||0); }
 function ptAdjNow(){ return (S&&S.ptAdj&&S.ptAdj.per===curPeriod())?(S.ptAdj.v||0):0; }   // 管理人が直接足した点数（その決算のあいだだけ）
-function myPoint(){ return Math.max(0,calcPoint(S.pop,S.wins,myProfit3(),myTodayNet())+ptAdjNow()); }
+function myPoint(){ return Math.max(0,pointOf(S.pop,S.wins,myProfit3(),myTodayNet(),S.today.use||0)+ptAdjNow()); }
 function expSum(){ return Object.values(S.exp||{}).reduce((a,b)=>a+b,0); }
 function mySummaryRow(){ const st=myStat(); return {title:S.title||null,me:true,key:myKey(),name:S.owner,shop:S.shop,money:S.money+S.bank-S.debt,cash:Math.max(0,S.money),dig:S.dig,kao:S.kao,job:S.job,pop:S.pop,wins:S.wins,guild:S.guild,soldiers:S.soldiers,t:Date.now(),
   point:myPoint(),sale:S.today.sales,exps:expSum(),comment:S.comment,found:S.createdAt,rkY:S.rankY||0,st,btype:S.btype,cases:S.cases.map(c=>c&&has(c.no)?{no:c.no,price:c.price,stock:S.stock[c.no]}:null)}; }
 function allShops(){
   return [mySummaryRow()]
     .concat(S.npcs.map(n=>({me:false,npc:true,strong:!!n.strong,warrior:!!n.warrior,tyrant:!!n.tyrant,key:'npc:'+n.id,id:n.id,name:n.owner,shop:n.shop,money:n.money,dig:n.dig+(n.tyrant?(T().nikuDig||0):0),kao:n.kao,job:n.job,pop:Math.min(99,n.pop+(n.tyrant?(T().nikuPop||0):0)),wins:n.wins,guild:n.guild||null,soldiers:0,
-      point:Math.round(calcPoint(n.pop,n.wins,(n.ph||[]).reduce((a,b)=>a+b,0),n.today*0.45)*(n.mult||1))+(n.tyrant?(T().nikuScore||0):0),sale:n.today,exps:0,comment:'',found:S.createdAt,rkY:n.rankY||0,st:totalStat(n.st,null),btype:n.btype,cases:n.cases})));
+      point:Math.round(calcPoint(n.pop,n.wins,(n.ph||[]).reduce((a,b)=>a+b,0),n.today*0.45,NPC_DEN)*(n.mult||1))+(n.tyrant?(T().nikuScore||0):0),sale:n.today,exps:0,comment:'',found:S.createdAt,rkY:n.rankY||0,st:totalStat(n.st,null),btype:n.btype,cases:n.cases})));
 }
 
 // NPCの支出・損失（盗まれた・用心棒代・決闘の賞金など）を点数と資金に反映する
@@ -1522,7 +1532,7 @@ function npcOnline(atDay){
     const tw=T(), nikuB=d.tyrant?{pt:tw.nikuScore||0,pop:tw.nikuPop||0,dig:tw.nikuDig||0}:{pt:0,pop:0,dig:0};
     return {me:false,npc:true,exposed:ex<1,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop:Math.min(99,Math.round(popE)+nikuB.pop),wins,
       dig:Math.max(0,(Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))))+nikuB.dig-((T().npcDigLoss||{})['npc:'+i]||0)),money:(Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3))+(d.warrior?(tw.rikiEarn||0):0)-((tw.npcMoneyLoss||{})['npc:'+i]||0),
-      point:Math.max(0,Math.round(calcPoint(popE,wins,profit3*ex,today*ex-npcLossToday('npc:'+i))*(d.mult||1))+nikuB.pt+(d.warrior?Math.round((tw.rikiPrev||0)/20+(tw.rikiToday||0)/20+((tw.rikiGuardPrev||0)+(tw.rikiGuardToday||0))/50-npcLossToday('npc:'+i)/20):0)),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
+      point:Math.max(0,Math.round(calcPoint(popE,wins,profit3*ex,today*ex-npcLossToday('npc:'+i),NPC_DEN)*(d.mult||1))+nikuB.pt+(d.warrior?Math.round((tw.rikiPrev||0)/20+(tw.rikiToday||0)/20+((tw.rikiGuardPrev||0)+(tw.rikiGuardToday||0))/50-npcLossToday('npc:'+i)/20):0)),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
       st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
   });
 }
@@ -1602,7 +1612,7 @@ function shopSummary(){
     pop:Math.round(S.pop),dig:S.dig,wins:S.wins,soldiers:S.soldiers,guild:S.guild,house:S.house,
     st:{life:t.life,attack:t.attack,defence:t.defence,tech:t.tech},btype:S.btype,weapon:w,
     cases:S.cases.map(c=>c&&has(c.no)&&S.stock[c.no]-resv(c.no)>0?{no:c.no,price:c.price,stock:S.stock[c.no]-resv(c.no)}:null),day:day(),t:Date.now(),
-    point:myPoint(),ptEnd:S.ptEnd||null,pp:{wins:S.wins||0,p3:Math.round(myProfit3()),tn:Math.round(myTodayNet()),per:curPeriod(),base:ptAdjNow(),basePer:curPeriod()},sale:S.today.sales,exps:Math.round(expSum()),found:S.createdAt||0,rkY:S.rankY||0};
+    point:myPoint(),ptEnd:S.ptEnd||null,pp:{wins:S.wins||0,p3:Math.round(myProfit3()),tn:Math.round(myTodayNet()),use:Math.round(S.today.use||0),per:curPeriod(),base:ptAdjNow(),basePer:curPeriod()},sale:S.today.sales,exps:Math.round(expSum()),found:S.createdAt||0,rkY:S.rankY||0};
 }
 let lastPub='', pubBusy=false;
 /* ---------- 代理営業：ログインしていないお店の売上を，ログイン中の人がかわりに計算して街に反映する ----------
@@ -1636,7 +1646,7 @@ function pxStep(d,now){
   let g=0;
   while(from<end && g++<40){
     const per=Math.floor((from+JST)/SETTLE_MS), to=Math.min(end,(per+1)*SETTLE_MS-JST);
-    if(d.pp.per<per){ d.ptEnd={d:d.pp.per,v:d.point||0}; d.pp.p3=Math.round(d.pp.p3*2/3+d.pp.tn); d.pp.tn=0; d.sale=0; d.pp.per=per; if(d.pp.basePer!=null){ d.pp.base=0; d.pp.basePer=per; } d.point=calcPoint(d.pop||0,d.pp.wins,d.pp.p3,0)+(d.pp.base||0); }
+    if(d.pp.per<per){ d.ptEnd={d:d.pp.per,v:d.point||0}; d.pp.p3=Math.round(d.pp.p3*2/3+d.pp.tn); d.pp.tn=0; d.pp.use=0; d.sale=0; d.pp.per=per; if(d.pp.basePer!=null){ d.pp.base=0; d.pp.basePer=per; } d.point=calcPoint(d.pop||0,d.pp.wins,d.pp.p3,0)+(d.pp.base||0); }
     const dt=(to-from)/1000*RATE;
     const L=px.log[per]||(px.log[per]={s:{},y:0});
     (d.cases||[]).forEach((c,idx)=>{ if(!c||!(c.stock>0)) return;
@@ -1647,7 +1657,7 @@ function pxStep(d,now){
   }
   px.at=from; d.px=px; d.act=false;
   const ks=Object.keys(px.log).map(Number).sort((a,b)=>a-b); while(ks.length>20) delete px.log[ks.shift()];
-  d.point=calcPoint(d.pop||0,d.pp.wins,d.pp.p3,d.pp.tn)+(d.pp.base||0);
+  d.point=pointOf(d.pop||0,d.pp.wins,d.pp.p3,d.pp.tn,d.pp.use||0)+(d.pp.base||0);
   return d;
 }
 let pxBusy=false;
@@ -1732,8 +1742,8 @@ function processMail(){
       else if(m.kind==='honor'){ const a=m.amount||10; S.pop=clamp(S.pop+a,0,100); letter(who,face,`領主${who}さまから勲章を授かりました！ お店の評判が広まり，人気が${a}上がりました。`); }
       else if(m.kind==='adpop'){ const a=m.amount||15; S.pop=clamp(S.pop+a,0,100); letter(who,face,`${who}さんが，あなたのお店の広告を出してくれました！ 人気が${a}上がりました。`); }
       else if(m.kind==='rumor'){ const a=m.amount||10; S.pop=clamp(S.pop-a,0,100); letter('街のうわさ好き','kaoguide',`あなたのお店について，よくない噂が広まっているようです…。人気が${a}下がりました。（だれかが禁断の書を使ったのかもしれません）`); }
-      else if(m.kind==='robbed'){ const a=Math.min(m.amount||0,Math.max(0,S.money)); S.money-=a;   /* 銀行の預金は絶対に取られない */ addPay(Math.round(a/50));   /* 盗まれた額の1/50だけ点数が下がる */ letter('店員','kaoguide',`たいへんです！ お店の金庫から${yen(a)}が盗まれてしまいました…。だれかのしわざのようです。`); }
-      else if(m.kind==='stolen'){ const k=Math.min(m.n||0,Math.max(0,(S.stock[m.no]||0)-resv(m.no))); if(k>0){ add(m.no,-k); addPay(Math.round((ITEMS[m.no]?ITEMS[m.no].price:0)*k/50)); } letter('店員','kaoguide',`お店の棚から${ITEMS[m.no]?ITEMS[m.no].name:'品物'}×${k}が盗まれてしまいました…。だれかのしわざのようです。`); }
+      else if(m.kind==='robbed'){ const a=Math.min(m.amount||0,Math.max(0,S.money)); S.money-=a;   /* 銀行の預金は絶対に取られない */ addPay(Math.round(a/50),'use');   /* 盗まれた額の1/50だけ点数が下がる */ letter('店員','kaoguide',`たいへんです！ お店の金庫から${yen(a)}が盗まれてしまいました…。だれかのしわざのようです。`); }
+      else if(m.kind==='stolen'){ const k=Math.min(m.n||0,Math.max(0,(S.stock[m.no]||0)-resv(m.no))); if(k>0){ add(m.no,-k); addPay(Math.round((ITEMS[m.no]?ITEMS[m.no].price:0)*k/50),'use'); } letter('店員','kaoguide',`お店の棚から${ITEMS[m.no]?ITEMS[m.no].name:'品物'}×${k}が盗まれてしまいました…。だれかのしわざのようです。`); }
       else if(m.kind==='gpop'){ S.pop=clamp(S.pop+(m.amount||0),0,100); letter(who,face,`ギルド「${m.gname||''}」の広告が出されました。人気が${m.amount}上がりました！`); }
       else if(m.kind==='time'){ S.time=Math.min(maxTime(),S.time+(m.minutes||0)); letter(who,face,`求人「${m.title||'手伝い'}」を引き受けて，${hm(m.minutes||0)}働いてくれました。持ち時間が増えました。`); }
       else if(m.kind==='wipe'){ NET.db.doc('mail/'+id).delete().catch(()=>{}); try{ localStorage.removeItem(SAVE); }catch(e){} S=null; lastPub=''; try{ localStorage.removeItem(UIDKEY); localStorage.setItem(LOGOUTKEY,'1'); }catch(e){} setFlash('管理人によってお店のデータがリセットされました。新しくお店を開いてください。',1); render(); return; }
@@ -1872,7 +1882,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101707;
+const APP_VER=2026101802;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2331,7 +2341,7 @@ function settle(){
   if(S.bankCount%14===0 && S.bank>0){ const it=Math.min(5000000,Math.round(Math.min(S.bank,100000000)*0.05)); S.bank+=it; letter('銀行','kaofather',`預金利息 ${yen(it)} をお付けしました。${S.bank>100000000?'（利息がつくのは預金¥1億まで・1回¥500万までです）':''}`); }
   if(S.debt>0){
     S.debt=Math.round(S.debt*(AWAY?1.01:1.03)); if(!AWAY) S.debtDays++;
-    if(S.debtDays>20){ const pay=Math.round(S.debt*1.1); S.money-=pay; addPay(pay-S.debt); S.debt=0; S.debtDays=0; letter('銀行','kaofather',`返済期限を過ぎたため ${yen(pay)} を強制回収しました。`); }
+    if(S.debtDays>20){ const pay=Math.round(S.debt*1.1); S.money-=pay; addPay(pay-S.debt,'use'); S.debt=0; S.debtDays=0; letter('銀行','kaofather',`返済期限を過ぎたため ${yen(pay)} を強制回収しました。`); }
   }
   // ドラゴンの体調回復
   (S.dragons||[]).forEach(g=>{ g.cond=Math.min(100,(g.cond||70)+8+Math.round(g.st.he/10)); });
@@ -2340,7 +2350,7 @@ function settle(){
   const tw=T(), focus=tw.manorFocus||'', rentPer=townVal(tw,'manorRent',0);
   let plots=0;
   MANOR.forEach(m=>{ const n=S.manor[m.id]||0; plots+=n; const mul=(m.id===focus?1.5:1)*(tw.lordHarvestP===d?1.3:1); if(n>0) m.out.forEach(([no,q])=>{ const k=Math.round(q*n*mul); add(no,k); mo.push(ITEMS[no].name+'×'+k); }); });
-  if(plots>0 && rentPer>0){ const rent=plots*rentPer; S.money-=rent; addPay(rent); townTx(t=>{ t.fund=(t.fund||0)+rent; t.inToday=(t.inToday||0)+rent; }); mo.push(`（地代 ${yen(rent)} を納めました）`); }
+  if(plots>0 && rentPer>0){ const rent=plots*rentPer; S.money-=rent; addPay(rent,'use'); townTx(t=>{ t.fund=(t.fund||0)+rent; t.inToday=(t.inToday||0)+rent; }); mo.push(`（地代 ${yen(rent)} を納めました）`); }
   if(mo.length) letter('荘園の管理人','kaokeeper','今日の収穫です：'+mo.join('，'));
   // 履歴
   S.hist.unshift({d,sales:S.today.sales,count:S.today.count,cost:cost+hold+gfee+upk+Math.round(S.today.tax||0),pay:Math.round(S.today.pay||0),inc:Math.round(S.today.inc||0),pop:Math.round(S.pop)});
@@ -2918,7 +2928,7 @@ function resetStats(){
   const fee=30000;
   confirmBox(`能力をリセットしますか？<br><small>体力・攻撃・防御・技量を最初の値（HP150・攻50・防40・技50）に戻し，そのぶんを<b>経験値 ${total.toLocaleString()}</b>として返します。<br>あとから好きな能力に振り分けられます。費用：${yen(fee)}</small>`,()=>{
     if(S.money<fee){ setFlash('費用が足りません',1); render(); return; }
-    S.money-=fee; addPay(fee); S.bexp=(S.bexp||0)+total; S.st={...BASE_ST};
+    S.money-=fee; addPay(fee,'use'); S.bexp=(S.bexp||0)+total; S.st={...BASE_ST};
     setFlash(`能力をリセットしました。経験値 ${total.toLocaleString()} を好きな能力に振り分けてください。`); save(); render();
   });
 }
@@ -3211,7 +3221,7 @@ function special(no,i,target,msgs){
     const n=(!isP&&target!=null)?S.npcs[target]:null;
     const pshop=isP?(NET.shops[uid]||{}):null, tname=isP?(pshop.shop||'ある店'):(n?n.shop:'');
     const nw=m=>{ news(m); newsNet(m); };
-    const FINES=[500000,1000000,0,1500000], FINE=FINES[i]||1500000; const payFine=()=>{ S.money-=FINE; addPay(FINE); townTx(t=>{ t.fund=(t.fund||0)+FINE; }); return `罰金${yen(FINE)}を払い，`; };   // 見つかったときの罰金：噂50万・万引き100万・お金を盗む150万（街資金へ）
+    const FINES=[500000,1000000,0,1500000], FINE=FINES[i]||1500000; const payFine=()=>{ S.money-=FINE; addPay(FINE,'use'); townTx(t=>{ t.fund=(t.fund||0)+FINE; }); return `罰金${yen(FINE)}を払い，`; };   // 見つかったときの罰金：噂50万・万引き100万・お金を盗む150万（街資金へ）
     const rumorNpc=(key,ms)=>{ if(NET.online) townTx(t=>{ t.rumor=t.rumor||{}; t.rumor[key]=Date.now()+ms; }); };
     if(i===0){
       if(isP){ sendMail(uid,{kind:'rumor',amount:10}); }
@@ -3222,7 +3232,7 @@ function special(no,i,target,msgs){
       const cs=isP?(pshop.cases||[]).filter(c=>c&&c.stock>0&&ITEMS[c.no]):(n?n.cases.filter(c=>c&&c.stock>0):[]);
       if(cs.length&&Math.random()<0.6){ const c=pick(cs); const k=Math.min(c.stock,1+rnd(3)); if(!isP){ c.stock-=k; npcLose('npc:'+n.id,(c.price||ITEMS[c.no].price)*k,(c.price||ITEMS[c.no].price)*k/50); } add(c.no,k);
         if(isP){ sendMail(uid,{kind:'stolen',no:c.no,n:k}); const v=(ITEMS[c.no]?ITEMS[c.no].price:0)*k;
-          shopDocTx(uid,d=>{ const x=(d.cases||[]).find(z=>z&&z.no===c.no&&z.stock>0); if(x) x.stock=Math.max(0,x.stock-k); shopDocNet(d,-v/50); });
+          shopDocTx(uid,d=>{ const x=(d.cases||[]).find(z=>z&&z.no===c.no&&z.stock>0); if(x) x.stock=Math.max(0,x.stock-k); shopDocNet(d,-v/50,0,v/50); });
           if(NET.shops[uid]){ const x=(NET.shops[uid].cases||[]).find(z=>z&&z.no===c.no&&z.stock>0); if(x) x.stock=Math.max(0,x.stock-k); } }
         msgs.push(`${esc(tname)}から${iname(c.no)}×${k}を盗んだ…`); nw(`【万引き】${tname}で${ITEMS[c.no].name}×${k}が盗まれた！ 犯人はまだ見つかっていない`); }
       else { const fm=payFine(); S.pop=clamp(S.pop-15,0,100); msgs.push(`<span class="red">見つかってしまった！ ${fm}人気も下がった</span>`); nw(`【事件】${S.shop}の店主が${tname}で万引きしようとして捕まった！ 罰金${yen(FINE)}`); } }
@@ -3231,7 +3241,7 @@ function special(no,i,target,msgs){
       const base=isP?Math.max(0,pshop.cash!=null?pshop.cash:0):(n?Math.max(0,NET.online?((npcOnline().find(r=>r.key==='npc:'+n.id)||{}).money||0):(n.money||300000)):0);
       if(base>0&&Math.random()<0.5){ const g=Math.min(3000000,Math.max(10000,Math.round(base*rr(0.03,0.08)/1000)*1000));
         S.money+=g; addIncome(Math.round(g/50));   // 盗んだお金は1/50だけ点数に
-        if(isP){ sendMail(uid,{kind:'robbed',amount:g}); shopDocTx(uid,d=>{ d.money=(d.money||0)-g; if(d.cash!=null) d.cash=Math.max(0,d.cash-g); shopDocNet(d,-g/50); }); } else if(n) npcLose('npc:'+n.id,g,g/50);
+        if(isP){ sendMail(uid,{kind:'robbed',amount:g}); shopDocTx(uid,d=>{ d.money=(d.money||0)-g; if(d.cash!=null) d.cash=Math.max(0,d.cash-g); shopDocNet(d,-g/50,0,g/50); }); } else if(n) npcLose('npc:'+n.id,g,g/50);
         msgs.push(`${esc(tname)}の金庫から${yen(g)}を盗み出した…`); nw(`【事件】${tname}の金庫から${yen(g)}が盗まれた！ 犯人はまだ見つかっていない`); }
       else { const fm=payFine(); S.pop=clamp(S.pop-15,0,100); msgs.push(`<span class="red">見つかってしまった！ ${fm}人気も下がった</span>`); nw(`【事件】${S.shop}の店主が${tname}の金庫を狙って捕まった！ 罰金${yen(FINE)}`); } }
     if(i===2){
@@ -3440,7 +3450,7 @@ SCREENS.sweep=function(){
 function sweep(m){
   if(m===0){ const t=Math.max(10,Math.round(S.trash*1.5)); if(!spendTime(t)){ setFlash('持ち時間が足りません',1); render(); return; } S.trash=0; setFlash('お店がピカピカになりました！'); save(); render(); return; }
   const c=sweepFee(); if(S.money<c){ setFlash('資金が足りません',1); render(); return; }
-  S.money-=c; addPay(c); S.trash=0; rikiEarn(c);
+  S.money-=c; addPay(c,'use'); S.trash=0; rikiEarn(c);
   setFlash(`豪将リキーヤ「よし，ピカピカだ！」（${yen(c)}）`); save(); render();
 }
 // リキーヤの稼ぎ（掃除代など）
@@ -3649,12 +3659,12 @@ function marketSurvey(){
   <div class="c"><a onclick="go('street')">商店通りへ戻る</a></div>`;
 }
 // 他のお店の公開データ（shops/uid）の今期の利益を変えて，点数をその場で計算し直す
-function shopDocNet(d,delta,sale){
+function shopDocNet(d,delta,sale,useAdd){
   const per=curPeriod();
   if(!d.pp) d.pp={wins:d.wins||0,p3:0,tn:0,per:Math.floor(((d.t||Date.now())+JST)/SETTLE_MS),base:Math.max(0,(d.point||0)-calcPoint(d.pop||0,d.wins||0,0,0))};
-  if(d.pp.per<per){ d.ptEnd={d:d.pp.per,v:d.point||0}; d.pp.p3=Math.round(d.pp.p3*2/3+d.pp.tn); d.pp.tn=0; d.sale=0; d.pp.per=per; if(d.pp.basePer!=null){ d.pp.base=0; d.pp.basePer=per; } }
+  if(d.pp.per<per){ d.ptEnd={d:d.pp.per,v:d.point||0}; d.pp.p3=Math.round(d.pp.p3*2/3+d.pp.tn); d.pp.tn=0; d.pp.use=0; d.sale=0; d.pp.per=per; if(d.pp.basePer!=null){ d.pp.base=0; d.pp.basePer=per; } }
   if(sale) d.sale=(d.sale||0)+sale;
-  d.pp.tn=(d.pp.tn||0)+Math.round(delta); d.point=Math.max(0,calcPoint(d.pop||0,d.pp.wins||0,d.pp.p3||0,d.pp.tn)+(d.pp.base||0));
+  d.pp.tn=(d.pp.tn||0)+Math.round(delta); if(useAdd) d.pp.use=Math.max(0,(d.pp.use||0)+Math.round(useAdd)); d.point=Math.max(0,pointOf(d.pop||0,d.pp.wins||0,d.pp.p3||0,d.pp.tn,d.pp.use||0)+(d.pp.base||0));
   return d;
 }
 let SHOPQ=Promise.resolve();
@@ -3760,7 +3770,7 @@ async function takeJob(k){
     });
     if(r.ret!=='ok'){ setFlash({gone:'この求人はもう終わっています',closed:'この求人は締め切られました',noitem:'品物が足りません',notime:'持ち時間が足りません',nomoney:'代金が足りません',full:'持ち時間がいっぱいで受け取れません'}[r.ret]||'引き受けられませんでした',1); render(); return; }
     const x=r.x;
-    if(x.kind==='offer'){ S.money-=x.reward; addPay(x.reward); S.time=Math.min(maxTime(),S.time+x.hours*60); rikiEarn(x.reward);
+    if(x.kind==='offer'){ S.money-=x.reward; addPay(x.reward,'use'); S.time=Math.min(maxTime(),S.time+x.hours*60); rikiEarn(x.reward);
       news(`${S.owner}（${S.shop}）が豪将リキーヤに手伝いを頼んだ`); setFlash(`豪将リキーヤ「任せろ！」 持ち時間が${x.hours}時間ふえました（代金${yen(x.reward)}）`); save(); render(); return; }
     if(x.kind==='item'){ add(x.no,-x.n); if(!String(x.poster).startsWith('npc:')) sendMail(x.poster,{kind:'item',no:x.no,n:x.n,note:`求人「${x.title}」の納品（${S.owner}より）`}); }
     else { S.time-=x.hours*60; if(!String(x.poster).startsWith('npc:')) sendMail(x.poster,{kind:'time',minutes:x.hours*60,title:x.title}); }
@@ -3793,7 +3803,7 @@ async function checkMyJobs(){
 function rikiHelp(){ const R=S.work&&S.work.riki; if(!R||R.done) return;
   if(S.money<R.price){ setFlash('代金が足りません',1); render(); return; }
   if(S.time+R.h*60>maxTime()){ setFlash('持ち時間がいっぱいで受け取れません',1); render(); return; }
-  S.money-=R.price; addPay(R.price); S.time+=R.h*60; R.left=(R.left==null?1:R.left)-1; R.done=R.left<=0; rikiEarn(R.price);
+  S.money-=R.price; addPay(R.price,'use'); S.time+=R.h*60; R.left=(R.left==null?1:R.left)-1; R.done=R.left<=0; rikiEarn(R.price);
   setFlash(`豪将リキーヤ「任せろ！」 持ち時間が${R.h}時間ふえました（代金${yen(R.price)}）`); save(); render(); }
 function doWork(i){
   const j=S.work.jobs[i]; if(!spendTime(j.t)){ setFlash(`持ち時間が足りません（必要：${hm(j.t)}）`,1); render(); return; }
@@ -4027,6 +4037,7 @@ const GUIDE=[
   <tr><th>下がる</th><td>どこにでもある品を高く売る／棚が空っぽ／何も売れない／ごみが溜まる／決闘に負ける（−1）／最上級の魔物に挑む（−2，勝てば1戻る）</td></tr></table>
   商いだけなら人気は60前後で落ち着きます。それ以上はギルドや広告の力も借りましょう。前回の変化の理由は[収支]で見られます。`,'⭐','shop'],
  ['ランキングの点数',`点数は「<b>人気 × 利益</b>」で決まります。利益＝売上＋そのほかの収入−税−経費−仕入れ。人気が0でも，利益があれば少しだけ点数がつきます。<br>
+  利益は少しでも出せば点数がぐんと伸びますが，<b>稼ぐほど伸びにくく</b>なり，<b>1位を取った回数が多いほど点数がつきにくく</b>なります（元の商人物語と同じ）。上位を守るのは大変，下からは追いつきやすい仕組みです。仕入れ以外のむだな出費は，上位でもしっかり点数が下がります。<br>
   バトルの賞金は点数には1割しか入りません。<b>商いで稼ぐのがいちばんの近道</b>です。<br>
   決算ごとに<b>1位は爵位ポイント+1，2位は¥10万とギフト券5枚，3位は¥5万とギフト券3枚，4位はギフト券2枚，5位はギフト券1枚</b>がもらえます。`,'🏆','shop'],
  ['お店を大きくするには',`・<b>陳列棚キット</b>で棚を増やすと，たくさん並べられます（棚の維持費がかかります）。8つ目の「特等席」は2倍売れます<br>
@@ -4386,7 +4397,7 @@ function lordPay(){
 }
 function lordSupport(){
   const v=clamp(parseInt($('#lSup').value)||0,0,1000000); if(!v) return; if(S.money<=200000||S.money<v){ setFlash('資金が足りません',1); render(); return; }
-  S.money-=v; addPay(v); save();
+  S.money-=v; addPay(v,'use'); save();
   townTx(t=>{ t.fund=(t.fund||0)+v; }).then(()=>{ news(`${S.owner}（${S.shop}）が街に${yen(v)}を資金援助しました`); setFlash(`街に${yen(v)}を援助しました`); render(); });
 }
 SCREENS.manor=function(){
@@ -4442,7 +4453,7 @@ function guildOffline(){
   return h;
 }
 function joinGuild(id){ S.guild=id; setFlash(`「${guildInfo(id).name}」に加盟しました`); save(); render(); }
-function makeGuild(){ if(S.money<GUILD_COST){ setFlash('資金が足りません',1); render(); return; } S.money-=GUILD_COST; addPay(GUILD_COST); S.myguild={name:$('#gName').value.trim()||'新ギルド',fee:clamp(+$('#gFee').value||0,0,10)}; S.guild='my'; news(`${S.owner}がギルド「${S.myguild.name}」を結成した`); setFlash('ギルドを結成しました！'); save(); render(); }
+function makeGuild(){ if(S.money<GUILD_COST){ setFlash('資金が足りません',1); render(); return; } S.money-=GUILD_COST; addPay(GUILD_COST,'use'); S.myguild={name:$('#gName').value.trim()||'新ギルド',fee:clamp(+$('#gFee').value||0,0,10)}; S.guild='my'; news(`${S.owner}がギルド「${S.myguild.name}」を結成した`); setFlash('ギルドを結成しました！'); save(); render(); }
 function inviteGuild(){ if(!spendTime(120)){ setFlash('持ち時間が足りません',1); render(); return; } const c=S.npcs.filter(n=>n.guild!=='my'); if(!c.length) return; const n=pick(c); if(Math.random()<0.25+n.friend*0.03+S.dig*0.01){ n.guild='my'; setFlash(`${n.shop}がギルドに加盟してくれた！`); } else setFlash(`${n.shop}に断られてしまった…`); save(); render(); }
 
 /* ---------- オンラインのギルド ---------- */
@@ -4535,7 +4546,7 @@ function guildTx(id,fn){
 function syncGuild(){
   if(!S||!NET.online) return;
   setTimeout(syncMyName,0);
-  if(S.myguild){ S.money+=500000; addPay(-500000); letter('ギルド受付','kaoguild',`以前に作ったギルド「${S.myguild.name}」は，オンラインのギルドに作り直しになりました。結成費用¥500,000をお返しします。【施設】→[ギルド]から改めて結成してください。`); S.myguild=null; if(S.guild==='my') S.guild=null; save(); }
+  if(S.myguild){ S.money+=500000; addPay(-500000,'use'); letter('ギルド受付','kaoguild',`以前に作ったギルド「${S.myguild.name}」は，オンラインのギルドに作り直しになりました。結成費用¥500,000をお返しします。【施設】→[ギルド]から改めて結成してください。`); S.myguild=null; if(S.guild==='my') S.guild=null; save(); }
   if(['a','b','my'].includes(S.guild)){ S.guild=null; save(); }
   if(S.guild && !['a','b','my'].includes(S.guild)){
     const g=NET.guilds[S.guild];
@@ -4706,12 +4717,12 @@ async function guildCreate(){
   if(Object.values(NET.guilds).some(g=>g.name===name)){ setFlash('同じ名前のギルドがあります',1); render(); return; }
   if(S.money<GUILD_COST){ setFlash('資金が足りません',1); render(); return; }
   let ic=(document.querySelector('input[name=gIcon]:checked')||{}).value||'guildprize'; const up=ic==='__upload'&&NEW_GICON?NEW_GICON:null; if(ic==='__upload'&&!up) ic='guildprize';
-  S.money-=GUILD_COST; addPay(GUILD_COST); save();
+  S.money-=GUILD_COST; addPay(GUILD_COST,'use'); save();
   try{
     const ref=await NET.db.collection('guilds').add({name,leader:NET.uid,leaderName:S.owner,fee:+$('#gFee').value,open:$('#gOpen').value==='1',icon:ic,msg:'',fund:0,exp:0,members:{[NET.uid]:me4g()},reqs:{},board:[],t:Date.now()});
     S.guild=ref.id; if(up){ IMG['gicon-'+ref.id]=up; await guildTx(ref.id,x=>{ x.iconData=up; x.icon='gicon-'+ref.id; }); NEW_GICON=null; }
     gTab=1; news(`${S.owner}（${S.shop}）がギルド「${name}」を結成した！`); setFlash(`ギルド「${esc(name)}」を結成しました！`);
-  }catch(e){ netErr(e); S.money+=GUILD_COST; addPay(-GUILD_COST); setFlash('結成に失敗しました',1); }
+  }catch(e){ netErr(e); S.money+=GUILD_COST; addPay(-GUILD_COST,'use'); setFlash('結成に失敗しました',1); }
   save(); render();
 }
 async function guildJoin(k){
@@ -4732,7 +4743,7 @@ function guildLeave(){
 }
 function guildDonate(){
   const v=Math.max(0,parseInt($('#gDon').value)||0); if(!v) return; if(S.money<v){ setFlash('資金が足りません',1); render(); return; }
-  S.money-=v; addPay(v); save();
+  S.money-=v; addPay(v,'use'); save();
   guildTx(S.guild,g=>{ g.fund=(g.fund||0)+v; g.exp=(g.exp||0)+v; const gpv=Math.floor(v/10000); g.gp=(g.gp||0)+gpv; g.gpTotal=(g.gpTotal||0)+gpv; g.board.push({name:S.owner,kao:S.kao,d:day(),m:`金庫に${yen(v)}を寄付しました`,t:Date.now()}); g.board=g.board.slice(-30); }).then(r=>{ if(r==='error'||r==='gone'){ S.money+=v; addPay(-v); setFlash('寄付に失敗しました',1); } else setFlash(`${yen(v)}を寄付しました`); save(); render(); });
 }
 function guildPost(){ const m=$('#gMsg').value.trim(); if(!m) return; guildTx(S.guild,g=>{ g.board.push({name:S.owner,kao:S.kao,d:day(),m,t:Date.now()}); g.board=g.board.slice(-30); }).then(()=>render()); }
@@ -4817,7 +4828,7 @@ function runRace(){
       clearInterval(t); race.state='done';
       const b=race.bet;
       if(b.i===fin){ const w=Math.round(b.v*race.sl[fin].odds); S.money+=w; addIncome(Math.round((w-b.v)*0.1)); race.result=`${fin+1}番の勝利！ 的中！ ${yen(w)}の払い戻し！`; if(w>=100000) news(`${S.shop}がスライムレースで大穴を当てた！`); }
-      else { race.result=`${fin+1}番の勝利！ 残念，はずれ…`; addPay(Math.round(b.v*0.1)); }
+      else { race.result=`${fin+1}番の勝利！ 残念，はずれ…`; addPay(Math.round(b.v*0.1),'use'); }
       save(); render();
     }
   },120);
@@ -4877,7 +4888,7 @@ function drBuy(){
   if(S.dragons.length>=3){ setFlash('ドラゴンは3頭までです',1); render(); return; }
   if(S.money<500000){ setFlash('資金が足りません',1); render(); return; }
   const name=($('#drName').value.trim()||pick(DR_NPCNAMES)).slice(0,10), color=+$('#drCol').value;
-  S.money-=500000; addPay(500000);
+  S.money-=500000; addPay(500000,'use');
   const st={}; DR_STATS.forEach(([k])=>st[k]=25+rnd(31));
   S.dragons.push({id:Math.random().toString(36).slice(2,9),name,color,st,cond:80,born:curPeriod(),wins:0,runs:0,earn:0});
   news(`${S.owner}（${S.shop}）がドラゴン「${name}」を購入した`); setFlash(`ドラゴン「${esc(name)}」がやって来ました！`); save(); render();
@@ -4886,14 +4897,14 @@ function drTrain(i){
   const g=S.dragons[i], k=$('#drT'+i).value;
   if(S.money<20000){ setFlash('資金が足りません',1); render(); return; }
   if(!spendTime(60)){ setFlash('持ち時間が足りません',1); render(); return; }
-  S.money-=20000; addPay(20000);
+  S.money-=20000; addPay(20000,'use');
   const up=Math.max(1,Math.round((1+rnd(4))*(100-g.st[k])/50)); g.st[k]=Math.min(100,g.st[k]+up); g.cond=Math.max(0,g.cond-5);
   setFlash(`${esc(g.name)}の${DR_STATS.find(x=>x[0]===k)[1]}が${up}上がった！（体調-5）`); save(); render();
 }
 function drRetire(i){ const g=S.dragons[i]; confirmBox(`${esc(g.name)}を引退させますか？`,()=>{ S.dragons.splice(i,1); S.dragonsRet.push(g); news(`ドラゴン「${g.name}」（${S.shop}）が引退した。通算${g.runs||0}戦${g.wins||0}勝`); setFlash(`${esc(g.name)}は引退しました。おつかれさま！`); save(); render(); }); }
 function drBreed(i){
   const p=S.dragonsRet[i]; if(S.dragons.length>=3||S.money<200000){ setFlash(S.dragons.length>=3?'牧場がいっぱいです':'資金が足りません',1); render(); return; }
-  S.money-=200000; addPay(200000); p.breedDay=curPeriod();
+  S.money-=200000; addPay(200000,'use'); p.breedDay=curPeriod();
   const st={}; DR_STATS.forEach(([k])=>st[k]=Math.min(90,Math.round((p.st[k]+30+rnd(31))/2)+Math.min(8,p.wins||0)));
   const name=(p.name.slice(0,6)+'ジュニア').slice(0,10);
   S.dragons.push({id:Math.random().toString(36).slice(2,9),name,color:p.color,st,cond:80,born:curPeriod(),wins:0,runs:0,earn:0,parent:p.name});
@@ -4911,7 +4922,7 @@ async function drEnter(kind){
   let r;
   if(NET.online) r=await dbTx('drace/'+id,fn).catch(e=>{ netErr(e); return {ret:'err'}; });
   else { r=fn(S.draceLocal[id]); if(r.set) S.draceLocal[id]=r.set; }
-  if(r.ret==='ok'){ S.money-=K.fee; addPay(K.fee); setFlash(`${esc(g.name)}を${K.name}（${fmtReal(raceTime(d))}の決算のとき）に出走登録しました！`); }
+  if(r.ret==='ok'){ S.money-=K.fee; addPay(K.fee,'use'); setFlash(`${esc(g.name)}を${K.name}（${fmtReal(raceTime(d))}の決算のとき）に出走登録しました！`); }
   else setFlash({dup:'そのドラゴンはもう登録済みです',full:'出走枠がいっぱいです',done:'締め切られました'}[r.ret]||'登録できませんでした',1);
   save(); render();
 }
@@ -5042,7 +5053,7 @@ function hireSoldier(){
   const n=Math.max(1,parseInt($('#soN').value)||0), c=n*1000;
   if(S.money<c){ setFlash('資金が足りません',1); render(); return; }
   if(!spendTime(10)){ setFlash('持ち時間が足りません',1); render(); return; }
-  S.money-=c; addPay(c); S.soldiers=(S.soldiers||0)+n; setFlash(`兵士を${n}人雇いました（${yen(c)}）`); save(); render();
+  S.money-=c; addPay(c,'use'); S.soldiers=(S.soldiers||0)+n; setFlash(`兵士を${n}人雇いました（${yen(c)}）`); save(); render();
 }
 function fireSoldier(){ const n=Math.min(S.soldiers||0,Math.max(1,parseInt($('#soN').value)||0)); S.soldiers-=n; setFlash(`兵士を${n}人解雇しました`); save(); render(); }
 function soldierTo(where){
@@ -5069,7 +5080,7 @@ function assault(){
     setFlash((logs&&logs.length)?logs.join('<br>'):'戦いは起こらなかった'); save(); render();
   });
 }
-function train(){ if(S.money<2000){ setFlash('資金が足りません',1); render(); return; } if(!spendTime(120)){ setFlash('持ち時間が足りません',1); render(); return; } S.money-=2000; addPay(2000); const k=pick(['life','attack','defence','tech']); const v=k==='life'?3+rnd(4):1+rnd(2); S.st[k]+=v; setFlash(`訓練した！${{life:'HP',attack:'攻撃',defence:'防御',tech:'技量'}[k]}が${v}上がった`); save(); render(); }
+function train(){ if(S.money<2000){ setFlash('資金が足りません',1); render(); return; } if(!spendTime(120)){ setFlash('持ち時間が足りません',1); render(); return; } S.money-=2000; addPay(2000,'use'); const k=pick(['life','attack','defence','tech']); const v=k==='life'?3+rnd(4):1+rnd(2); S.st[k]+=v; setFlash(`訓練した！${{life:'HP',attack:'攻撃',defence:'防御',tech:'技量'}[k]}が${v}上がった`); save(); render(); }
 function fightRebel(){ return raidAttack(); if(!spendTime(180)){ setFlash('持ち時間が足りません',1); render(); return; } startBattle(9,null); }
 
 SCREENS.hometown=function(){
@@ -5088,7 +5099,7 @@ SCREENS.hometown=function(){
   <div class="c"><big>ご近所</big></div>
   <div class="c">${S.npcs.map(n=>`<span style="display:inline-block;margin:3px;text-align:center">${im(pick(['house1a','house1b','house2a','house2b']),'','style="height:40px"')}<br><small>${esc(n.owner)}</small></span>`).join('')}</div>`;
 };
-function buyHouse(i){ const h=HOUSES[i]; if(S.money<h.price){ setFlash('資金が足りません',1); render(); return; } S.money-=h.price; addPay(h.price); for(let k=S.house+1;k<=i;k++) S.dig+=(HOUSES[k].dig||0); S.house=i; setFlash(`${h.name}に引っ越しました！`); news(`${S.owner}が${h.name}を購入した`); save(); render(); }
+function buyHouse(i){ const h=HOUSES[i]; if(S.money<h.price){ setFlash('資金が足りません',1); render(); return; } S.money-=h.price; addPay(h.price,'use'); for(let k=S.house+1;k<=i;k++) S.dig+=(HOUSES[k].dig||0); S.house=i; setFlash(`${h.name}に引っ越しました！`); news(`${S.owner}が${h.name}を購入した`); save(); render(); }
 SCREENS.bank=function(){
   const worth=S.money+S.bank;
   const maxDep=Math.max(0,Math.floor(worth*0.7)-S.bank);
@@ -5299,9 +5310,9 @@ function sendDwarf(){
 function sendMoney(){
   const r=recip($('#smTo').value), a=Math.max(0,parseInt($('#smA').value)||0);
   if(!a) return; if(a>S.money*0.5){ setFlash('資金の50%までしか送金できません',1); render(); return; }
-  if(r.uid){ S.money-=a; addPay(a); sendMail(r.uid,{kind:'money',amount:a,note:`${S.owner}（${S.shop}）からの金一封`}); setFlash(`${yen(a)}を送金しました`); save(); render(); return; }
+  if(r.uid){ S.money-=a; addPay(a,'use'); sendMail(r.uid,{kind:'money',amount:a,note:`${S.owner}（${S.shop}）からの金一封`}); setFlash(`${yen(a)}を送金しました`); save(); render(); return; }
   const n=r.npc;
-  S.money-=a; addPay(a); n.money+=a; n.friend+=Math.ceil(a/10000);
+  S.money-=a; addPay(a,'use'); n.money+=a; n.friend+=Math.ceil(a/10000);
   letter(n.owner,'kao'+n.kao,`${yen(a)}の金一封，ありがたく頂戴しました！`);
   if(n.friend>=5 && Math.random()<0.5){ const g=pick(n.pool); const k=1+rnd(3); add(g,k); letter(n.owner,'kao'+n.kao,`お礼に${ITEMS[g].name}×${k}を贈ります！`); n.friend=0; }
   setFlash(`${n.owner}に${yen(a)}を送金しました`); save(); render();
@@ -5569,14 +5580,14 @@ function adminGiveBox(k){
 }
 // 付与したときの点数の見込み（その店のいまの成績から計算）
 function adminPtInfo(key){
-  if(key===myKey()&&S) return {pop:S.pop,wins:S.wins||0,p3:myProfit3(),tn:myTodayNet(),base:ptAdjNow()};
+  if(key===myKey()&&S) return {pop:S.pop,wins:S.wins||0,p3:myProfit3(),tn:myTodayNet(),use:S.today.use||0,base:ptAdjNow()};
   const d=NET.shops[key]; if(!d) return null; const per=curPeriod(), pp=d.pp||{};
   const same=pp.per===per;
-  return {pop:d.pop||0,wins:pp.wins!=null?pp.wins:(d.wins||0),p3:same?(pp.p3||0):Math.round((pp.p3||0)*2/3+(pp.tn||0)),tn:same?(pp.tn||0):0,base:same&&pp.basePer!=null?(pp.base||0):0};
+  return {pop:d.pop||0,wins:pp.wins!=null?pp.wins:(d.wins||0),p3:same?(pp.p3||0):Math.round((pp.p3||0)*2/3+(pp.tn||0)),tn:same?(pp.tn||0):0,use:same?(pp.use||0):0,base:same&&pp.basePer!=null?(pp.base||0):0};
 }
 function adminPtPreviewText(key,sale,pt){
   const x=adminPtInfo(key); if(!x) return '';
-  const now=Math.max(0,calcPoint(x.pop,x.wins,x.p3,x.tn)+x.base), aft=Math.max(0,calcPoint(x.pop,x.wins,x.p3,x.tn+sale)+x.base+pt);
+  const now=Math.max(0,pointOf(x.pop,x.wins,x.p3,x.tn,x.use)+x.base), aft=Math.max(0,pointOf(x.pop,x.wins,x.p3,x.tn+sale,x.use)+x.base+pt);
   return `いまの点数 <b>${now.toLocaleString()}</b> → 付与後 <b>${aft.toLocaleString()}</b>（${aft-now>=0?'+':''}${(aft-now).toLocaleString()}点）`;
 }
 function adminPtPreview(k){ const key=REFS[k], e=$('#agPv'); if(!e||key==='*all*') return; e.innerHTML=adminPtPreviewText(key,parseInt($('#agSale').value)||0,parseInt($('#agPt').value)||0); }
