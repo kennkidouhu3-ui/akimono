@@ -1424,7 +1424,7 @@ function npcOnline(atDay){
     const tw=T(), nikuB=d.tyrant?{pt:tw.nikuScore||0,pop:tw.nikuPop||0,dig:tw.nikuDig||0}:{pt:0,pop:0,dig:0};
     return {me:false,npc:true,exposed:ex<1,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop:Math.min(99,Math.round(popE)+nikuB.pop),wins,
       dig:Math.max(0,(Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))))+nikuB.dig-((T().npcDigLoss||{})['npc:'+i]||0)),money:(Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3))+(d.warrior?(tw.rikiEarn||0):0)-((tw.npcMoneyLoss||{})['npc:'+i]||0),
-      point:Math.round(calcPoint(popE,wins,profit3*ex,today*ex-npcLossToday('npc:'+i))*(d.mult||1))+nikuB.pt+(d.warrior?Math.round((tw.rikiPrev||0)/20+(tw.rikiToday||0)/20+((tw.rikiGuardPrev||0)+(tw.rikiGuardToday||0))/50):0),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
+      point:Math.max(0,Math.round(calcPoint(popE,wins,profit3*ex,today*ex-npcLossToday('npc:'+i))*(d.mult||1))+nikuB.pt+(d.warrior?Math.round((tw.rikiPrev||0)/20+(tw.rikiToday||0)/20+((tw.rikiGuardPrev||0)+(tw.rikiGuardToday||0))/50-npcLossToday('npc:'+i)/20):0)),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
       st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
   });
 }
