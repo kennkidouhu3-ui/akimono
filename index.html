@@ -1658,6 +1658,7 @@ function processMail(){
       else if(m.kind==='raidrew'){ applyRaidRew(m); }
       else if(m.kind==='npcduel'){ applyNpcDuel(m); }
       else if(m.kind==='admin'){ applyAdmin(m); }
+      else if(m.kind==='adpop'){ const a=m.amount||15; S.pop=clamp(S.pop+a,0,100); letter(who,face,`${who}さんが，あなたのお店の広告を出してくれました！ 人気が${a}上がりました。`); }
       else if(m.kind==='rumor'){ const a=m.amount||10; S.pop=clamp(S.pop-a,0,100); letter('街のうわさ好き','kaoguide',`あなたのお店について，よくない噂が広まっているようです…。人気が${a}下がりました。（だれかが禁断の書を使ったのかもしれません）`); }
       else if(m.kind==='robbed'){ const a=Math.min(m.amount||0,Math.max(0,S.money)); S.money-=a; addPay(Math.round(a/50));   /* 盗まれた額の1/50だけ点数が下がる */ letter('店員','kaoguide',`たいへんです！ お店の金庫から${yen(a)}が盗まれてしまいました…。だれかのしわざのようです。`); }
       else if(m.kind==='stolen'){ const k=Math.min(m.n||0,Math.max(0,(S.stock[m.no]||0)-resv(m.no))); if(k>0){ add(m.no,-k); addPay(Math.round((ITEMS[m.no]?ITEMS[m.no].price:0)*k/50)); } letter('店員','kaoguide',`お店の棚から${ITEMS[m.no]?ITEMS[m.no].name:'品物'}×${k}が盗まれてしまいました…。だれかのしわざのようです。`); }
@@ -2998,7 +2999,7 @@ function chooseTarget(no,i,t){
   const rows=[];
   const done=tg=>no===80&&duelCount(tg)>=DUEL_LIMIT;
   const btn=(tg,ref)=>done(tg)?'<small class="note">今回は<br>対戦済み</small>':`<button onclick="pickTarget(${ref},${no},${i},${t})">選ぶ</button>`;
-  if((no===80||(no===65&&i!==2)) && NET.online) playerShops().filter(p=>no===80||!p.idle).forEach(p=>rows.push(`<tr><td>${kao(p.kao)}</td><td>${esc(p.shop)}<br><small>${esc(p.name)}（プレイヤー）</small></td><td>${btn('p:'+p.uid,R('p:'+p.uid))}</td></tr>`));
+  if((no===80||(no===65&&i!==2)||(no===62&&i===1)) && NET.online) playerShops().filter(p=>no===80||!p.idle).forEach(p=>rows.push(`<tr><td>${kao(p.kao)}</td><td>${esc(p.shop)}<br><small>${esc(p.name)}（プレイヤー）</small></td><td>${btn('p:'+p.uid,R('p:'+p.uid))}</td></tr>`));
   S.npcs.forEach(n=>rows.push(`<tr><td>${kao(n.kao)}</td><td>${esc(n.shop)}${n.strong?' <span class="npctag strong">強豪</span>':''}${n.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${n.tyrant?' <span class=\"npctag strong\" style=\"background:#3a1010;border-color:#300;color:#fff\">暴君</span>':''}<br><small>${esc(n.owner)}${no===80&&n.st?`・HP${n.st.life} 攻${n.st.attack}`:''}</small></td><td>${btn(n.id,R(n.id))}</td></tr>`));
   modal(`<div><big>相手を選ぶ</big></div>${no===80?`<div class="c note">同じ相手とは，決算ごとに${DUEL_LIMIT}回まで決闘できます。</div>`:''}<div class="tbl"><table class="t">${rows.join('')}</table></div><div class="c"><button onclick="closeModal()">やめる</button></div>`);
 }
@@ -3092,7 +3093,8 @@ function special(no,i,target,msgs){
   else if(no===62){
     markAd(i);
     if(i===0){ S.pop=clamp(S.pop+Math.max(3,Math.round(20*(1-S.pop/110))),0,100); msgs.push('街中に広告を出した！人気が上がった'); }
-    if(i===1){ const n=S.npcs[target]; n.pop=clamp(n.pop+20,0,100); npcPopChange('npc:'+n.id,20); n.friend+=5; msgs.push(`${esc(n.shop)}の広告を出してあげた`); letter(n.owner,'kao'+n.kao,'広告を出してくださったそうで，ありがとうございます！'); }
+    if(i===1&&typeof target==='string'&&target.startsWith('p:')){ const uid=target.slice(2), p=NET.shops[uid]||{}; sendMail(uid,{kind:'adpop',amount:15}); msgs.push(`${esc(p.shop||'お店')}の広告を出してあげた（相手の人気+15）`); const m=`${S.shop}が${p.shop||'お店'}の広告を出してあげた！`; news(m); newsNet(m); }
+    else if(i===1){ const n=S.npcs[target]; n.pop=clamp(n.pop+20,0,100); npcPopChange('npc:'+n.id,20); n.friend+=5; msgs.push(`${esc(n.shop)}の広告を出してあげた`); letter(n.owner,'kao'+n.kao,'広告を出してくださったそうで，ありがとうございます！'); }
     if(i===2){ const gi=guildInfo(S.guild); if(gi&&gi.g){ Object.keys(gi.g.members||{}).forEach(u=>{ if(u===NET.uid) S.pop=clamp(S.pop+8,0,100); else sendMail(u,{kind:'gpop',amount:8,gname:gi.name}); }); msgs.push(`ギルド「${esc(gi.name)}」の広告を出した！ 加盟店みんなの人気が上がった`); } else if(gi){ S.pop=clamp(S.pop+8,0,100); S.npcs.filter(n=>n.guild===S.guild).forEach(n=>n.pop=clamp(n.pop+8,0,100)); msgs.push('ギルドの広告を出した！'); } else msgs.push('ギルドに所属していないので効果がなかった…'); }
   }
   else if(no===65){
