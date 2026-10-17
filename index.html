@@ -1016,7 +1016,7 @@ async function checkNiku(){
       const guard=Math.random()<0.3; let fee=0;
       if(guard){ const isNpc=String(n.target.key).startsWith('npc:'); const row=(NET.online?ranking():allShops()).find(r=>r.key===n.target.key)||{};
         fee=isNpc?300000:Math.min(5000000,Math.max(100000,Math.round((row.money||0)*0.08)));
-        t.rikiGuard=(t.rikiGuard||0)+1; t.rikiEarn=(t.rikiEarn||0)+fee; t.rikiToday=(t.rikiToday||0)+fee; }
+        t.rikiGuard=(t.rikiGuard||0)+1; t.rikiEarn=(t.rikiEarn||0)+fee; t.rikiGuardToday=(t.rikiGuardToday||0)+fee; }   // 用心棒代は最終的に1/50が点数になる（¥50で1点）
       const win=guard||def>=pow;
       // 勝ったら（撃退されなかったら）点数・人気・爵位を奪う
       let steal=null;
@@ -1406,7 +1406,7 @@ function npcOnline(atDay){
     const tw=T(), nikuB=d.tyrant?{pt:tw.nikuScore||0,pop:tw.nikuPop||0,dig:tw.nikuDig||0}:{pt:0,pop:0,dig:0};
     return {me:false,npc:true,exposed:ex<1,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop:Math.min(99,Math.round(pop*ex)+nikuB.pop),wins,
       dig:Math.max(0,(Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))))+nikuB.dig-((T().npcDigLoss||{})['npc:'+i]||0)),money:(Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3))+(d.warrior?(tw.rikiEarn||0):0),
-      point:Math.round(calcPoint(pop*ex,wins,profit3*ex,today*ex)*(d.mult||1))+nikuB.pt+(d.warrior?Math.round((tw.rikiPrev||0)/20+(tw.rikiToday||0)/20):0),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
+      point:Math.round(calcPoint(pop*ex,wins,profit3*ex,today*ex)*(d.mult||1))+nikuB.pt+(d.warrior?Math.round((tw.rikiPrev||0)/20+(tw.rikiToday||0)/20+((tw.rikiGuardPrev||0)+(tw.rikiGuardToday||0))/50):0),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
       st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
   });
 }
@@ -1904,7 +1904,7 @@ function townDaily(d){
     { const md=Object.values(t.taxmode||{}); const dbl=md.filter(x=>x==='double').length, fr=md.filter(x=>x==='free').length;
       t.safety=clamp(townVal(t,'safety',80)-Math.min(5,dbl)+Math.min(2,fr*0.3),0,100); }
     // にくべんき藩が奪った点数・人気は少しずつ薄れる
-    t.rikiPrev=t.rikiToday||0; t.rikiToday=0;
+    t.rikiPrev=t.rikiToday||0; t.rikiToday=0; t.rikiGuardPrev=t.rikiGuardToday||0; t.rikiGuardToday=0;
     if(NET.online) for(let rj=0;rj<RIKI_SLOTS;rj++){ const hrs=2+Math.floor(Math.random()*3), price=hrs*30000; const R=NPCDEF.findIndex(x=>x.warrior);
       NET.db.collection('jobs').add({poster:'npc:'+R,posterName:'豪将リキーヤ',posterShop:'リキーヤ道場',posterKao:'riki',kind:'offer',title:['店番なら俺に任せろ！','代わりに働いてやるぞ！','暇だから手伝ってやる！'][Math.floor(Math.random()*3)],hours:hrs,reward:price,end:nowClock()+43200,done:false,t:Date.now(),npc:true}).catch(()=>{});
       if(rj===0) logs.push(`【求人】豪将リキーヤが「手伝ってやるぞ！」と${RIKI_SLOTS}件の求人を出した（持ち時間2〜4時間・1時間¥30,000・【取引】→[求人]）`); }
