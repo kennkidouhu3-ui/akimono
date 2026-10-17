@@ -1073,10 +1073,14 @@ async function checkNiku(){
     if(t.niku&&now>=t.niku.at&&(t.niku.buy||nikuFreeActive(t))){
       const n=t.niku; let val=0;
       if(String(n.target.key).startsWith('npc:')){ const x=(S.npcs||[])[+String(n.target.key).slice(4)]; val=x?(x.cases||[]).reduce((a,c)=>a+(c&&c.stock>0?((ITEMS[c.no]&&ITEMS[c.no].price)||c.price)*c.stock:0),0):0; if(!val) val=500000; npcGainApply(t,n.target.key,val); }
+      else if(n.target.key===myKey()){ val=S.cases.reduce((a,c)=>{ if(!c||!has(c.no)) return a; const k=(S.stock[c.no]||0)-resv(c.no); return a+(k>0?(ITEMS[c.no].price||0)*k:0); },0); }
+      else { const d=NET.shops[n.target.key]; val=d?(d.cases||[]).reduce((a,c)=>a+(c&&c.stock>0&&ITEMS[c.no]?(ITEMS[c.no].price||0)*c.stock:0),0):0; }
+      t.nikuBuyTotal=(t.nikuBuyTotal||0)+val; if(t.nikuFree) t.nikuFree.sum=(t.nikuFree.sum||0)+val;
       if(!t.nikuHit||t.nikuHit.p!==curPeriod()) t.nikuHit={p:curPeriod(),keys:[]};
       t.nikuHit.keys.push(n.target.key);
       t.nikuLast={id:n.at,target:n.target,buy:true,at:now,val}; fired=t.nikuLast;
-      logs.push(`【買い占め】${NIKU}が${n.target.shop}に現れ，「ここの品を全部もらおう！」と棚の品を残らず標準価格で買い占めていった！ 店主はびっくり仰天`);
+      logs.push(val>0?`【買い占め】${NIKU}が${n.target.shop}に現れ，「ここの品を全部もらおう！」と棚の品を残らず標準価格で買い占めていった！ 買い占め額 ${yen(val)}（今回の解放で合計 ${yen(t.nikuFree&&t.nikuFree.sum||val)}・これまでの総額 ${yen(t.nikuBuyTotal)}）`
+        :`【買い占め】${NIKU}が${n.target.shop}に現れたが，棚が空っぽで何も買えなかった！「つまらん店だ！」（これまでの買い占め総額 ${yen(t.nikuBuyTotal)}）`);
       t.niku=null;
     }
     if(t.niku&&now>=t.niku.at){
@@ -1481,7 +1485,8 @@ function addPay(v){ if(!S) return; S.today.pay=(S.today.pay||0)+Math.round(v); }
 function addIncome(v){ if(!S) return; S.today.inc=(S.today.inc||0)+Math.round(v); }
 function myProfit3(){ return S.hist.slice(0,3).reduce((a,h)=>a+(h.sales+(h.inc||0)-h.cost-(h.pay||0)),0); }
 function myTodayNet(){ return S.today.sales+(S.today.inc||0)-(S.today.tax||0)-(S.today.pay||0); }
-function myPoint(){ return calcPoint(S.pop,S.wins,myProfit3(),myTodayNet()); }
+function ptAdjNow(){ return (S&&S.ptAdj&&S.ptAdj.per===curPeriod())?(S.ptAdj.v||0):0; }   // 管理人が直接足した点数（その決算のあいだだけ）
+function myPoint(){ return Math.max(0,calcPoint(S.pop,S.wins,myProfit3(),myTodayNet())+ptAdjNow()); }
 function expSum(){ return Object.values(S.exp||{}).reduce((a,b)=>a+b,0); }
 function mySummaryRow(){ const st=myStat(); return {title:S.title||null,me:true,key:myKey(),name:S.owner,shop:S.shop,money:S.money+S.bank-S.debt,cash:Math.max(0,S.money),dig:S.dig,kao:S.kao,job:S.job,pop:S.pop,wins:S.wins,guild:S.guild,soldiers:S.soldiers,t:Date.now(),
   point:myPoint(),sale:S.today.sales,exps:expSum(),comment:S.comment,found:S.createdAt,rkY:S.rankY||0,st,btype:S.btype,cases:S.cases.map(c=>c&&has(c.no)?{no:c.no,price:c.price,stock:S.stock[c.no]}:null)}; }
@@ -1597,7 +1602,7 @@ function shopSummary(){
     pop:Math.round(S.pop),dig:S.dig,wins:S.wins,soldiers:S.soldiers,guild:S.guild,house:S.house,
     st:{life:t.life,attack:t.attack,defence:t.defence,tech:t.tech},btype:S.btype,weapon:w,
     cases:S.cases.map(c=>c&&has(c.no)&&S.stock[c.no]-resv(c.no)>0?{no:c.no,price:c.price,stock:S.stock[c.no]-resv(c.no)}:null),day:day(),t:Date.now(),
-    point:myPoint(),ptEnd:S.ptEnd||null,pp:{wins:S.wins||0,p3:Math.round(myProfit3()),tn:Math.round(myTodayNet()),per:curPeriod()},sale:S.today.sales,exps:Math.round(expSum()),found:S.createdAt||0,rkY:S.rankY||0};
+    point:myPoint(),ptEnd:S.ptEnd||null,pp:{wins:S.wins||0,p3:Math.round(myProfit3()),tn:Math.round(myTodayNet()),per:curPeriod(),base:ptAdjNow(),basePer:curPeriod()},sale:S.today.sales,exps:Math.round(expSum()),found:S.createdAt||0,rkY:S.rankY||0};
 }
 let lastPub='', pubBusy=false;
 /* ---------- 代理営業：ログインしていないお店の売上を，ログイン中の人がかわりに計算して街に反映する ----------
@@ -1631,7 +1636,7 @@ function pxStep(d,now){
   let g=0;
   while(from<end && g++<40){
     const per=Math.floor((from+JST)/SETTLE_MS), to=Math.min(end,(per+1)*SETTLE_MS-JST);
-    if(d.pp.per<per){ d.ptEnd={d:d.pp.per,v:d.point||0}; d.pp.p3=Math.round(d.pp.p3*2/3+d.pp.tn); d.pp.tn=0; d.sale=0; d.pp.per=per; d.point=calcPoint(d.pop||0,d.pp.wins,d.pp.p3,0)+(d.pp.base||0); }
+    if(d.pp.per<per){ d.ptEnd={d:d.pp.per,v:d.point||0}; d.pp.p3=Math.round(d.pp.p3*2/3+d.pp.tn); d.pp.tn=0; d.sale=0; d.pp.per=per; if(d.pp.basePer!=null){ d.pp.base=0; d.pp.basePer=per; } d.point=calcPoint(d.pop||0,d.pp.wins,d.pp.p3,0)+(d.pp.base||0); }
     const dt=(to-from)/1000*RATE;
     const L=px.log[per]||(px.log[per]={s:{},y:0});
     (d.cases||[]).forEach((c,idx)=>{ if(!c||!(c.stock>0)) return;
@@ -1867,7 +1872,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101702;
+const APP_VER=2026101704;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2040,6 +2045,7 @@ function townDaily(d){
     if(NET.online) for(let rj=0;rj<RIKI_SLOTS;rj++){ const hrs=2+Math.floor(Math.random()*3), price=hrs*30000; const R=NPCDEF.findIndex(x=>x.warrior);
       NET.db.collection('jobs').add({poster:'npc:'+R,posterName:'豪将リキーヤ',posterShop:'リキーヤ道場',posterKao:'riki',kind:'offer',title:['店番なら俺に任せろ！','代わりに働いてやるぞ！','暇だから手伝ってやる！'][Math.floor(Math.random()*3)],hours:hrs,reward:price,end:nowClock()+43200,done:false,t:Date.now(),npc:true}).catch(()=>{});
       if(rj===0) logs.push(`【求人】豪将リキーヤが「手伝ってやるぞ！」と${RIKI_SLOTS}件の求人を出した（持ち時間2〜4時間・1時間¥30,000・【取引】→[求人]）`); }
+    if(t.nikuFree&&!t.nikuFree.rep&&Date.now()>=t.nikuFree.until-120000){ t.nikuFree.rep=1; logs.push(`【解放終了】${NIKU}の解放（${t.nikuFree.n||1}回目）が終わった。今回の買い占め合計 ${yen(t.nikuFree.sum||0)}（これまでの総額 ${yen(t.nikuBuyTotal||0)}）。次の決算からは襲撃に戻る…`); }
     t.nikuScore=Math.round((t.nikuScore||0)*0.9); t.nikuPop=Math.max(0,(t.nikuPop||0)-1);
     // 治安が悪いと山賊バルバロスが攻めてきて，領主の座を狙う（レイドとは別）
     const saf=townVal(t,'safety',80);
@@ -3640,9 +3646,9 @@ function marketSurvey(){
 function shopDocNet(d,delta,sale){
   const per=curPeriod();
   if(!d.pp) d.pp={wins:d.wins||0,p3:0,tn:0,per:Math.floor(((d.t||Date.now())+JST)/SETTLE_MS),base:Math.max(0,(d.point||0)-calcPoint(d.pop||0,d.wins||0,0,0))};
-  if(d.pp.per<per){ d.ptEnd={d:d.pp.per,v:d.point||0}; d.pp.p3=Math.round(d.pp.p3*2/3+d.pp.tn); d.pp.tn=0; d.sale=0; d.pp.per=per; }
+  if(d.pp.per<per){ d.ptEnd={d:d.pp.per,v:d.point||0}; d.pp.p3=Math.round(d.pp.p3*2/3+d.pp.tn); d.pp.tn=0; d.sale=0; d.pp.per=per; if(d.pp.basePer!=null){ d.pp.base=0; d.pp.basePer=per; } }
   if(sale) d.sale=(d.sale||0)+sale;
-  d.pp.tn=(d.pp.tn||0)+Math.round(delta); d.point=calcPoint(d.pop||0,d.pp.wins||0,d.pp.p3||0,d.pp.tn)+(d.pp.base||0);
+  d.pp.tn=(d.pp.tn||0)+Math.round(delta); d.point=Math.max(0,calcPoint(d.pop||0,d.pp.wins||0,d.pp.p3||0,d.pp.tn)+(d.pp.base||0));
   return d;
 }
 let SHOPQ=Promise.resolve();
@@ -5375,7 +5381,9 @@ SCREENS.admin=function(){
     <div class="c"><button onclick="adminEvStart()">このイベントを起こす</button></div>
     <div class="c note">いまのイベント中は起こせません（先に「終わらせる」）。次の予定は入れかわります。</div>
     <div class="c"><big>にくべんき藩の襲撃</big></div>
-    <div class="tbl"><table class="t" style="width:100%"><tr><th>予定</th><td>${nk?esc(nk.target.shop)+'<br><small>'+fmtReal(nk.at)+'・襲撃'+nk.pow+'</small>':'なし'}</td><td>${nk?'<button onclick="adminNiku(0)">取り消す</button><br><button onclick="adminNiku(1)">いますぐ襲撃</button>':''}</td></tr></table></div>`;
+    <div class="tbl"><table class="t" style="width:100%"><tr><th>予定</th><td>${nk?esc(nk.target.shop)+'<br><small>'+fmtReal(nk.at)+'・襲撃'+nk.pow+'</small>':'なし'}</td><td>${nk?'<button onclick="adminNiku(0)">取り消す</button><br><button onclick="adminNiku(1)">いますぐ襲撃</button>':''}</td></tr>
+      <tr><th>買い占め総額</th><td>${yen(T().nikuBuyTotal||0)}${T().nikuFree&&T().nikuFree.sum?`<br><small>今回の解放：${yen(T().nikuFree.sum)}</small>`:''}</td><td><input type="number" id="anBuy" value="0" style="width:130px"> 円<br><button onclick="adminNikuBuy()">総額に足す</button></td></tr></table></div>
+    <div class="c note">以前の買い占め（金額の記録がなかった分）は，ここで総額に足しておけます。マイナスで減らせます。新聞にも記事が出ます。</div>`;
   } else if(ADTAB===4){
     const gs=Object.entries(NET.guilds||{});
     h+=`<div class="tbl"><table class="t" style="width:100%"><tr><th>ギルド</th><th>状況</th><th></th></tr>
@@ -5477,6 +5485,8 @@ function adminEvEnd(win){
     if(t.ev&&!t.ev.done) t.ev.end=now-1; }).then(()=>checkRaid()).then(()=>{ setFlash('イベントを終わらせました'); render(); });
 }
 function adminEvCancel(){ townTx(t=>{ t.evNext=null; t.evWarned=false; }).then(()=>checkEvents()).then(()=>{ setFlash('次の予定を取り消しました（新しい予定がランダムで決まります）'); render(); }); }
+function adminNikuBuy(){ const v=parseInt($('#anBuy').value)||0; if(!v) return; let tot=0;
+  townTx(t=>{ t.nikuBuyTotal=Math.max(0,(t.nikuBuyTotal||0)+v); tot=t.nikuBuyTotal; }).then(()=>{ if(v>0){ const m=`【買い占め】これまでの記録を集計：${NIKU}による買い占め額 ${yen(v)} を追加（これまでの総額 ${yen(tot)}）`; news(m); newsNet(m); } setFlash(`買い占め総額を ${yen(tot)} にしました`); render(); }); }
 function adminNiku(now){ townTx(t=>{ if(!t.niku) return; if(now) t.niku.at=Date.now()-1000; else t.niku=null; }).then(()=>checkNiku()).then(()=>{ setFlash(now?'襲撃させました':'襲撃を取り消しました'); render(); }); }
 function adminGuild(k,what){
   const id=REFS[k];
@@ -5495,6 +5505,8 @@ function adminGiveBox(k){
   <tr><th>爵位pt</th><td><input type="number" id="agD" value="${all?0:1}" style="width:70px"> pt</td></tr>
   <tr><th>持ち時間</th><td><input type="number" id="agT" value="0" style="width:70px"> 時間 <label><input type="checkbox" id="agTF"> 満タンにする</label><br><small class="note">上限（ふつう72時間）までふえます</small></td></tr>
   <tr><th>人気</th><td><input type="number" id="agP" value="0" style="width:70px"> <small>（−100〜100）</small></td></tr>
+  <tr><th>売上として<br>点数に加算</th><td><input type="number" id="agSale" value="0" style="width:140px" oninput="adminPtPreview(${R(key)})"> 円 <small>（売れたのと同じ扱いで点数が上がる・資金は増えない）</small><div id="agPv" class="note">${all?'':adminPtPreviewText(key,0,0)}</div></td></tr>
+  <tr><th>点数を<br>直接加算</th><td><input type="number" id="agPt" value="0" style="width:110px" oninput="adminPtPreview(${R(key)})"> 点 <small>（マイナスで減らす・次の決算まで有効）</small></td></tr>
   <tr><th>経験値</th><td><input type="number" id="agE" value="0" style="width:90px"></td></tr>
   <tr><th>兵士</th><td><input type="number" id="agS" value="0" style="width:90px"> 人</td></tr>
   <tr><th>アイテム</th><td><select id="agI"><option value="0">なし</option><option value="79">★ギフト券</option><option value="80">★バトルチケット</option>${items}</select> ×<input type="number" id="agN" value="1" min="1" style="width:60px"></td></tr>
@@ -5502,12 +5514,28 @@ function adminGiveBox(k){
   </table>
   <div class="c"><button onclick="adminGive(${R(key)})">送る</button> <button onclick="closeModal()">やめる</button></div>`);
 }
+// 付与したときの点数の見込み（その店のいまの成績から計算）
+function adminPtInfo(key){
+  if(key===myKey()&&S) return {pop:S.pop,wins:S.wins||0,p3:myProfit3(),tn:myTodayNet(),base:ptAdjNow()};
+  const d=NET.shops[key]; if(!d) return null; const per=curPeriod(), pp=d.pp||{};
+  const same=pp.per===per;
+  return {pop:d.pop||0,wins:pp.wins!=null?pp.wins:(d.wins||0),p3:same?(pp.p3||0):Math.round((pp.p3||0)*2/3+(pp.tn||0)),tn:same?(pp.tn||0):0,base:same&&pp.basePer!=null?(pp.base||0):0};
+}
+function adminPtPreviewText(key,sale,pt){
+  const x=adminPtInfo(key); if(!x) return '';
+  const now=Math.max(0,calcPoint(x.pop,x.wins,x.p3,x.tn)+x.base), aft=Math.max(0,calcPoint(x.pop,x.wins,x.p3,x.tn+sale)+x.base+pt);
+  return `いまの点数 <b>${now.toLocaleString()}</b> → 付与後 <b>${aft.toLocaleString()}</b>（${aft-now>=0?'+':''}${(aft-now).toLocaleString()}点）`;
+}
+function adminPtPreview(k){ const key=REFS[k], e=$('#agPv'); if(!e||key==='*all*') return; e.innerHTML=adminPtPreviewText(key,parseInt($('#agSale').value)||0,parseInt($('#agPt').value)||0); }
 function adminGive(k){
   const key=REFS[k];
   const money=parseInt($('#agM').value)||0, dig=parseInt($('#agD').value)||0, no=+$('#agI').value, n=Math.max(1,parseInt($('#agN').value)||1), body=$('#agB').value.trim();
   const time=Math.round((parseFloat($('#agT').value)||0)*60), full=$('#agTF').checked, pop=clamp(parseInt($('#agP').value)||0,-100,100), exp=parseInt($('#agE').value)||0, sold=parseInt($('#agS').value)||0;
+  const sale=parseInt($('#agSale').value)||0, pt=parseInt($('#agPt').value)||0;
   closeModal();
-  const m={kind:'admin',money,dig,no:no||0,n:no?n:0,body,time,full,pop,exp,sold};
+  const m={kind:'admin',money,dig,no:no||0,n:no?n:0,body,time,full,pop,exp,sold,sale,pt,per:curPeriod()};
+  // 相手がログインしていなくても，ランキングの点数にはその場で反映する
+  if((sale||pt)&&key!=='*all*'&&key!==myKey()&&NET.online) shopDocTx(key,d=>{ if(pt){ shopDocNet(d,0); d.pp.base=(d.pp.basePer===curPeriod()?(d.pp.base||0):0)+pt; d.pp.basePer=curPeriod(); } shopDocNet(d,sale,0); });
   if(key==='*all*'){ const ps=adminPlayers(); ps.forEach(p=>{ if(p.me) applyAdmin(m); else sendMail(p.key,m); }); save(); const s=`【お知らせ】管理人から全員へプレゼントが届きました！`; news(s); newsNet(s); setFlash(`${ps.length}店に配りました（相手が次にゲームを開いたときに届きます）`); render(); return; }
   if(key===myKey()){ applyAdmin(m); setFlash('付与しました'); save(); render(); return; }
   sendMail(key,m).then(ok=>{ setFlash(ok?'付与しました（相手が次にゲームを開いたときに届きます）':'送れませんでした',!ok); render(); });
@@ -5519,6 +5547,8 @@ function applyAdmin(m){
   if(m.no&&ITEMS[m.no]&&m.n){ add(m.no,m.n); parts.push(`${ITEMS[m.no].name}×${m.n}`); }
   if(m.full){ S.time=maxTime(); parts.push('持ち時間が満タン'); } else if(m.time){ S.time=clamp(S.time+m.time,0,maxTime()); parts.push(`持ち時間 ${m.time>0?'+':''}${hm(m.time)}`); }
   if(m.pop){ S.pop=clamp(S.pop+m.pop,0,100); parts.push(`人気 ${m.pop>0?'+':''}${m.pop}`); }
+  if(m.sale){ addIncome(m.sale); parts.push(`売上 ${m.sale>0?'+':''}${yen(m.sale)}ぶんの点数`); }
+  if(m.pt&&(m.per==null||m.per===curPeriod())){ const cp=curPeriod(); S.ptAdj={per:cp,v:((S.ptAdj&&S.ptAdj.per===cp)?S.ptAdj.v:0)+m.pt}; parts.push(`点数 ${m.pt>0?'+':''}${m.pt.toLocaleString()}点`); }
   if(m.exp){ S.bexp=Math.max(0,(S.bexp||0)+m.exp); parts.push(`経験値 ${m.exp>0?'+':''}${m.exp}`); }
   if(m.sold){ S.soldiers=Math.max(0,(S.soldiers||0)+m.sold); parts.push(`兵士 ${m.sold>0?'+':''}${m.sold}人`); }
   letter('街の管理人','kaominister',`${m.body?m.body+'<br>':''}管理人から ${parts.join('，')||'お知らせ'} が届きました。`.replace('<br>','　'));
