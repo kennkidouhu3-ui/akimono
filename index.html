@@ -2175,7 +2175,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101904;
+const APP_VER=2026101905;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2602,6 +2602,7 @@ function closeAuction(a){
 function settle(){
   const d=S.lastPeriod;
   S.ptEnd={d,v:myPoint()};   // この日の最終点数（表彰はこの値で比べる）
+  const rk0=NET.online?rankingAt(d):ranking();   // 決算の直前（この回の最終）の順位。順位の上がり下がりの矢印や表彰に使う
   let cost=CASECOST[S.ncase]||0;
   let hold=0; for(const no in S.stock){ const it=ITEMS[no]; if(it) hold+=upkeep(it)*S.stock[no]; }
   hold=Math.round(hold);
@@ -2675,8 +2676,8 @@ function settle(){
   const tx=Math.round((S.today.tax||0)+(S.today.npctax||0));
   const ntx=Math.round(S.today.npctax||0);
   if(tx>0) townTx(t=>{ t.fund=(t.fund||0)+tx; t.inToday=(t.inToday||0)+tx; if(ntx) t.npcToday=(t.npcToday||0)+ntx; });
-  // ランキング・優勝
-  const rk=ranking();
+  // ランキング・優勝（決算の直前の順位で）
+  const rk=rk0;
   rk.forEach((r,i)=>{ if(r.me) S.rankY=i+1; else if(r.id!=null&&S.npcs[r.id]) S.npcs[r.id].rankY=i+1; });
   if(NET.online){ publishShop(true); }
   else if(rk[0] && rk[0].me){
@@ -2751,6 +2752,7 @@ const MENU=[
 /* ---------- アップデート情報（新しいものを上に追加していく） ---------- */
 const UPDATES=[
  {id:20261019,d:'2026年10月19日',items:[
+  ['↕️','ランキングの順位の横の矢印（↑↓）が，決算のあとの順位とくらべていたのを，前回の決算のときの順位とくらべるように直しました。'],
   ['📈','大きな赤字のあと，稼いでもなかなか点数が上がらなかったのを直しました。赤字は1割（最大¥100万ぶん）だけ点数に響くようになり，稼げばすぐ点数が戻ります。'],
   ['🎁','寄付（ギルドの金庫・領主への援助）・家の購入・ギルド結成のお金は，点数には1割だけ響くようにしました（使ったお金そのものは減ります）。決算履歴にも「寄付・家」の金額が出ます。'],
   ['🧾','決算履歴の「仕入れ・出費」に，品物の仕入れ以外の出費（家・ギルド・地代・罰金・掃除代・求人など）がいくらあったかも出るようにしました。'],
