@@ -900,9 +900,9 @@ const MANOR = [
   {id:'wood',name:'雑木林',price:50000,out:[[3,600],[4,150]],img:'tree1'},
   {id:'ranch',name:'牧場',price:60000,out:[[2,500]],img:'housez'},
   {id:'mine',name:'鉱区',price:150000,out:[[5,500],[6,100],[8,50]],img:'house0'},
-  {id:'veg',name:'野菜畑',price:80000,out:[[226,50],[227,50],[250,50],[251,50],[228,10]],img:'tree2'},
-  {id:'pond',name:'生け簀',price:120000,out:[[230,40],[231,20],[256,20]],img:'housez'},
-  {id:'hunt',name:'狩り場',price:120000,out:[[245,30],[244,15]],img:'tree1'},
+  {id:'veg',name:'野菜畑',price:80000,out:[[226,25],[227,25],[250,25],[251,25],[228,5]],img:'tree2'},
+  {id:'pond',name:'生け簀',price:120000,out:[[230,30],[231,15],[256,15]],img:'housez'},
+  {id:'hunt',name:'狩り場',price:120000,out:[[245,15],[244,8]],img:'tree1'},
 ];
 const MANOR_JOB={herb:'drug',wood:'material',mine:'material',ranch:'cow',veg:'veg',pond:'fish',hunt:'meat'};
 function manorJobMul(id){ return S&&MANOR_JOB[id]&&MANOR_JOB[id]===S.job?1.5:1; }
@@ -1927,7 +1927,7 @@ function pxRate(d,c,idx){
   const aMe=popF(d.pop||0)*priceF(c.price/it.price);
   const aOther=rv.reduce((a,r)=>a+popF(r.pop)*priceF(r.price/it.price),0);
   const share=aMe<=0?0:Math.min(1,aMe/(aMe+aOther)*(1+0.25*rv.length));
-  return (1/it.pop)*demandOf(c.no)*aMe*share*(it.food?2:1)*(it.med?5:1)*(isTrend(c.no)?1.5:1)*CASE_BOOST(idx)*townMult();
+  return (1/it.pop)*demandOf(c.no)*aMe*share*(it.food?2:1)*(it.med?3:1)*(isTrend(c.no)?1.5:1)*CASE_BOOST(idx)*townMult();
 }
 function pxStep(d,now){
   if(!d||!d.uid||d.uid===NET.uid) return null;
@@ -2183,7 +2183,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101910;
+const APP_VER=2026101911;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2506,7 +2506,7 @@ function myRate(c,rivals){
   const aMe=popF(S.pop)*priceF(c.price/it.price);   // 標準価格とくらべた高い・安い
   const aOther=rivals.reduce((a,r)=>a+popF(r.pop)*priceF(r.price/it.price),0);
   const share=aMe<=0?0:Math.min(1,aMe/(aMe+aOther)*(1+0.25*rivals.length));
-  return (1/it.pop)*demandOf(c.no)*aMe*share*(it.food?2:1)*(it.med?5:1)*(isTrend(c.no)?1.5:1);   // 食べ物は2倍・薬は5倍よく売れる
+  return (1/it.pop)*demandOf(c.no)*aMe*share*(it.food?2:1)*(it.med?3:1)*(isTrend(c.no)?1.5:1);   // 食べ物は2倍・薬は3倍よく売れる
 }
 // 売れたときの人気の変化：手に入りにくい品を安く売ると上がり，どこにでもある品を高く売ると下がる
 function popGain(price,no,rivals){
@@ -2562,7 +2562,7 @@ function simulate(dt){
   if(!NET.online) S.npcs.forEach(n=>{
     n.cases.forEach(nc=>{
       if(!nc||nc.stock<=0) return;
-      const k=Math.min(nc.stock,poisson(saleRate(ITEMS[nc.no],nc.price,n.pop,1)*dt*0.9*(n.mult||1)*dragonX*(ITEMS[nc.no].food?2:1)*(ITEMS[nc.no].med?5:1)*(isTrend(nc.no)?1.5:1)*(((T().exposed||{})['npc:'+n.id]||0)>Date.now()?0.75:1)));
+      const k=Math.min(nc.stock,poisson(saleRate(ITEMS[nc.no],nc.price,n.pop,1)*dt*0.9*(n.mult||1)*dragonX*(ITEMS[nc.no].food?2:1)*(ITEMS[nc.no].med?3:1)*(isTrend(nc.no)?1.5:1)*(((T().exposed||{})['npc:'+n.id]||0)>Date.now()?0.75:1)));
       if(k>0){ nc.stock-=k; const g=nc.price*k; const tax = NET.online?0:Math.round(g*taxRateFor('npc:'+n.id)/100); n.money+=g-tax; n.today+=g; if(tax) S.today.npctax=(S.today.npctax||0)+tax; }
     });
   });
@@ -2760,8 +2760,9 @@ const MENU=[
 /* ---------- アップデート情報（新しいものを上に追加していく） ---------- */
 const UPDATES=[
  {id:20261019,d:'2026年10月19日',items:[
+  ['⚖️','バランス調整：**薬の「よく売れる」効果を5倍→3倍**にしました（値段10倍で売れすぎていたため）。食べ物の値段が3倍になって収穫の価値が上がりすぎた荘園は，**野菜畑・狩り場の収穫を半分，生け簀を3/4**にしました。','imp'],
   ['⚠️','**【重要】食べ物と薬の値段が大きく変わりました。お店の棚に並べている食べ物・薬の値段を，新しい標準価格に合わせて付け直してください。**（前の安い値段のままだと，すごく安売りしていることになります）','imp'],
-  ['💊','**薬の値段が10倍**になりました（ポーション¥150→**¥1,500**・ハイポーション¥350→**¥3,500**・エーテル¥400→**¥4,000**・ハイエーテル¥800→**¥8,000**・エリ草¥4,000→**¥40,000**・妙薬ネクター¥4,000→**¥40,000**）。売れ行きは同じ値段のふつうの品と同じ割合で，そこに薬の「5倍売れる」効果がかかります。薬草から作るポーション・エーテルは**薬草を3倍**使います。妙薬ネクターの材料は**ポーション60個**になりました。ギフト券の戦闘セットのハイポーションは2個になりました。','imp'],
+  ['💊','**薬の値段が10倍**になりました（ポーション¥150→**¥1,500**・ハイポーション¥350→**¥3,500**・エーテル¥400→**¥4,000**・ハイエーテル¥800→**¥8,000**・エリ草¥4,000→**¥40,000**・妙薬ネクター¥4,000→**¥40,000**）。売れ行きは同じ値段のふつうの品と同じ割合で，そこに薬の「**3倍売れる**」効果がかかります（前は5倍）。薬草から作るポーション・エーテルは**薬草を3倍**使います。妙薬ネクターの材料は**ポーション60個**になりました。ギフト券の戦闘セットのハイポーションは2個になりました。','imp'],
   ['🍱','**食べ物の値段が3倍**になりました（野菜・肉・魚・料理・うどん・そば・ミノ牛乳・ミノヨーグルト・ミノチーズなど。小麦粉・そば粉，海の幸セット・麺づくし詰め合わせも3倍）。売れ行きは，**同じ値段のふつうの品のちょうど2倍**です。','imp'],
   ['↕️','ランキングの順位の横の矢印（↑↓）が，決算のあとの順位とくらべていたのを，**前回の決算のときの順位**とくらべるように直しました。'],
   ['📈','大きな赤字のあと，稼いでもなかなか点数が上がらなかったのを直しました。**赤字は1割（最大¥100万ぶん）だけ点数に響く**ようになり，稼げばすぐ点数が戻ります。','imp'],
