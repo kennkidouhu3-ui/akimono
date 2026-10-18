@@ -941,6 +941,8 @@ const NPCDEF = [
   // 盗人と警察のNPC：盗人は1〜3時間ごとに盗みに入り，警察は2〜4時間ごとに街をパトロールする
   {shop:'黒猫のガラクタ屋',owner:'クロ',kao:113,job:'thief',pool:[67,277,278,279,280,33],thief:1,mult:1.0,comment:'ちょっと見ていくだけだよ……ほんとだよ？'},
   {shop:'街の交番',owner:'ケイジ巡査',kao:120,job:'police',pool:[30,32,26,46,47,323],police:1,mult:0.9,comment:'街の平和はおまかせください！ 怪しい人を見たら知らせてくださいね。'},
+  // 船大工のNPC
+  {shop:'ボルグ造船所',owner:'親方ボルグ',kao:111,job:'ship',pool:[191,206,192,320,190,4,5],mult:1.1,comment:'いい船はいい木から。港へ出るなら，うちの船を見ていきな！'},
 ];
 const GUILDS = [
   {id:'a',name:'黄金の天秤',img:'guild-a',fee:3,bonus:1.0,desc:'古くからの商人たちの互助組合。会費は安め。'},
@@ -1257,6 +1259,7 @@ async function checkRaid(){
     }
     await checkNpcDuel();
     await checkNpcCrime();
+    await checkNpcShelf();
     await checkNiku();
     await checkEvents();
     applyNikuResult();
@@ -2167,7 +2170,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101826;
+const APP_VER=2026101827;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2199,6 +2202,7 @@ async function initNet(){
     db.collection('shops').onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]=d.data()); NET.shops=o; softRender(); },netErr);
     watchVersion(db);
     db.doc(MKT_PATH).onSnapshot(s=>{ NET.market=s.exists?s.data():null; if(route==='market') softRender(); },netErr);
+    db.doc(NPCSH_PATH).onSnapshot(s=>{ NET.npcShelf=s.exists?JSON.parse(JSON.stringify(s.data())):null; applyNpcShelf(); if(route==='street') softRender(); },netErr);
     db.doc('town/state').onSnapshot(s=>{ NET.town=s.exists?JSON.parse(JSON.stringify(s.data())):null; if(NET.town&&!NET.town.riot) NET.town.riot={}; softRender(); },netErr);
     db.collection('mail').where('to','==',uid).onSnapshot(queueMail,netErr);
     db.collection('bbs').orderBy('t','desc').limit(40).onSnapshot(s=>{ NET.bbs=s.docs.map(d=>d.data()); softRender(); },netErr);
@@ -2541,8 +2545,8 @@ function simulate(dt){
       if(pendingCustomers.length<6) pendingCustomers.push(idx);
     }
   });
-  // NPC 売上
-  S.npcs.forEach(n=>{
+  // NPC 売上（オフラインだけ。オンラインのNPCの棚は街で共有し，プレイヤーが買ったぶんだけ減る）
+  if(!NET.online) S.npcs.forEach(n=>{
     n.cases.forEach(nc=>{
       if(!nc||nc.stock<=0) return;
       const k=Math.min(nc.stock,poisson(saleRate(ITEMS[nc.no],nc.price,n.pop,1)*dt*0.9*(n.mult||1)*dragonX*(ITEMS[nc.no].food?2:1)*(ITEMS[nc.no].med?5:1)*(isTrend(nc.no)?1.5:1)*(((T().exposed||{})['npc:'+n.id]||0)>Date.now()?0.75:1)));
@@ -2656,8 +2660,8 @@ function settle(){
     const empty=n.cases.filter(c=>!c||c.stock<=0).length;
     n.pop=clamp(n.pop + (n.today>0?rr(0,4):-3) - empty + rr(-2,2),n.popBase?n.popBase-15:5,100);
     n.money-=CASECOST[n.cases.length]||0;
-    npcRestock(n,false);
-    n.cases.forEach(c=>{ if(c) c.price=Math.max(10,Math.round(c.price*rr(0.95,1.05))); });
+    if(!NET.online) npcRestock(n,false);
+    if(!NET.online) n.cases.forEach(c=>{ if(c) c.price=Math.max(10,Math.round(c.price*rr(0.95,1.05))); });
     n.ph=[Math.round(n.today*0.45)].concat(n.ph||[]).slice(0,3);
     n.today=0;
     if(Math.random()<0.03) n.dig=Math.min(6,n.dig+1);
@@ -2742,6 +2746,8 @@ const MENU=[
 /* ---------- アップデート情報（新しいものを上に追加していく） ---------- */
 const UPDATES=[
  {id:20261018,d:'2026年10月18日',items:[
+  ['🏪','NPCのお店がそれぞれ3〜4時間ごとに棚を補充するようになりました（ときどき品も入れかわります）。オンラインではNPCの棚の在庫を街のみんなで共有し，だれかが買うとなくなります（市場と同じ）。'],
+  ['⚓','NPCに船大工「ボルグ造船所（親方ボルグ）」が加わりました。船や造船術，丸太・鉄塊を売っています。'],
   ['🥋','豪将リキーヤの点数が，求人・用心棒・掃除の稼ぎでどんどん増えて強すぎたので，ほかの店と同じ「稼ぐほど伸びにくい」計算にしました。'],
   ['🎓','修行キットで覚えられる技術を追加しました：手打ちの技（うどん・そば屋），船大工の腕（船大工），潮読みの術（航海士），細工職人の技（道具屋・革細工/木工/装飾），忍び足（盗人），捜査の勘（警察）。'],
   ['🚓','NPCに盗人「黒猫のガラクタ屋（クロ）」と警察「街の交番（ケイジ巡査）」が加わりました。クロは1〜3時間ごとにお店の金庫をねらい（銀行のお金は無事），ケイジ巡査は2〜4時間ごとにパトロールして街の治安を上げ，ときどきクロを捕まえます。警察の店はねらわれても捕まえやすくなっています。'],
@@ -3607,7 +3613,7 @@ function special(no,i,target,msgs){
       if(Math.random()<0.3*(thf?0.5:1)*(pol?2:1)/snk/snk){ const fm=payFine(); S.pop=clamp(S.pop-10,0,100); msgs.push(`<span class="red">噂の出どころがバレてしまった！ ${fm}自店の人気も下がった</span>`); nw(`【事件】${tname}の悪い噂を流していたのは${S.shop}の店主だった！ 罰金${yen(FINE)}`); } }
     if(i===1){
       const cs=isP?(pshop.cases||[]).filter(c=>c&&c.stock>0&&ITEMS[c.no]):(n?n.cases.filter(c=>c&&c.stock>0):[]);
-      if(cs.length&&Math.random()<0.6*(thf?1.35:1)*(pol?0.5:1)*snk){ const c=pick(cs); const k=Math.min(c.stock,1+rnd(3)); if(!isP){ c.stock-=k; npcLose('npc:'+n.id,(c.price||ITEMS[c.no].price)*k,(c.price||ITEMS[c.no].price)*k/50); } add(c.no,k);
+      if(cs.length&&Math.random()<0.6*(thf?1.35:1)*(pol?0.5:1)*snk){ const c=pick(cs); const k=Math.min(c.stock,1+rnd(3)); if(!isP){ if(NET.online) npcShelfTake(n.id,n.cases.indexOf(c),c.no,k); c.stock-=k; npcLose('npc:'+n.id,(c.price||ITEMS[c.no].price)*k,(c.price||ITEMS[c.no].price)*k/50); } add(c.no,k);
         if(isP){ sendMail(uid,{kind:'stolen',no:c.no,n:k}); const v=(ITEMS[c.no]?ITEMS[c.no].price:0)*k;
           shopDocTx(uid,d=>{ const x=(d.cases||[]).find(z=>z&&z.no===c.no&&z.stock>0); if(x) x.stock=Math.max(0,x.stock-k); shopDocNet(d,-v/50,0,v/50); });
           if(NET.shops[uid]){ const x=(NET.shops[uid].cases||[]).find(z=>z&&z.no===c.no&&z.stock>0); if(x) x.stock=Math.max(0,x.stock-k); } }
@@ -3980,6 +3986,7 @@ async function buyMarket(n){
 }
 
 SCREENS.street=function(){
+  if(NET.online) applyNpcShelf();
   if(sub.uid){
     const p=NET.shops[sub.uid];
     if(!p) return `<p class="c">お店が見つかりません。<a onclick="go('street')">戻る</a></p>`;
@@ -4073,7 +4080,64 @@ async function buyPlayer(k,i){
   sendMail(uid,{kind:'buy',no:c.no,n:q,price:c.price});
   setFlash(`${p.shop}で${ITEMS[c.no].name}を${q}${ITEMS[c.no].scale}買いました（${yen(cost)}）`); save(); render();
 }
-function buyNpc(id,i){
+/* ---------- NPCの棚の補充：それぞれ3〜4時間ごと。オンラインでは棚の在庫を街のみんなで共有（買ったらなくなる） ---------- */
+const NPCSH_PATH='town/npcShelf';
+function npcRsGap(){ return Math.round((3+Math.random())*3600000); }
+function npcQty(it){ return it.price>5000?2+rnd(4):it.price>1000?5+rnd(10):20+rnd(40); }
+function npcRefill(n){
+  npcRestock(n,false);                                       // 空いた棚に新しい品
+  n.cases.forEach(c=>{ if(!c||c.stock<=0||!ITEMS[c.no]) return; const q=npcQty(ITEMS[c.no]); if(c.stock<q) c.stock=q; });   // 減った棚を補充
+  if(Math.random()<0.3){ const idx=n.cases.map((c,i)=>c?i:-1).filter(i=>i>=0); if(idx.length){ n.cases[pick(idx)]=null; npcRestock(n,false); } }   // ときどき品を入れかえる
+}
+function npcShelfPool(i){ return (S&&S.npcs&&S.npcs[i]&&S.npcs[i].pool)||(NPCDEF[i]||{}).pool||[]; }
+function applyNpcShelf(){
+  const D=NET.npcShelf; if(!S||!S.npcs||!D||!D.c) return;
+  S.npcs.forEach(n=>{ const c=D.c[n.id]; if(Array.isArray(c)) n.cases=c.map(x=>x&&ITEMS[x.no]?{no:x.no,price:x.price,stock:x.stock}:null); });
+}
+let npcShelfBusy=false;
+async function checkNpcShelf(){
+  if(!S) return;
+  const now=Date.now();
+  if(!NET.online){ (S.npcs||[]).forEach(n=>{ if(!n.rsAt) n.rsAt=now+npcRsGap(); if(now>=n.rsAt){ npcRefill(n); n.rsAt=now+npcRsGap(); } }); return; }
+  applyNpcShelf();
+  const D=NET.npcShelf; if(npcShelfBusy) return;
+  if(D&&D.c&&D.nx&&NPCDEF.every((d,i)=>D.c[i]&&D.nx[i]&&D.nx[i]>now)) return;
+  npcShelfBusy=true;
+  try{
+    await dbTx(NPCSH_PATH,d=>{
+      const now=Date.now(); const X=d||{c:{},nx:{}}; X.c=X.c||{}; X.nx=X.nx||{}; let ch=false;
+      NPCDEF.forEach((def,i)=>{
+        if(X.c[i]&&X.nx[i]&&X.nx[i]>now) return;
+        const n={id:i,pool:npcShelfPool(i),money:0,cases:Array.isArray(X.c[i])?X.c[i].map(x=>x?{...x}:null):((S.npcs[i]&&S.npcs[i].cases)||[]).map(x=>x?{...x}:null)};
+        if(X.c[i]) npcRefill(n); else npcRestock(n,false);
+        X.c[i]=n.cases.map(x=>x?{no:x.no,price:x.price,stock:x.stock}:null); X.nx[i]=now+npcRsGap(); ch=true;
+      });
+      return ch?{set:X}:{};
+    });
+  }catch(e){ netErr(e); }
+  npcShelfBusy=false;
+}
+// オンライン：NPCの棚から買う・盗む（街の共有の在庫から減らす）
+async function npcShelfTake(id,i,no,q){
+  if(!NET.online) return q;
+  let got=0;
+  try{ await dbTx(NPCSH_PATH,d=>{ if(!d||!d.c||!Array.isArray(d.c[id])) { got=0; return {}; } const c=d.c[id][i]; if(!c||c.no!==no||c.stock<=0){ got=0; return {}; } got=Math.min(q,c.stock); c.stock-=got; if(c.stock<=0) d.c[id][i]=null; return {set:d}; }); }catch(e){ netErr(e); got=0; }
+  return got;
+}
+async function buyNpc(id,i){
+  const n=S.npcs[id], c=n.cases[i]; if(!c||c.stock<=0){ setFlash('品切れです',1); render(); return; }
+  let q=Math.min(c.stock,Math.max(1,parseInt($('#sq'+i).value)||1));
+  if(S.money<c.price*q){ setFlash('資金が足りません',1); render(); return; }
+  const t=Math.round(20+q/3); if(S.time<t){ setFlash('持ち時間が足りません',1); render(); return; }
+  const no=c.no, price=c.price;
+  if(NET.online){ q=await npcShelfTake(id,i,no,q); if(q<=0){ setFlash('ほかのお客さんに先に買われて，品切れになってしまいました',1); render(); return; } }
+  else c.stock-=q;
+  const cost=price*q; spendTime(Math.round(20+q/3));
+  S.money-=cost; addPay(cost); n.money+=cost; add(no,q); n.friend++;
+  if(NET.online&&n.cases[i]&&n.cases[i].no===no) n.cases[i].stock=Math.max(0,n.cases[i].stock-q);
+  setFlash(`${n.shop}で${ITEMS[no].name}を${q}${ITEMS[no].scale}買いました（${yen(cost)}）`); save(); render();
+}
+function _oldBuyNpc(id,i){
   const n=S.npcs[id], c=n.cases[i]; const q=Math.min(c.stock,Math.max(1,parseInt($('#sq'+i).value)||1));
   const cost=c.price*q, t=Math.round(20+q/3);
   if(S.money<cost){ setFlash('資金が足りません',1); render(); return; }
