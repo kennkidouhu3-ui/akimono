@@ -849,13 +849,14 @@ const SPECIAL_EXCH = [
   {name:'英雄の証',need:[[44,5],[56,5],[50,5],[61,5]],get:[70,1]},
 ];
 const MANOR = [
-  {id:'herb',name:'薬草畑',price:30000,out:[[1,25]],img:'tree2'},
-  {id:'wood',name:'雑木林',price:50000,out:[[3,12],[4,3]],img:'tree1'},
-  {id:'ranch',name:'牧場',price:60000,out:[[2,10]],img:'housez'},
-  {id:'mine',name:'鉱区',price:150000,out:[[5,10],[6,2],[8,1]],img:'house0'},
-  {id:'veg',name:'野菜畑',price:80000,out:[[226,10],[227,10],[250,10],[251,10],[228,2]],img:'tree2'},
-  {id:'pond',name:'生け簀',price:120000,out:[[230,8],[231,4],[256,4]],img:'housez'},
-  {id:'hunt',name:'狩り場',price:120000,out:[[245,6],[244,3]],img:'tree1'},
+  // 収穫量：原料の荘園は以前の50倍，食べ物の荘園（そのまま売れやすい）は5倍
+  {id:'herb',name:'薬草畑',price:30000,out:[[1,1250]],img:'tree2'},
+  {id:'wood',name:'雑木林',price:50000,out:[[3,600],[4,150]],img:'tree1'},
+  {id:'ranch',name:'牧場',price:60000,out:[[2,500]],img:'housez'},
+  {id:'mine',name:'鉱区',price:150000,out:[[5,500],[6,100],[8,50]],img:'house0'},
+  {id:'veg',name:'野菜畑',price:80000,out:[[226,50],[227,50],[250,50],[251,50],[228,10]],img:'tree2'},
+  {id:'pond',name:'生け簀',price:120000,out:[[230,40],[231,20],[256,20]],img:'housez'},
+  {id:'hunt',name:'狩り場',price:120000,out:[[245,30],[244,15]],img:'tree1'},
 ];
 const HOUSES = [
   {name:'借家',img:'house2a',price:0,plus:0},
@@ -2050,7 +2051,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101820;
+const APP_VER=2026101821;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2625,6 +2626,7 @@ const MENU=[
 /* ---------- アップデート情報（新しいものを上に追加していく） ---------- */
 const UPDATES=[
  {id:20261018,d:'2026年10月18日',items:[
+  ['🌱','荘園の収穫量を大きく増やしました。薬草畑・雑木林・牧場・鉱区（原料）は50倍，野菜畑・生け簀・狩り場（食べ物）は5倍です。そのかわり質屋では，¥1,000以下の安い原料は標準価格の1割での買い取りになりました。'],
   ['🌾','市場の「小麦粉」「そば粉」の流通量が30倍になりました。'],
   ['🔧','海の素材で作る装備（海竜の剣・鎧，火竜の剣，氷晶の盾，白熊の鎧，絹のマント，金砂の腕輪，人魚のティアラ）が，材料をそのまま売るより安くなっていたので，必要な材料を減らし値段を上げました。香辛料カレーは1回で5皿できます。'],
   ['⚖️','寄付などの出費で点数が下がりすぎていたのを直しました。売上で上がる分と出費で下がる分は，同じ金額なら同じになります（¥10万売れて¥10万寄付すれば，点数は元どおり）。'],
@@ -4172,9 +4174,9 @@ SCREENS.pawn=function(){
   const mine=Object.keys(S.stock).map(Number).filter(n=>ITEMS[n]&&ITEMS[n].price>0);
   pawnNorm(); const pw=Object.keys(S.pawn).map(Number).filter(n=>S.pawn[n]>0);
   return `<div class="c"><big>質屋</big></div>
-  ${talk(21,'質屋の主人','いらなくなった品は標準価格の4割で買い取るよ。うちで買うなら標準価格の3割増しだ。<br>売られた品は1日たつと「質流れ品」として市場に流すからね。')}
+  ${talk(21,'質屋の主人','いらなくなった品は標準価格の4割で買い取るよ（¥1,000以下の安い原料は1割だ）。うちで買うなら標準価格の3割増しだ。<br>売られた品は1日たつと「質流れ品」として市場に流すからね。')}
   <div class="c"><big>買い取り</big></div>
-  <div class="c">${mine.length?`<select id="pwNo">${mine.map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${S.stock[n]}・1${ITEMS[n].scale}${yen(Math.floor(ITEMS[n].price*0.4))}）</option>`).join('')}</select>
+  <div class="c">${mine.length?`<select id="pwNo">${mine.map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${S.stock[n]}・1${ITEMS[n].scale}${yen(pawnPrice(n))}）</option>`).join('')}</select>
    ×<input type="number" id="pwN" value="1" min="1" style="width:60px"> <button onclick="pawnSell()">売る</button>`:'<small>売れる品がありません</small>'}</div>
   <div class="c"><big>質屋の品</big></div>
   <div class="tbl"><table class="t"><tr><th>品物</th><th>価格</th><th>在庫</th><th></th></tr>
@@ -4228,7 +4230,9 @@ function pawnMktHtml(){
     <td class="c nw"><input type="number" id="mpq${n}" value="1" min="1" max="${st}" style="width:52px"><button onclick="buyPawnMkt(${n})">買う</button></td></tr>`; }).join('')||'<tr><td colspan=3 class="c">いまは質流れ品はありません</td></tr>'}
   </table></div>`;
 }
-function pawnSell(){ const no=+$('#pwNo').value, n=Math.min(plainCount(no),Math.max(1,parseInt($('#pwN').value)||1)); if(!n) return; add(no,-n); const g=Math.floor(ITEMS[no].price*0.4)*n; S.money+=g; addIncome(g); pawnNorm(); S.pawnLots.push({no,n,at:Date.now()}); pawnNorm(); setFlash(`${ITEMS[no].name}×${n}を${yen(g)}で売りました`); save(); render(); }
+// 質屋の買い取り値：ふつうは標準価格の4割。¥1,000以下の安い原料（荘園でたくさんとれる品など）は1割
+function pawnPrice(no){ const it=ITEMS[no]; return Math.floor((it.price||0)*(it.type==='原料'&&(it.price||0)<=1000?0.1:0.4)); }
+function pawnSell(){ const no=+$('#pwNo').value, n=Math.min(plainCount(no),Math.max(1,parseInt($('#pwN').value)||1)); if(!n) return; add(no,-n); const g=pawnPrice(no)*n; S.money+=g; addIncome(g); pawnNorm(); S.pawnLots.push({no,n,at:Date.now()}); pawnNorm(); setFlash(`${ITEMS[no].name}×${n}を${yen(g)}で売りました`); save(); render(); }
 function pawnBuy(no){ const p=Math.ceil(ITEMS[no].price*1.3); if(S.money<p){ setFlash('資金が足りません',1); render(); return; } pawnNorm(); const ls=S.pawnLots.filter(l=>l.no===no&&l.n>0).sort((a,b)=>b.at-a.at); if(!ls.length){ setFlash('品切れです',1); render(); return; } S.money-=p; addPay(p); ls[0].n--; S.pawnLots=S.pawnLots.filter(l=>l.n>0); pawnNorm(); add(no,1); setFlash(`${ITEMS[no].name}を買いました`); save(); render(); }
 SCREENS.palace=function(){
   const worth=S.money+S.bank-S.debt;
