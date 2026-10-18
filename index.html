@@ -1000,7 +1000,8 @@ function ii(no){ return im('item-no-'+no,'i16'); }
 function iname(no){ const it=ITEMS[no]; return it? `<span class="lk" onclick="event.stopPropagation();itemInfo(${no})">${ii(no)}${esc(it.name)}</span>`:'?'; }
 // 維持費：元の商人物語と同じく，指定がなければ標準価格の1/10を基準にする（1日あたりはその1/10）
 function itemCost(it){ return it.cost!=null? it.cost : Math.floor((it.price||0)/10); }
-function upkeep(it){ return itemCost(it)/10; }
+// 在庫の維持費。¥1,000以下の安い原料（荘園でたくさんとれる品）は1/5に
+function upkeep(it){ return itemCost(it)/10*(it.type==='原料'&&(it.price||0)<=1000?0.2:1); }
 function upkeepStr(it){ const u=upkeep(it); return u<=0?'なし':'¥'+(u%1?u.toFixed(1):u.toLocaleString())+'/日'; }
 const STATNAME={life:'HP',attack:'攻撃',defence:'防御',tech:'技量'};
 function statStr(it){ return ['life','attack','defence','tech'].filter(k=>it[k]).map(k=>`${STATNAME[k]}${it[k]>0?'+':''}${it[k]}`).join(' '); }
@@ -1757,7 +1758,9 @@ function shelfF(fill){ return fill==null?1:0.5+0.5*Math.max(0,Math.min(1,fill));
 function fillOf(shF,shT){ return shT>30? shF/shT : null; }   // 30分以上たつまでは判定しない
 function pointOf(pop,wins,p3,tn,use,fill){ return Math.round(pointOf0(pop,wins,p3,tn,use)*shelfF(fill)); }
 // 売上で増える分と出費（寄付・用心棒代・罰金など）で減る分は同じ。同じ金額なら，稼げば上がり，使えば同じだけ下がる（元の商人物語と同じ）
-function pointOf0(pop,wins,p3,tn,use){ return calcPoint(pop,wins,p3,tn); }
+// 赤字はその1割だけ（最大¥100万ぶん）点数に響く。大きな赤字のあとでも，稼げばすぐ点数が上がるように
+function lossSoft(x){ return x>=0? x : Math.max(-1000000, x*0.1); }
+function pointOf0(pop,wins,p3,tn,use){ return calcPoint(pop,wins,lossSoft(p3),lossSoft(tn)); }
 // 点数の計算は元の商人物語と同じ式（利益50万円で倍率+1・倍率は15が上限・1位を取るほど補正が下がる）
 const PT_DEN=500000, NPC_DEN=1000000;
 function calcPoint(pop,wins,profit3,todayNet,den){
@@ -1770,7 +1773,9 @@ function calcPoint(pop,wins,profit3,todayNet,den){
   return Math.max(0,Math.floor((Math.round(pop*100)+extra)*r*p));
 }
 // 元の商人物語と同じく「利益」＝売上−税−支出（仕入れなど）で点数が決まる
-function addPay(v,kind){ if(!S) return; S.today.pay=(S.today.pay||0)+Math.round(v); if(kind==='use') S.today.use=Math.max(0,(S.today.use||0)+Math.round(v)); }   // use＝仕入れ以外の出費（用心棒代・罰金・寄付・家・兵士など）
+// 寄付・家・ギルド結成のお金（kind='gift'）は，点数には1割だけ響く（使ったお金そのものはちゃんと減る）
+const GIFT_PT=0.1;
+function addPay(v,kind){ if(!S) return; if(kind==='gift'){ S.today.gift=Math.max(0,(S.today.gift||0)+Math.round(v)); v=v*GIFT_PT; kind='use'; } S.today.pay=(S.today.pay||0)+Math.round(v); if(kind==='use') S.today.use=Math.max(0,(S.today.use||0)+Math.round(v)); }   // use＝仕入れ以外の出費（用心棒代・罰金・寄付・家・兵士など）
 // 売上以外の稼ぎ（依頼・求人・賞金・レース・レイドなど）
 function addIncome(v){ if(!S) return; S.today.inc=(S.today.inc||0)+Math.round(v); }
 function myProfit3(){ return S.hist.slice(0,3).reduce((a,h)=>a+(h.sales+(h.inc||0)-h.cost-(h.pay||0)),0); }
@@ -2170,7 +2175,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101827;
+const APP_VER=2026101904;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2653,7 +2658,7 @@ function settle(){
   if(plots>0 && rentPer>0){ const rent=plots*rentPer; S.money-=rent; addPay(rent,'use'); townTx(t=>{ t.fund=(t.fund||0)+rent; t.inToday=(t.inToday||0)+rent; }); mo.push(`（地代 ${yen(rent)} を納めました）`); }
   if(mo.length) letter('荘園の管理人','kaokeeper','今日の収穫です：'+mo.join('，'));
   // 履歴
-  S.hist.unshift({d,sales:S.today.sales,count:S.today.count,cost:cost+hold+gfee+upk+Math.round(S.today.tax||0),pay:Math.round(S.today.pay||0),inc:Math.round(S.today.inc||0),pop:Math.round(S.pop)});
+  S.hist.unshift({d,sales:S.today.sales,count:S.today.count,hold,use:Math.round(S.today.use||0),gift:Math.round(S.today.gift||0),cost:cost+hold+gfee+upk+Math.round(S.today.tax||0),pay:Math.round(S.today.pay||0),inc:Math.round(S.today.inc||0),pop:Math.round(S.pop)});
   S.hist=S.hist.slice(0,20);
   // NPC
   S.npcs.forEach(n=>{
@@ -2745,6 +2750,12 @@ const MENU=[
 
 /* ---------- アップデート情報（新しいものを上に追加していく） ---------- */
 const UPDATES=[
+ {id:20261019,d:'2026年10月19日',items:[
+  ['📈','大きな赤字のあと，稼いでもなかなか点数が上がらなかったのを直しました。赤字は1割（最大¥100万ぶん）だけ点数に響くようになり，稼げばすぐ点数が戻ります。'],
+  ['🎁','寄付（ギルドの金庫・領主への援助）・家の購入・ギルド結成のお金は，点数には1割だけ響くようにしました（使ったお金そのものは減ります）。決算履歴にも「寄付・家」の金額が出ます。'],
+  ['🧾','決算履歴の「仕入れ・出費」に，品物の仕入れ以外の出費（家・ギルド・地代・罰金・掃除代・求人など）がいくらあったかも出るようにしました。'],
+  ['📦','¥1,000以下の安い原料（薬草・木の枝・丸太・獣の革・鉄塊・ミスリル塊・魔石など）の在庫の維持費を1/5にしました。荘園の収穫を増やしたぶん在庫がたまり，決算の経費がふくらんで点数が大きく下がることがあったためです。収支の表に「うち在庫の維持費」も出るようにしました。'],
+ ]},
  {id:20261018,d:'2026年10月18日',items:[
   ['🏪','NPCのお店がそれぞれ3〜4時間ごとに棚を補充するようになりました（ときどき品も入れかわります）。オンラインではNPCの棚の在庫を街のみんなで共有し，だれかが買うとなくなります（市場と同じ）。'],
   ['⚓','NPCに船大工「ボルグ造船所（親方ボルグ）」が加わりました。船や造船術，丸太・鉄塊を売っています。'],
@@ -3862,8 +3873,8 @@ SCREENS.balance=function(){
     <tr><th>資金</th><td class="r">${yen(S.money)}</td></tr><tr><th>預金／借金</th><td class="r">${yen(S.bank)} ／ ${yen(S.debt)}</td></tr>
   </table></div>
   <div class="c"><big>決算履歴</big></div>
-  <div class="tbl"><table class="t" style="width:100%"><tr><th>日</th><th>売上</th><th>経費<br><small>仕入れ</small></th><th>利益</th><th>人気</th></tr>
-  ${S.hist.map(h=>{ const pr=h.sales+(h.inc||0)-h.cost-(h.pay||0); return `<tr><td class="c nw"><small>${periodLabel(h.d)}</small></td><td class="r">${yen(h.sales)}<br><small>${h.count}個</small></td><td class="r">${yen(h.cost)}<br><small>${yen(h.pay||0)}</small></td><td class="r ${pr<0?'red':'blue'}">${yen(pr)}</td><td class="r">${h.pop}%</td></tr>`; }).join('')||'<tr><td colspan=5 class="c">まだ決算はありません</td></tr>'}
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>日</th><th>売上</th><th>経費<br><small>仕入れ・出費</small></th><th>利益</th><th>人気</th></tr>
+  ${S.hist.map(h=>{ const pr=h.sales+(h.inc||0)-h.cost-(h.pay||0); return `<tr><td class="c nw"><small>${periodLabel(h.d)}</small></td><td class="r">${yen(h.sales)}<br><small>${h.count}個</small></td><td class="r">${yen(h.cost)}${h.hold?`<br><small class="note">うち在庫${yen(h.hold)}</small>`:''}<br><small>${yen(h.pay||0)}</small>${h.use?`<br><small class="note">うち仕入れ以外${yen(h.use)}</small>`:''}${h.gift?`<br><small class="note">ほかに寄付・家${yen(h.gift)}（点数には1割）</small>`:''}</td><td class="r ${pr<0?'red':'blue'}">${yen(pr)}</td><td class="r">${h.pop}%</td></tr>`; }).join('')||'<tr><td colspan=5 class="c">まだ決算はありません</td></tr>'}
   </table></div>
   ${S.today.count?`<div class="c"><big>本日売れた商品</big></div><div class="tbl"><table class="t">${Object.keys(S.today.items).map(n=>`<tr><td>${iname(+n)}</td><td class="r">${S.today.items[n]}</td></tr>`).join('')}</table></div>`:''}`;
 };
@@ -4483,7 +4494,8 @@ const GUIDE=[
  ['ランキングの点数',`点数は「<b>人気 × 利益</b>」で決まります。利益＝売上＋そのほかの収入−税−経費−仕入れ。人気が0でも，利益があれば少しだけ点数がつきます。<br>
   <b>品ぞろえ</b>も大事です。決算のあいだ棚が品物で埋まっていた割合で点数が変わり（ずっと満杯なら1倍，ずっと空なら0.5倍），空いた棚が多いと人気も下がります。こまめに補充しましょう。<br>
   利益は少しでも出せば点数がぐんと伸びますが，<b>稼ぐほど伸びにくく</b>なり，<b>1位を取った回数が多いほど点数がつきにくく</b>なります（元の商人物語と同じ）。上位を守るのは大変，下からは追いつきやすい仕組みです。<br>
-  寄付や用心棒代などの出費は，<b>同じ金額を売り上げたときに上がる分と同じだけ</b>点数が下がります（使ったぶんだけ利益が減るのと同じ）。<br>
+  <b>赤字</b>のときは，赤字の1割（最大¥100万ぶん）だけが点数に響きます。大きな赤字を出しても，また稼げばすぐ点数が上がります。<br>
+  用心棒代や罰金などの出費は，<b>同じ金額を売り上げたときに上がる分と同じだけ</b>点数が下がります（使ったぶんだけ利益が減るのと同じ）。ただし<b>寄付（ギルド・領主）・家の購入・ギルド結成</b>は，使った金額の<b>1割だけ</b>が点数に響きます。<br>
   バトルの賞金は点数には1割しか入りません。<b>商いで稼ぐのがいちばんの近道</b>です。<br>
   決算ごとに<b>1位は爵位ポイント+1，2位は¥10万とギフト券5枚，3位は¥5万とギフト券3枚，4位はギフト券2枚，5位はギフト券1枚</b>がもらえます。`,'🏆','shop'],
  ['お店を大きくするには',`・<b>陳列棚キット</b>で棚を増やすと，たくさん並べられます（棚の維持費がかかります）。8つ目の「特等席」は2倍売れます<br>
@@ -4843,7 +4855,7 @@ function lordPay(){
 }
 function lordSupport(){
   const v=clamp(parseInt($('#lSup').value)||0,0,1000000); if(!v) return; if(S.money<=200000||S.money<v){ setFlash('資金が足りません',1); render(); return; }
-  S.money-=v; addPay(v,'use'); save();
+  S.money-=v; addPay(v,'gift'); save();
   townTx(t=>{ t.fund=(t.fund||0)+v; }).then(()=>{ news(`${S.owner}（${S.shop}）が街に${yen(v)}を資金援助しました`); setFlash(`街に${yen(v)}を援助しました`); render(); });
 }
 SCREENS.manor=function(){
@@ -4899,7 +4911,7 @@ function guildOffline(){
   return h;
 }
 function joinGuild(id){ S.guild=id; setFlash(`「${guildInfo(id).name}」に加盟しました`); save(); render(); }
-function makeGuild(){ if(S.money<GUILD_COST){ setFlash('資金が足りません',1); render(); return; } S.money-=GUILD_COST; addPay(GUILD_COST,'use'); S.myguild={name:$('#gName').value.trim()||'新ギルド',fee:clamp(+$('#gFee').value||0,0,10)}; S.guild='my'; news(`${S.owner}がギルド「${S.myguild.name}」を結成した`); setFlash('ギルドを結成しました！'); save(); render(); }
+function makeGuild(){ if(S.money<GUILD_COST){ setFlash('資金が足りません',1); render(); return; } S.money-=GUILD_COST; addPay(GUILD_COST,'gift'); S.myguild={name:$('#gName').value.trim()||'新ギルド',fee:clamp(+$('#gFee').value||0,0,10)}; S.guild='my'; news(`${S.owner}がギルド「${S.myguild.name}」を結成した`); setFlash('ギルドを結成しました！'); save(); render(); }
 function inviteGuild(){ if(!spendTime(120)){ setFlash('持ち時間が足りません',1); render(); return; } const c=S.npcs.filter(n=>n.guild!=='my'); if(!c.length) return; const n=pick(c); if(Math.random()<0.25+n.friend*0.03+S.dig*0.01){ n.guild='my'; setFlash(`${n.shop}がギルドに加盟してくれた！`); } else setFlash(`${n.shop}に断られてしまった…`); save(); render(); }
 
 /* ---------- オンラインのギルド ---------- */
@@ -5163,12 +5175,12 @@ async function guildCreate(){
   if(Object.values(NET.guilds).some(g=>g.name===name)){ setFlash('同じ名前のギルドがあります',1); render(); return; }
   if(S.money<GUILD_COST){ setFlash('資金が足りません',1); render(); return; }
   let ic=(document.querySelector('input[name=gIcon]:checked')||{}).value||'guildprize'; const up=ic==='__upload'&&NEW_GICON?NEW_GICON:null; if(ic==='__upload'&&!up) ic='guildprize';
-  S.money-=GUILD_COST; addPay(GUILD_COST,'use'); save();
+  S.money-=GUILD_COST; addPay(GUILD_COST,'gift'); save();
   try{
     const ref=await NET.db.collection('guilds').add({name,leader:NET.uid,leaderName:S.owner,fee:+$('#gFee').value,open:$('#gOpen').value==='1',icon:ic,msg:'',fund:0,exp:0,members:{[NET.uid]:me4g()},reqs:{},board:[],t:Date.now()});
     S.guild=ref.id; if(up){ IMG['gicon-'+ref.id]=up; await guildTx(ref.id,x=>{ x.iconData=up; x.icon='gicon-'+ref.id; }); NEW_GICON=null; }
     gTab=1; news(`${S.owner}（${S.shop}）がギルド「${name}」を結成した！`); setFlash(`ギルド「${esc(name)}」を結成しました！`);
-  }catch(e){ netErr(e); S.money+=GUILD_COST; addPay(-GUILD_COST,'use'); setFlash('結成に失敗しました',1); }
+  }catch(e){ netErr(e); S.money+=GUILD_COST; addPay(-GUILD_COST,'gift'); setFlash('結成に失敗しました',1); }
   save(); render();
 }
 async function guildJoin(k){
@@ -5189,8 +5201,8 @@ function guildLeave(){
 }
 function guildDonate(){
   const v=Math.max(0,parseInt($('#gDon').value)||0); if(!v) return; if(S.money<v){ setFlash('資金が足りません',1); render(); return; }
-  S.money-=v; addPay(v,'use'); save();
-  guildTx(S.guild,g=>{ g.fund=(g.fund||0)+v; g.exp=(g.exp||0)+v; const gpv=Math.floor(v/10000); g.gp=(g.gp||0)+gpv; g.gpTotal=(g.gpTotal||0)+gpv; g.board.push({name:S.owner,kao:S.kao,d:day(),m:`金庫に${yen(v)}を寄付しました`,t:Date.now()}); g.board=g.board.slice(-30); }).then(r=>{ if(r==='error'||r==='gone'){ S.money+=v; addPay(-v); setFlash('寄付に失敗しました',1); } else setFlash(`${yen(v)}を寄付しました`); save(); render(); });
+  S.money-=v; addPay(v,'gift'); save();
+  guildTx(S.guild,g=>{ g.fund=(g.fund||0)+v; g.exp=(g.exp||0)+v; const gpv=Math.floor(v/10000); g.gp=(g.gp||0)+gpv; g.gpTotal=(g.gpTotal||0)+gpv; g.board.push({name:S.owner,kao:S.kao,d:day(),m:`金庫に${yen(v)}を寄付しました`,t:Date.now()}); g.board=g.board.slice(-30); }).then(r=>{ if(r==='error'||r==='gone'){ S.money+=v; addPay(-v,'gift'); setFlash('寄付に失敗しました',1); } else setFlash(`${yen(v)}を寄付しました`); save(); render(); });
 }
 function guildPost(){ const m=$('#gMsg').value.trim(); if(!m) return; guildTx(S.guild,g=>{ g.board.push({name:S.owner,kao:S.kao,d:day(),m,t:Date.now()}); g.board=g.board.slice(-30); }).then(()=>render()); }
 function guildReq(k,ok){ const u=REFS[k]; guildTx(S.guild,g=>{ const m=g.reqs[u]; delete g.reqs[u]; if(ok&&m) g.members[u]=m; }).then(()=>{ if(!ok) sendMail(u,{kind:'letter',body:'ギルドへの加盟申請は見送られました。'}); setFlash(ok?'加盟を承認しました':'申請を断りました'); render(); }); }
@@ -5545,7 +5557,7 @@ SCREENS.hometown=function(){
   <div class="c"><big>ご近所</big></div>
   <div class="c">${S.npcs.map(n=>`<span style="display:inline-block;margin:3px;text-align:center">${im(pick(['house1a','house1b','house2a','house2b']),'','style="height:40px"')}<br><small>${esc(n.owner)}</small></span>`).join('')}</div>`;
 };
-function buyHouse(i){ const h=HOUSES[i]; if(S.money<h.price){ setFlash('資金が足りません',1); render(); return; } S.money-=h.price; addPay(h.price,'use'); for(let k=S.house+1;k<=i;k++) S.dig+=(HOUSES[k].dig||0); S.house=i; setFlash(`${h.name}に引っ越しました！`); news(`${S.owner}が${h.name}を購入した`); save(); render(); }
+function buyHouse(i){ const h=HOUSES[i]; if(S.money<h.price){ setFlash('資金が足りません',1); render(); return; } S.money-=h.price; addPay(h.price,'gift'); for(let k=S.house+1;k<=i;k++) S.dig+=(HOUSES[k].dig||0); S.house=i; setFlash(`${h.name}に引っ越しました！`); news(`${S.owner}が${h.name}を購入した`); save(); render(); }
 const BANK_MAX=1000000000;   // 預金は¥10億まで
 SCREENS.bank=function(){
   const worth=S.money+S.bank;
