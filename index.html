@@ -755,7 +755,7 @@ const JOB_EXTRA={'':'特別な効果はありません（いまの職業をや�
   drug:'薬はとてもよく売れる商品です', tool:'革細工・木工・装飾の品づくりや，解体・梱包が得意です', weapon:'剣や杖を作るのが得意です', armor:'盾や鎧を作るのが得意です',
   material:'鉱山や山で原料を集めるのが得意です', book:'本を書くのが得意です', cow:'ミノタウロスの世話（牛乳・チーズなど）が得意です', peddle:'市場への仕入れの旅が得意です',
   soldier:'戦いの修行が得意です', meat:'精肉・肉料理が得意です', veg:'畑仕事と野菜料理が得意です', fish:'釣りと魚料理が得意です',
-  ship:'船を造るのが得意です（航海そのものは航海士の担当）', noodle:'うどん・そばを打つのが得意です', navi:'<b>航海から3割早く帰ってきて，難破する確率が半分になります</b>'};
+  ship:'船を造るのが得意です（航海そのものは航海士の担当）', noodle:'うどん・そばを打つのが得意です', navi:'<b>航海から3割早く帰ってきて，難破する確率が半分になり，同時に15隻まで航海に出せます（ふつうは10隻）</b>'};
 function jobBooks(k){ const nm=(JOBS[k]||{}).name; if(!nm) return []; const out=[]; ITEMLIST.forEach(it=>{ if((it.uses||[]).some(u=>u.job===nm)) out.push(it.no); }); return out; }
 function jobDescHtml(k,gift){
   const J=JOBS[k]||JOBS['']; const bk=k?jobBooks(k):[];
@@ -1649,7 +1649,7 @@ function npcOnline(atDay){
     const tw=T(), nikuB=d.tyrant?{pt:tw.nikuScore||0,pop:tw.nikuPop||0,dig:tw.nikuDig||0}:{pt:0,pop:0,dig:0};
     return {me:false,npc:true,exposed:ex<1,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop:Math.min(99,Math.round(popE)+nikuB.pop),wins,
       dig:Math.max(0,(Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))))+nikuB.dig-((T().npcDigLoss||{})['npc:'+i]||0)),money:(Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3))+(d.warrior?(tw.rikiEarn||0):0)-((tw.npcMoneyLoss||{})['npc:'+i]||0),
-      point:Math.max(0,Math.round(calcPoint(popE,wins,profit3*ex,today*ex-npcLossToday('npc:'+i),NPC_DEN)*(d.mult||1))+nikuB.pt+(d.warrior?Math.round((tw.rikiPrev||0)/20+(tw.rikiToday||0)/20+((tw.rikiGuardPrev||0)+(tw.rikiGuardToday||0))/50-npcLossToday('npc:'+i)/20):0)),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
+      point:Math.max(0,Math.round(calcPoint(popE,wins,profit3*ex,today*ex-npcLossToday('npc:'+i),NPC_DEN)*(d.mult||1))+nikuB.pt+(d.warrior?Math.round((tw.rikiPrev||0)/20+(tw.rikiToday||0)/20+((tw.rikiSweepPrev||0)+(tw.rikiSweepToday||0))/200+((tw.rikiGuardPrev||0)+(tw.rikiGuardToday||0))/50-npcLossToday('npc:'+i)/20):0)),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
       st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
   });
 }
@@ -2002,7 +2002,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101812;
+const APP_VER=2026101815;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2172,7 +2172,7 @@ function townDaily(d){
     { const md=Object.values(t.taxmode||{}); const dbl=md.filter(x=>x==='double').length, fr=md.filter(x=>x==='free').length;
       t.safety=clamp(townVal(t,'safety',80)-Math.min(5,dbl)+Math.min(2,fr*0.3),0,100); }
     // にくべんき藩が奪った点数・人気は少しずつ薄れる
-    t.rikiPrev=t.rikiToday||0; t.rikiToday=0; t.rikiGuardPrev=t.rikiGuardToday||0; t.rikiGuardToday=0;
+    t.rikiPrev=t.rikiToday||0; t.rikiToday=0; t.rikiSweepPrev=t.rikiSweepToday||0; t.rikiSweepToday=0; t.rikiGuardPrev=t.rikiGuardToday||0; t.rikiGuardToday=0;
     if(NET.online) for(let rj=0;rj<RIKI_SLOTS;rj++){ const hrs=2+Math.floor(Math.random()*3), price=hrs*30000; const R=NPCDEF.findIndex(x=>x.warrior);
       NET.db.collection('jobs').add({poster:'npc:'+R,posterName:'豪将リキーヤ',posterShop:'リキーヤ道場',posterKao:'riki',kind:'offer',title:['店番なら俺に任せろ！','代わりに働いてやるぞ！','暇だから手伝ってやる！'][Math.floor(Math.random()*3)],hours:hrs,reward:price,end:nowClock()+43200,done:false,t:Date.now(),npc:true}).catch(()=>{});
       if(rj===0) logs.push(`【求人】豪将リキーヤが「手伝ってやるぞ！」と${RIKI_SLOTS}件の求人を出した（持ち時間2〜4時間・1時間¥30,000・【取引】→[求人]）`); }
@@ -2215,15 +2215,20 @@ function makeNpc(d,i){
 function npcRestock(n,init){
   const ncase = 3+ (n.id%3);
   while(n.cases.length<ncase) n.cases.push(null);
-  n.cases=n.cases.map(c=>{
-    if(c && c.stock>0 && !init) return c;
-    const no=pick(n.pool), it=ITEMS[no];
+  // 同じ品を複数の棚に並べない（NPCだけ有利にならないように）
+  const seen=new Set(); n.cases=n.cases.map(c=>{ if(c&&c.stock>0){ if(seen.has(c.no)) return null; seen.add(c.no); } return c; });
+  for(let ci=0;ci<n.cases.length;ci++){ const c=n.cases[ci];
+    if(c && c.stock>0 && !init) continue;
+    n.cases[ci]=null;
+    const used=new Set(n.cases.filter(x=>x&&x.stock>0).map(x=>x.no));
+    const cand=(n.pool||[]).filter(x=>!used.has(x)&&ITEMS[x]); if(!cand.length) continue;
+    const no=pick(cand), it=ITEMS[no];
     const price=Math.round(it.price*rr(0.9,1.35)/10)*10||it.price;
     const cost=it.price*0.55;
     const qty=it.price>5000?2+rnd(4):it.price>1000?5+rnd(10):20+rnd(40);
     if(!init) n.money-=cost*qty;
-    return {no,price,stock:qty};
-  });
+    n.cases[ci]={no,price,stock:qty};
+  }
 }
 
 /* ============================================================
@@ -2584,6 +2589,8 @@ const UPDATES=[
   ['💰','維持費がついていなかった品（魔物の素材・島や港の品・小麦粉など）に，元のデータと同じ考え方で維持費をつけました。'],
   ['🛒','ランキングの点数に「品ぞろえ」を加えました。決算のあいだ棚が埋まっていた割合で点数が変わります（ずっと満杯なら1倍，ずっと空なら0.5倍）。空いた棚が多いと人気も下がり，いつも満杯の店は人気を保ちやすくなります。留守にしている間も人気が少しずつ下がるようにしました（始めて1週間の店は下がりにくい）。'],
   ['🔢','品物の並び順を見直しました。種類ごとにまとまり，同じ種類の中は安い順（やさしい順）に並びます。本や地図の作り方も，やさしい順（必要な熟練度→できる品の値段）にそろえました（造船術なら小型帆船→…→探検船）。'],
+  ['🧹','豪将リキーヤの掃除代が点数に入りすぎていたので，掃除代は点数にほとんど入らないようにしました（1/200）。NPCが同じ品を複数の棚に並べないようにしました。'],
+  ['⚓','同時に航海に出せる船を10隻まで（航海士は15隻まで）にしました。港の「持っている船」は，行ける海ごとに安い船から並ぶようにしました。'],
   ['📖','転職のススメで，それぞれの職業の効果（得意なこと・早くなる作業・転職祝い）が見られるようにしました。'],
   ['📚','新しく作った本・地図の値段を元の本・地図にそろえました（入門の本¥25,000・専門の本¥50,000・地図¥10,000）。造船術は¥50,000，家庭料理入門・精肉・加工の手引き・麺打ちの極意は¥25,000です。'],
   ['⚖️','後から追加した品の売れ行きや陳列できるかどうかを，元の商人物語のデータに合わせました（地図や「〇〇の極意」などの技術の品は陳列できません）。食べ物はこまめに作って並べるほど稼げるよう，売れやすいままです。'],
@@ -3632,13 +3639,14 @@ SCREENS.sweep=function(){
 function sweep(m){
   if(m===0){ const t=Math.max(10,Math.round(S.trash*1.5)); if(!spendTime(t)){ setFlash('持ち時間が足りません',1); render(); return; } S.trash=0; setFlash('お店がピカピカになりました！'); save(); render(); return; }
   const c=sweepFee(); if(S.money<c){ setFlash('資金が足りません',1); render(); return; }
-  S.money-=c; addPay(c,'use'); S.trash=0; rikiEarn(c);
+  S.money-=c; addPay(c,'use'); S.trash=0; rikiEarn(c,'sweep');
   setFlash(`豪将リキーヤ「よし，ピカピカだ！」（${yen(c)}）`); save(); render();
 }
 // リキーヤの稼ぎ（掃除代など）
-function rikiEarn(v){
-  if(NET.online) townTx(t=>{ t.rikiEarn=(t.rikiEarn||0)+v; t.rikiToday=(t.rikiToday||0)+v; });
-  else { const n=(S.npcs||[]).find(x=>x.warrior); if(n){ n.money+=v; n.today=(n.today||0)+v; } }
+function rikiEarn(v,kind){
+  const sw=kind==='sweep';   // 掃除代はお金としては入るが，点数にはほとんど入らない（1/200）
+  if(NET.online) townTx(t=>{ t.rikiEarn=(t.rikiEarn||0)+v; if(sw) t.rikiSweepToday=(t.rikiSweepToday||0)+v; else t.rikiToday=(t.rikiToday||0)+v; });
+  else { const n=(S.npcs||[]).find(x=>x.warrior); if(n){ n.money+=v; n.today=(n.today||0)+v*(sw?0.1:1); } }
 }
 SCREENS.balance=function(){
   const hold=Object.keys(S.stock).reduce((a,no)=>a+(ITEMS[no]?upkeep(ITEMS[no]):0)*S.stock[no],0);
@@ -5430,27 +5438,33 @@ const VOYAGES=[   // 行きやすい順（最初から行ける近海→遠洋�
   {id:'sky',name:'天空の浮島',c:3,hours:10,cost:80000,loot:[[317,2,4,80],[198,3,6,80],[313,1,2,40],[199,1,1,20]],lose:0.2},
 ];
 function voyPrep(V){ return 30+V.hours*20; }
+// 船の並び：行ける海（近海→遠洋→危険な海）ごとに，安い船から
+function shipOrder(){ return Object.keys(SHIPS).map(Number).sort((a,b)=>(SHIPS[a].c-SHIPS[b].c)||((ITEMS[a].price||0)-(ITEMS[b].price||0))); }
+// 同時に航海に出せる船の数（航海士は多く出せる）
+function voyMax(){ return S&&S.job==='navi'?15:10; }
 function isNavigator(){ return S&&S.job==='navi'; }
 function voyCost(V){ return V.cost; }
 function voyHours(V,ship){ return V.hours*SHIPS[ship].speed*(isNavigator()?0.7:1); }   // 航海士は3割早く帰ってくる   // 出航の準備にかかる持ち時間
 const SEA_CLASS=['','小型の船でもOK','大型の船が必要','鋼鉄船が必要'];
 SCREENS.port=function(){
   const vs=S.voyages||[], now=Date.now();
-  const myShips=Object.keys(SHIPS).map(Number).filter(n=>has(n));
+  const myShips=shipOrder().filter(n=>has(n));
   let h=`<div class="c"><big>港</big></div>${talk('kaodwarf','港の船頭','船があれば島や遠くの町へ探索に行けるぞい。帰ってくるまで待てば，そこでしか手に入らん品を持ち帰ってくる。船は「造船術」の本で造れる（市場で買えるぞい）。')}`;
   h+=`<div class="c"><big>航海中の船</big></div><div class="tbl"><table class="t" style="width:100%">${vs.map(v=>{ const V=VOYAGES.find(x=>x.id===v.dest); const left=v.back-now; return `<tr><td>${ii(v.ship)} ${esc(ITEMS[v.ship].name)}<br><small>${V?V.name:''}へ</small></td><td class="r nw">${left>0?`帰港まで<br><b>${Math.floor(left/3600000)}時間${Math.floor(left%3600000/60000)}分</b>`:'<b class="blue">帰港！</b>'}</td></tr>`; }).join('')||'<tr><td class="c">航海中の船はありません</td></tr>'}</table></div>`;
-  h+=`<div class="c"><big>持っている船</big></div><div class="tbl"><table class="t" style="width:100%">${Object.keys(SHIPS).map(Number).map(n=>{ const X=SHIPS[n]; return `<tr><td>${iname(n)} ×${S.stock[n]||0}</td><td><small>${['','近海','遠洋','危険な海まで'][X.c]}・時間×${X.speed}・積荷×${X.cargo}${X.safe>0?'・難破しにくい':X.safe<0?'・<span class="red">難破しやすい</span>':''}${X.rare?'・珍しい品が見つかりやすい':''}</small></td></tr>`; }).join('')}</table></div>`;
+  h+=`<div class="c note">同時に航海に出せる船：<b>${(S.voyages||[]).length}/${voyMax()}隻</b>${S.job==='navi'?'（航海士）':'（航海士なら15隻）'}</div>`;
+  h+=`<div class="c"><big>持っている船</big></div><div class="tbl"><table class="t" style="width:100%">${shipOrder().map(n=>{ const X=SHIPS[n]; return `<tr><td>${iname(n)} ×${S.stock[n]||0}</td><td><small>${['','近海','遠洋','危険な海まで'][X.c]}・時間×${X.speed}・積荷×${X.cargo}${X.safe>0?'・難破しにくい':X.safe<0?'・<span class="red">難破しやすい</span>':''}${X.rare?'・珍しい品が見つかりやすい':''}</small></td></tr>`; }).join('')}</table></div>`;
   h+=`<div class="c"><big>行き先</big></div><div class="tbl"><table class="t" style="width:100%"><tr><th>行き先</th><th>手に入る品</th><th></th></tr>
   ${VOYAGES.map(V=>{ const ok=myShips.filter(n=>SHIPS[n].c>=V.c);
     return `<tr><td>${V.town?'🏙':'🏝'} ${esc(V.name)}<br><small>現実で約${isNavigator()?Math.round(V.hours*7)/10:V.hours}時間・準備${yen(voyCost(V))}・持ち時間${hm(voyPrep(V))}<br>${V.c>1?`<span class="${ok.length?'':'red'}">${SEA_CLASS[V.c]}</span><br>`:''}${V.lose?`<span class="note">難破の危険${Math.round(V.lose*100*(isNavigator()?0.5:1))}%</span>`:''}</small></td>
     <td><small>${V.loot.map(([no])=>iname(no)).join(' ')}</small></td>
-    <td class="nw">${ok.length?`<select id="shp_${V.id}">${ok.map(n=>`<option value="${n}">${esc(ITEMS[n].name)}</option>`).join('')}</select><br><button ${S.money>=voyCost(V)&&S.time>=voyPrep(V)?'':'disabled'} onclick="sail('${V.id}')">出航</button>`:'<small class="note">船がない</small>'}</td></tr>`; }).join('')}</table></div>
+    <td class="nw">${ok.length?`<select id="shp_${V.id}">${ok.map(n=>`<option value="${n}">${esc(ITEMS[n].name)}</option>`).join('')}</select><br><button ${S.money>=voyCost(V)&&S.time>=voyPrep(V)&&(S.voyages||[]).length<voyMax()?'':'disabled'} onclick="sail('${V.id}')">出航</button>`:'<small class="note">船がない</small>'}</td></tr>`; }).join('')}</table></div>
   <div class="c note">快速帆船は時間が半分，大商船は積荷が多く，鋼鉄船は危険な海へ行けて難破しにくい船です。高速艇はとても速いが難破しやすく，貨物船はのろいが積荷がとても多く，探検船は珍しい品が見つかりやすい船です。時間は現実の時間です。</div>`;
   return h;
 };
 function sail(id){
   const V=VOYAGES.find(x=>x.id===id); const sel=$('#shp_'+id); const ship=sel?+sel.value:0;
   if(!ship||!has(ship)||SHIPS[ship].c<V.c){ setFlash('この海へ行ける船がありません',1); render(); return; }
+  if((S.voyages||[]).length>=voyMax()){ setFlash(`同時に航海に出せる船は${voyMax()}隻までです（航海士なら15隻）。帰ってくるのを待ちましょう`,1); render(); return; }
   const vcost=voyCost(V);
   if(S.money<vcost){ setFlash('準備のお金が足りません',1); render(); return; }
   const prep=voyPrep(V);
