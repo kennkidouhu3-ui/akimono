@@ -363,7 +363,7 @@ const FORGE=[];   // 鍛冶工房のレシピ
     {no:204,type:'アクセサリ',name:'珊瑚の指輪',info:'赤珊瑚を削った指輪',price:25000,pop:2880,plus:0,scale:'個',soubi:4,tech:45,uses:[],skill:'luck'},
     {no:205,type:'アクセサリ',name:'人魚のティアラ',info:'人魚の涙をあしらった宝冠',price:150000,pop:4320,plus:0,scale:'個',soubi:4,defence:80,tech:110,uses:[],skill:'mermaid'}
   );
-  I(15).uses.push(R('妙薬ネクターを調合する',[[5,195],[5,30]],200,5,30,120));
+  I(15).uses.push(R('妙薬ネクターを調合する',[[5,195],[60,30]],200,5,30,120));   // ポーション60個（材料約¥10万→ネクター5本¥20万）
   // 新しい船
   I(190).uses.push(R('快速帆船を造る',[[40,4],[20,5],[5,6],[20,2]],206,1,20,600,'造船する'));
   I(190).uses.push(R('大商船を造る',[[120,4],[40,5],[20,2],[3,197]],207,1,50,1080,'造船する'));
@@ -520,7 +520,7 @@ const EVENT_ONLY=[81,82,83,84,85,86,151,181,182,183,184];
     R('野菜のピクルスを作る',[[4,227],[4,251],[1,213]],255,4,20,90,'八百屋'),
     R('ミノタウロスの肉でソーセージ',[[4,224],[1,213]],246,6,20,90,'肉屋'));
   // 食べものの印（よく売れる）
-  [26,35,36,195,200,217].concat(Array.from({length:40},(_,k)=>224+k)).forEach(no=>{ const x=I(no); if(x&&x.type==='薬') x.food=1; });
+  [26,35,36,195,217].concat(Array.from({length:40},(_,k)=>224+k)).forEach(no=>{ const x=I(no); if(x&&x.type==='薬') x.food=1; });
   // 作れる食べ物を「食べる」と能力がずっと上がる
   [243,244,245,246,247,248,249,253,254,255,258,259,260,261].forEach(no=>{ if(FOOD_EFFECT_KEYS.includes(no)) I(no).uses.push({name:'食べる',time:3,action:'食べる',use:[[1,no]],get:[]}); });
   // ミノタウロスの解体
@@ -578,8 +578,8 @@ const EVENT_ONLY=[81,82,83,84,85,86,151,181,182,183,184];
     T(272,'商売上手','行商人の技。持っていると，資金調達・剣市・広告の作業が25%早くなる'));
   const L=(name,mats,no)=>({name,time:720,action:'修行する',exp:1,use:[[1,37]].concat(mats),get:[[1,no,100]]});
   I(37).uses.push(
-    L('肉屋に弟子入り',[[20,224],[10,244]],264), L('農家に弟子入り',[[30,226],[30,227]],265), L('漁師に弟子入り',[[30,230],[10,231]],266),
-    L('薬師に弟子入り',[[20,30],[10,32]],267), L('牧場に弟子入り',[[30,26]],268), L('文豪に弟子入り',[[3,15],[20,3]],269),
+    L('肉屋に弟子入り',[[7,224],[3,244]],264), L('農家に弟子入り',[[10,226],[10,227]],265), L('漁師に弟子入り',[[10,230],[4,231]],266),
+    L('薬師に弟子入り',[[4,30],[2,32]],267), L('牧場に弟子入り',[[10,26]],268), L('文豪に弟子入り',[[3,15],[20,3]],269),
     L('傭兵隊で鍛える',[[5,80]],270), L('探検家と旅をする',[[20,5],[20,4]],271), L('大商人に弟子入り',[[3,62]],272));
   // ギフト券：交換できる品を追加
   const G=(name,n,get)=>({name,time:30,use:[[n,79]],get:get.map(([k,x])=>[k,x,100])});
@@ -730,11 +730,16 @@ Object.assign(IMG,{"item-no-331": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     T(336,'捜査の勘','警察の技。持っていると，パトロールの報奨金が3割増え，悪人を捕まえやすくなる'));
   const L=(name,mats,no)=>({name,time:720,action:'修行する',exp:1,use:[[1,37]].concat(mats),get:[[1,no,100]]});
   I(37).uses.push(
-    L('うどん屋に弟子入り',[[30,290],[30,291]],331), L('造船所で修行する',[[40,4],[20,5]],332), L('船乗りと荒海をわたる',[[10,195],[5,193]],333),
+    L('うどん屋に弟子入り',[[10,290],[10,291]],331), L('造船所で修行する',[[40,4],[20,5]],332), L('船乗りと荒海をわたる',[[10,195],[5,193]],333),
     L('細工職人に弟子入り',[[20,2],[20,3]],334), L('盗賊団にもぐりこむ',[[10,32],[10,30]],335), L('警察学校に通う',[[10,30],[10,26]],336));
 })();
 // 後から足した品の売れ行き・陳列を，元の商人物語のデータに合わせる
 (function normalizeAdded(){
+  // 食べ物は値段3倍（材料の小麦粉・そば粉と，食べ物の詰め合わせも3倍にして，作ったときのもうけの割合はそのまま）
+  DATA.items.forEach(it=>{ if(it.food||[290,291,305,306].includes(it.no)){ it.price=Math.round(it.price*3); if(it.cost) it.cost=Math.round(it.cost*3); } });
+  // 薬（ポーション・エーテル・エリ草など）は値段10倍。薬草から作るときの薬草は3倍の量に
+  DATA.items.forEach(it=>{ if(it.med&&!it.food){ it.price=Math.round(it.price*10); if(it.cost) it.cost=Math.round(it.cost*10); } });
+  { const B=DATA.items.find(x=>x.no===15); if(B) B.uses.forEach(u=>{ if((u.get||[]).some(g=>[30,32].includes(g[1]))) u.use=u.use.map(([n,x])=>x===1?[n*3,x]:[n,x]); }); }
   // 新しく作った本・地図の値段などを元の本・地図にそろえる（入門の本¥25,000・専門の本¥50,000・地図¥10,000）
   const SAME={190:{price:50000,plus:1200,cost:1000},236:{price:25000,plus:1200,cost:500},262:{price:25000,plus:1200,cost:500},292:{price:25000,plus:1200,cost:500},
     234:{price:10000,pop:0,plus:60,cost:500,scale:'冊',noshow:1}};
@@ -749,9 +754,8 @@ Object.assign(IMG,{"item-no-331": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
     const p=it.price||0; it.cost=Math.max(1,Math.round(p<=1000? p*0.25 : p<=10000? p*0.03 : p*0.02));
   });
   DATA.items.forEach(it=>{
-    if(it.no<=80||it.noshow) return;
+    if((it.no<=80&&!it.food&&!it.med)||it.noshow) return;
     if(!(it.pop>0)&&!it.autopop) return;                     // もともと陳列できない品はそのまま
-    if(it.food&&!it.autopop) return;                          // 食べ物は売れやすいまま（こまめに作って並べるごほうび）
     if(it.type==='地図'){ it.pop=0; return; }                 // 地図は元のデータと同じく陳列できない
     if(TALENT_NEW.includes(it.no)){ it.pop=0; return; }       // 「〇〇の技術」と同じ種類の品は陳列できない
     if(it.type==='本'){ it.pop=2880; return; }               // 本は元の本と同じ売れ行き
@@ -799,7 +803,7 @@ const ITEMORD={}; ITEMLIST.forEach((it,i)=>{ ITEMORD[it.no]=i; });
   const set=(n,cost,get,rename)=>{ const u=find(n); if(!u) return; u.use=[[cost,79]]; if(get) u.get=get.map(([k,no])=>[k,no,100]); if(rename) u.name=rename; };
   set('入門本セットと引き換え',3);
   set('修行キットと引き換え',1);
-  set('戦闘セットと引き換え',1,[[20,80],[10,31]]);
+  set('戦闘セットと引き換え',1,[[20,80],[2,31]]);
   set('上級素材セットと引き換え',2,[[30,6],[20,7]]);
   set('広告パックと引き換え',2,[[1,62]]);
   set('宝くじ×5と引き換え',1);
@@ -1076,6 +1080,7 @@ function newState(owner,shop,kaoNo){
   return s;
 }
 function migrate(s){
+  try{ (s.npcs||[]).forEach(n=>(n.cases||[]).forEach(c=>{ if(c) npcPriceFix(c); })); }catch(e){}
   if(!s.createdAt) s.createdAt=Date.now()-Math.max(0,s.bankCount||0)*12*3600000;   // 開店日がない古いデータは，決算の回数から逆算
   if(!s) return s;
   if(s.soldiers==null) s.soldiers=0;
@@ -1668,6 +1673,9 @@ function balForecastHtml(){
 function fmtDay(d){ if(d==null) return ''; d=Math.max(1,d)-1; const y=Math.floor(d/360)+1, mo=Math.floor(d%360/30)+1, dd=d%30+1; return `商暦${y}年${mo}月${dd}日`; }
 function clockStr(){ return `${fmtDay(day())} ${hms(S.clock%1440)}`; }
 function news(t){ S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m:t}); S.news=S.news.slice(0,80); if(NET.online && (t.includes(S.shop)||t.includes(S.owner))) newsNet(t); }
+// 重要なお知らせは手紙でも届ける（1人1回ずつ）
+const NOTICES=[{id:'price20261019',from:'商人ギルド本部',face:'kaoguild',body:'**【重要なお知らせ】食べ物と薬の値段が変わりました**\n・**食べ物は3倍**（野菜・肉・魚・料理・うどん・そば・ミノ牛乳・ヨーグルト・チーズなど）。売れ行きは同じ値段のふつうの品の2倍です。\n・**薬は10倍**（ポーション¥1,500・ハイポーション¥3,500・エーテル¥4,000・ハイエーテル¥8,000・エリ草¥40,000・妙薬ネクター¥40,000）。\n・ポーション・エーテルづくりは薬草を3倍使い，妙薬ネクターの材料はポーション60個になりました。\n**お店の棚に並べている食べ物・薬の値段を，新しい標準価格に合わせて付け直してください。**前の値段のままだと，とても安く売ってしまいます。\nくわしくは【情報】→[アップデート]をご覧ください。'}];
+function checkNotices(){ if(!S) return; S.notices=S.notices||[]; let ch=false; NOTICES.forEach(n=>{ if(S.notices.includes(n.id)) return; S.notices.push(n.id); letter(n.from,n.face,n.body); ch=true; }); if(ch){ save(); softRender(); } }
 function letter(from,face,body,gift){ S.letters.unshift({d:day(),from,face,body,gift:gift||null,read:false}); S.letters=S.letters.slice(0,40); }
 function has(no,n){ return (S.stock[no]||0)>=(n||1); }
 function add(no,n){ S.stock[no]=(S.stock[no]||0)+n; if(S.stock[no]<=0){ delete S.stock[no]; if(S.enh&&S.enh[no]) delete S.enh[no]; } }
@@ -2175,7 +2183,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101905;
+const APP_VER=2026101910;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2752,11 +2760,14 @@ const MENU=[
 /* ---------- アップデート情報（新しいものを上に追加していく） ---------- */
 const UPDATES=[
  {id:20261019,d:'2026年10月19日',items:[
-  ['↕️','ランキングの順位の横の矢印（↑↓）が，決算のあとの順位とくらべていたのを，前回の決算のときの順位とくらべるように直しました。'],
-  ['📈','大きな赤字のあと，稼いでもなかなか点数が上がらなかったのを直しました。赤字は1割（最大¥100万ぶん）だけ点数に響くようになり，稼げばすぐ点数が戻ります。'],
-  ['🎁','寄付（ギルドの金庫・領主への援助）・家の購入・ギルド結成のお金は，点数には1割だけ響くようにしました（使ったお金そのものは減ります）。決算履歴にも「寄付・家」の金額が出ます。'],
+  ['⚠️','**【重要】食べ物と薬の値段が大きく変わりました。お店の棚に並べている食べ物・薬の値段を，新しい標準価格に合わせて付け直してください。**（前の安い値段のままだと，すごく安売りしていることになります）','imp'],
+  ['💊','**薬の値段が10倍**になりました（ポーション¥150→**¥1,500**・ハイポーション¥350→**¥3,500**・エーテル¥400→**¥4,000**・ハイエーテル¥800→**¥8,000**・エリ草¥4,000→**¥40,000**・妙薬ネクター¥4,000→**¥40,000**）。売れ行きは同じ値段のふつうの品と同じ割合で，そこに薬の「5倍売れる」効果がかかります。薬草から作るポーション・エーテルは**薬草を3倍**使います。妙薬ネクターの材料は**ポーション60個**になりました。ギフト券の戦闘セットのハイポーションは2個になりました。','imp'],
+  ['🍱','**食べ物の値段が3倍**になりました（野菜・肉・魚・料理・うどん・そば・ミノ牛乳・ミノヨーグルト・ミノチーズなど。小麦粉・そば粉，海の幸セット・麺づくし詰め合わせも3倍）。売れ行きは，**同じ値段のふつうの品のちょうど2倍**です。','imp'],
+  ['↕️','ランキングの順位の横の矢印（↑↓）が，決算のあとの順位とくらべていたのを，**前回の決算のときの順位**とくらべるように直しました。'],
+  ['📈','大きな赤字のあと，稼いでもなかなか点数が上がらなかったのを直しました。**赤字は1割（最大¥100万ぶん）だけ点数に響く**ようになり，稼げばすぐ点数が戻ります。','imp'],
+  ['🎁','**寄付（ギルドの金庫・領主への援助）・家の購入・ギルド結成のお金は，点数には1割だけ**響くようにしました（使ったお金そのものは減ります）。決算履歴にも「寄付・家」の金額が出ます。','imp'],
   ['🧾','決算履歴の「仕入れ・出費」に，品物の仕入れ以外の出費（家・ギルド・地代・罰金・掃除代・求人など）がいくらあったかも出るようにしました。'],
-  ['📦','¥1,000以下の安い原料（薬草・木の枝・丸太・獣の革・鉄塊・ミスリル塊・魔石など）の在庫の維持費を1/5にしました。荘園の収穫を増やしたぶん在庫がたまり，決算の経費がふくらんで点数が大きく下がることがあったためです。収支の表に「うち在庫の維持費」も出るようにしました。'],
+  ['📦','¥1,000以下の安い原料（薬草・木の枝・丸太・獣の革・鉄塊・ミスリル塊・魔石など）の**在庫の維持費を1/5**にしました。荘園の収穫を増やしたぶん在庫がたまり，決算の経費がふくらんで点数が大きく下がることがあったためです。収支の表に「うち在庫の維持費」も出るようにしました。'],
  ]},
  {id:20261018,d:'2026年10月18日',items:[
   ['🏪','NPCのお店がそれぞれ3〜4時間ごとに棚を補充するようになりました（ときどき品も入れかわります）。オンラインではNPCの棚の在庫を街のみんなで共有し，だれかが買うとなくなります（市場と同じ）。'],
@@ -2816,6 +2827,8 @@ const UPDATES=[
 ];
 // アップデート情報は直近1週間ぶんだけ表示する
 function updDate(id){ return new Date(Math.floor(id/10000),Math.floor(id/100)%100-1,id%100).getTime(); }
+// 文章の **〜** を赤い太字にする（アップデート情報・手紙）
+function richTxt(t){ return esc(t).replace(/\*\*(.+?)\*\*/g,'<b class="red">$1</b>').replace(/\n/g,'<br>'); }
 function updShown(){ const now=Date.now(); return UPDATES.filter(u=>now-updDate(u.id)<8*86400000); }
 function updLatest(){ return UPDATES[0]?UPDATES[0].id:0; }
 function updNew(){ return S&&(S.updSeen||0)<updLatest(); }
@@ -2824,7 +2837,7 @@ SCREENS.update=function(){
   return `<div class="c"><big>アップデート情報</big></div>
   ${talk('kaominister','大臣','ゲームの新しい仕組みや，直した不具合をお知らせしますぞ（直近1週間ぶん）。')}
   ${updShown().map(u=>`<div class="gcard open" style="margin:10px 0"><div class="ghead"><span class="gic">📢</span>${esc(u.d)}${u.id>seen?' <span class="npctag strong" style="margin-left:6px">NEW</span>':''}</div>
-    <div class="gbody">${u.items.map(([ic,t])=>`<div style="display:flex;gap:8px;margin:6px 0"><span style="flex:0 0 22px">${ic}</span><span>${esc(t)}</span></div>`).join('')}</div></div>`).join('')}`;
+    <div class="gbody">${u.items.map(([ic,t,imp])=>`<div style="display:flex;gap:8px;margin:6px 0${imp?';background:#fff0f0;border:1px solid #e88;border-radius:6px;padding:6px':''}"><span style="flex:0 0 22px">${ic}</span><span>${imp?'<span class="npctag strong" style="background:#d33;color:#fff;border-color:#d33">重要</span> ':''}${richTxt(t)}</span></div>`).join('')}</div></div>`).join('')}`;
 };
 let menuOpen=2;
 function menuGroupOf(r){ if(r==='use'||r==='battle') return 0; for(let i=0;i<MENU.length;i++){ if(MENU[i][1].some(x=>x[1]===r)) return i; } return 2; }
@@ -4103,9 +4116,10 @@ function npcRefill(n){
   if(Math.random()<0.3){ const idx=n.cases.map((c,i)=>c?i:-1).filter(i=>i>=0); if(idx.length){ n.cases[pick(idx)]=null; npcRestock(n,false); } }   // ときどき品を入れかえる
 }
 function npcShelfPool(i){ return (S&&S.npcs&&S.npcs[i]&&S.npcs[i].pool)||(NPCDEF[i]||{}).pool||[]; }
+function npcPriceFix(c){ const it=c&&ITEMS[c.no]; if(it&&c.price<it.price*0.6) c.price=Math.round(it.price*1.1/10)*10; return c; }
 function applyNpcShelf(){
   const D=NET.npcShelf; if(!S||!S.npcs||!D||!D.c) return;
-  S.npcs.forEach(n=>{ const c=D.c[n.id]; if(Array.isArray(c)) n.cases=c.map(x=>x&&ITEMS[x.no]?{no:x.no,price:x.price,stock:x.stock}:null); });
+  S.npcs.forEach(n=>{ const c=D.c[n.id]; if(Array.isArray(c)) n.cases=c.map(x=>x&&ITEMS[x.no]?npcPriceFix({no:x.no,price:x.price,stock:x.stock}):null); });
 }
 let npcShelfBusy=false;
 async function checkNpcShelf(){
@@ -4122,6 +4136,7 @@ async function checkNpcShelf(){
       NPCDEF.forEach((def,i)=>{
         if(X.c[i]&&X.nx[i]&&X.nx[i]>now) return;
         const n={id:i,pool:npcShelfPool(i),money:0,cases:Array.isArray(X.c[i])?X.c[i].map(x=>x?{...x}:null):((S.npcs[i]&&S.npcs[i].cases)||[]).map(x=>x?{...x}:null)};
+        n.cases.forEach(npcPriceFix);
         if(X.c[i]) npcRefill(n); else npcRestock(n,false);
         X.c[i]=n.cases.map(x=>x?{no:x.no,price:x.price,stock:x.stock}:null); X.nx[i]=now+npcRsGap(); ch=true;
       });
@@ -5612,7 +5627,7 @@ function shiri(){
 SCREENS.letter=function(){
   S.letters.forEach(l=>l.read=true);
   return `<div class="c"><big>郵便局</big></div>
-  <div class="tbl"><table class="t">${S.letters.map(l=>`<tr><td class="c" style="width:56px">${kao(l.face)}</td><td><small>${fmtDay(l.d)}</small> <span class="span">${esc(l.from)}</span><br>${esc(l.body)}</td></tr>`).join('')||'<tr><td>手紙はありません</td></tr>'}</table></div>
+  <div class="tbl"><table class="t">${S.letters.map(l=>`<tr><td class="c" style="width:56px">${kao(l.face)}</td><td><small>${fmtDay(l.d)}</small> <span class="span">${esc(l.from)}</span><br>${richTxt(l.body)}</td></tr>`).join('')||'<tr><td>手紙はありません</td></tr>'}</table></div>
   <div class="c"><big>手紙を書く</big></div>
   <div class="c">宛先 <select id="ltTo">${recipOpts()}</select><br>
   <input id="ltBody" maxlength="60" placeholder="本文" style="width:80%"><br><button onclick="sendLetter()">送る（10分）</button></div>`;
@@ -6230,7 +6245,7 @@ function tick(){
   if(saveTick%60===45) checkMyJobs();
   if(saveTick%20===10) checkDragonRaces();
   if(saveTick%15===5) checkRaid();
-  if(saveTick%30===11){ checkTitles(); checkLoginBonus(); if(NET.online){ checkTrendNews(); checkGbossRewards(); } }
+  if(saveTick%30===11){ checkTitles(); checkLoginBonus(); checkNotices(); if(NET.online){ checkTrendNews(); checkGbossRewards(); } }
   if(saveTick%120===40) recordDevice();
   if(saveTick%30===17&&NET.online) softRender();   // 「いま遊んでいる人」の数をこまめに更新
   if(saveTick%10===3) checkVoyages();
