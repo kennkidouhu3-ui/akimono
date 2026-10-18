@@ -1808,9 +1808,11 @@ function npcOnline(atDay){
     const ex=(((T().exposed||{})['npc:'+i]||0)>Date.now()?0.8:1)*(((T().nikuStolen||{})['npc:'+i]||0)>Date.now()?0.9:1)*(((T().rumor||{})['npc:'+i]||0)>Date.now()?0.8:1);
     const popE=clamp(pop*ex+npcPopToday('npc:'+i),0,100);
     const tw=T(), nikuB=d.tyrant?{pt:tw.nikuScore||0,pop:tw.nikuPop||0,dig:tw.nikuDig||0}:{pt:0,pop:0,dig:0};
+    // リキーヤの稼ぎ（求人・用心棒代・掃除代）は，ほかの店の利益と同じ計算で点数にする（稼ぐほど伸びにくい。掃除代は1/10だけ）
+    const rkNow=d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0)+(tw.rikiSweepToday||0)/10:0, rkPrev=d.warrior?(tw.rikiPrev||0)+(tw.rikiGuardPrev||0)+(tw.rikiSweepPrev||0)/10:0;
     return {me:false,npc:true,exposed:ex<1,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop:Math.min(99,Math.round(popE)+nikuB.pop),wins,
       dig:Math.max(0,(Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))))+nikuB.dig-((T().npcDigLoss||{})['npc:'+i]||0)),money:(Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3))+(d.warrior?(tw.rikiEarn||0):0)-((tw.npcMoneyLoss||{})['npc:'+i]||0),
-      point:Math.max(0,Math.round(calcPoint(popE,wins,profit3*ex,today*ex-npcLossToday('npc:'+i),NPC_DEN)*(d.mult||1))+nikuB.pt+(d.warrior?Math.round((tw.rikiPrev||0)/20+(tw.rikiToday||0)/20+((tw.rikiSweepPrev||0)+(tw.rikiSweepToday||0))/200+((tw.rikiGuardPrev||0)+(tw.rikiGuardToday||0))/50-npcLossToday('npc:'+i)/20):0)),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
+      point:Math.max(0,Math.round(calcPoint(popE,wins,profit3*ex+(d.warrior?rkPrev/3:0),today*ex+(d.warrior?rkNow:0)-npcLossToday('npc:'+i),NPC_DEN)*(d.mult||1))+nikuB.pt),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
       st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
   });
 }
@@ -2165,7 +2167,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101825;
+const APP_VER=2026101826;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2740,6 +2742,7 @@ const MENU=[
 /* ---------- アップデート情報（新しいものを上に追加していく） ---------- */
 const UPDATES=[
  {id:20261018,d:'2026年10月18日',items:[
+  ['🥋','豪将リキーヤの点数が，求人・用心棒・掃除の稼ぎでどんどん増えて強すぎたので，ほかの店と同じ「稼ぐほど伸びにくい」計算にしました。'],
   ['🎓','修行キットで覚えられる技術を追加しました：手打ちの技（うどん・そば屋），船大工の腕（船大工），潮読みの術（航海士），細工職人の技（道具屋・革細工/木工/装飾），忍び足（盗人），捜査の勘（警察）。'],
   ['🚓','NPCに盗人「黒猫のガラクタ屋（クロ）」と警察「街の交番（ケイジ巡査）」が加わりました。クロは1〜3時間ごとにお店の金庫をねらい（銀行のお金は無事），ケイジ巡査は2〜4時間ごとにパトロールして街の治安を上げ，ときどきクロを捕まえます。警察の店はねらわれても捕まえやすくなっています。'],
   ['🗡️','戦士の職業の絵を，剣と盾を持った戦士の絵に描き直しました。'],
