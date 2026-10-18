@@ -1427,6 +1427,8 @@ async function checkNpcCrime(){
             npcLossApply(t,thief.key,NPC_THIEF_FINE,NPC_THIEF_FINE/50); npcPopApply(t,thief.key,-3); if(cop) npcPopApply(t,cop.key,2);
             const bty=vPol?Math.round(NPC_THIEF_FINE*0.3):0; t.fund=(t.fund||0)+NPC_THIEF_FINE-bty;
             res.caught={v:V,thief:{key:thief.key,shop:thief.shop,name:thief.name},cop:cop?{name:cop.name,shop:cop.shop}:null,bty};
+          } else if(isP&&(V.blk=shopGuardBlock(v.key===myKey()?guardInfo():v.grd))){
+            res.guarded={v:V,thief:{key:thief.key,shop:thief.shop,name:thief.name},by:V.blk};
           } else {
             const cash=Math.max(0,isP?(v.cash!=null?v.cash:(v.money||0)):(v.money||0));
             const a=cash>0?Math.round(Math.min(300000,Math.max(5000,cash*(0.01+Math.random()*0.02)))/1000)*1000:0;
@@ -1435,7 +1437,7 @@ async function checkNpcCrime(){
           }
         }
       } }
-    return (res.patrol||res.caught||res.stole)?res:null;
+    return (res.patrol||res.caught||res.stole||res.guarded)?res:null;
   });
   if(!out) return;
   const nw=m=>{ S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m}); newsNet(m); };
@@ -1446,6 +1448,7 @@ async function checkNpcCrime(){
     nw(`【逮捕】${c.thief.shop}の${c.thief.name}が${c.v.shop}の金庫をねらったが，${c.cop?c.cop.shop+'の'+c.cop.name+'に':''}捕まった！ 罰金${yen(NPC_THIEF_FINE)}`);
     const n=loc(c.thief.key); if(n){ n.money=Math.max(0,(n.money||0)-NPC_THIEF_FINE); n.pop=clamp(n.pop-3,5,100); }
     if(c.bty){ const mail={kind:'bounty',amount:c.bty,thief:c.thief.shop+'の'+c.thief.name}; if(c.v.key===myKey()){ S.money+=c.bty; addIncome(c.bty); letter('警察署','kaoarmy',`${esc(mail.thief)}があなたの店で盗みをはたらこうとして捕まりました。罰金の3割，${yen(c.bty)}を報奨金としてお渡しします。`); save(); } else sendMail(c.v.key,mail); } }
+  if(out.guarded){ const g=out.guarded; nw(`【事件】盗人の${g.thief.name}が${g.v.shop}の金庫をねらったが，${g.by==='robot'?'店番ロボット':'見張りの相棒の魔物'}に追い払われた！`); const mail={kind:'guarded',by:g.by,what:'盗人の'+g.thief.name}; if(g.v.key===myKey()) guardWear(g.by,mail.what); else sendMail(g.v.key,mail); }
   if(out.stole){ const s0=out.stole;
     if(s0.a>0){ nw(`【事件】${s0.v.shop}の金庫から${yen(s0.a)}が盗まれた！ 盗人の${s0.thief.name}のしわざらしい……`);
       if(s0.v.isP){ const mail={kind:'npcrob',amount:s0.a,thief:s0.thief.name}; if(s0.v.key===myKey()) applyNpcRob(mail); else sendMail(s0.v.key,mail); }
@@ -1509,7 +1512,16 @@ async function checkTrendNews(){
 function petOf(){ const p=(S.pets||[])[S.petActive]; return p||null; }
 const PET_BATTLE=[0,0.05,0.10,0.15,0.25], PET_GUARD=[0,0.5,0.7,0.9,0.97], PET_TIER=['','低','中','上','最上級'];
 function petStatBonus(){ const p=petOf(); return p&&S.petMode!=='guard'?PET_BATTLE[p.tier]:0; }
-function petGuardRate(){ const p=petOf(); return p&&S.petMode==='guard'?PET_GUARD[p.tier]:0; }
+// 店の守り：相棒の魔物（見張り）と店番ロボットが，盗人・万引き・金庫破りを追い払う（どちらも，ときどき壊れたりけがをしたりする）
+function guardInfo(){ return {r:S&&has(64)?1:0,p:petGuardRate()}; }
+function shopGuardBlock(g){ g=g||{}; if(g.p>0&&Math.random()<g.p*0.7) return 'pet'; if(g.r&&Math.random()<0.6) return 'robot'; return null; }
+function guardWear(by,what){
+  const pet=petOf(), pn=pet?pet.name:'相棒';
+  if(by==='robot'){ if(Math.random()<0.1){ add(64,-1); letter('店番ロボット','kaoguide',`ビビッ…${what}を追い払いましたが，もみ合いで**店番ロボットが壊れてしまいました**…。`); } else letter('店番ロボット','kaoguide',`ビビッ！ ${what}を追い払いました。お店は無事です。`); }
+  else { if(Math.random()<0.1){ S.petHurt=Date.now()+12*3600000; letter('店員','kaoguide',`相棒の${esc(pn)}が${what}を追い払いましたが，**けがをしてしまいました**。12時間ほど休ませます（そのあいだは見張りができません）。`); } else letter('店員','kaoguide',`相棒の${esc(pn)}が${what}を追い払いました！ お店は無事です。`); }
+  save();
+}
+function petGuardRate(){ const p=petOf(); if(S&&S.petHurt&&Date.now()<S.petHurt) return 0; return p&&S.petMode==='guard'?Math.min(0.99,PET_GUARD[p.tier]+(((petTraitOf(p)||{}).fx||{}).watch||0)):0; }
 function petMon(p){ return p.top?TOP_MONS[p.ti]:MONS[p.mi]; }
 function petTame(mon,top){
   if(!mon||(S.pets||[]).length>=3) return '';
@@ -1517,12 +1529,13 @@ function petTame(mon,top){
   if(top){ const ti=TOP_MONS.indexOf(mon); if(ti<0||Math.random()>=0.005) return ''; pet={top:1,ti,tier:4,name:mon.name}; }   // 最上級は0.5%
   else { const mi=MONS.indexOf(mon); if(mi<0||Math.random()>=0.04) return ''; pet={mi,tier:Math.floor(mi/15)+1,name:mon.name}; }
   S.pets=(S.pets||[]).concat([pet]); if(S.petActive==null) S.petActive=0;
-  return `<b class="blue">${esc(mon.name)}が起き上がり，仲間になりたそうにこちらを見ている……相棒になった！</b>`;
+  const tr=petTraitOf(pet);
+  return `<b class="blue">${esc(mon.name)}が起き上がり，仲間になりたそうにこちらを見ている……相棒になった！</b>${tr?`<br><small>特性「${tr.n}」：${tr.d}</small>`:''}`;
 }
 function petsHtml(){
   const ps=S.pets||[];
   return `<div class="c"><big>相棒</big> <small>（${ps.length}/3）</small></div>
-  <div class="tbl"><table class="t" style="width:100%">${ps.map((p,i)=>{ const m=petMon(p); return `<tr><td style="width:44px">${im('no-'+m.img,'','width=36 height=46'+(m.fx?` style="${m.fx}"`:''))}</td><td><b>${esc(p.name)}</b> ${S.petActive===i?'<span class="blue">（連れている）</span>':''}<br><small>${p.tier===4?'<b class="red">最上級の魔物</b>':PET_TIER[p.tier]+'レベルの魔物'}・戦闘：全能力+${Math.round(PET_BATTLE[p.tier]*100)}%／店番：万引きを${Math.round(PET_GUARD[p.tier]*100)}%防ぐ</small></td><td class="nw">${S.petActive===i?'':`<button onclick="S.petActive=${i};save();render()">連れる</button><br>`}<button onclick="petRelease(${i})">逃がす</button></td></tr>`; }).join('')||'<tr><td class="c note">魔物を倒すと，まれに仲間になります</td></tr>'}</table></div>
+  <div class="tbl"><table class="t" style="width:100%">${ps.map((p,i)=>{ const m=petMon(p); return `<tr><td style="width:44px">${im('no-'+m.img,'','width=36 height=46'+(m.fx?` style="${m.fx}"`:''))}</td><td><b>${esc(p.name)}</b> ${S.petActive===i?'<span class="blue">（連れている）</span>':''}<br><small>${p.tier===4?'<b class="red">最上級の魔物</b>':PET_TIER[p.tier]+'レベルの魔物'}・戦闘：全能力+${Math.round(PET_BATTLE[p.tier]*100)}%／店番：万引きを${Math.round(PET_GUARD[p.tier]*100)}%防ぐ${(()=>{ const t=petTraitOf(p); return t?`<br>特性：<b class="blue">${t.n}</b>（${t.d}）<span class="note">連れているときにいつも効く</span>`:''; })()}${S.petActive===i&&S.petHurt&&Date.now()<S.petHurt?'<br><span class="red">けがで休んでいます</span>':''}</small></td><td class="nw">${S.petActive===i?'':`<button onclick="S.petActive=${i};save();render()">連れる</button><br>`}<button onclick="petRelease(${i})">逃がす</button></td></tr>`; }).join('')||'<tr><td class="c note">魔物を倒すと，まれに仲間になります</td></tr>'}</table></div>
   ${ps.length?`<div class="c">相棒の役目：<button ${S.petMode!=='guard'?'disabled':''} onclick="S.petMode='battle';save();render()">⚔ 戦闘で手伝う</button> <button ${S.petMode==='guard'?'disabled':''} onclick="S.petMode='guard';save();render()">🏪 店番をする</button></div>`:''}`;
 }
 function petRelease(i){ confirmBox('この相棒を逃がしますか？',()=>{ S.pets.splice(i,1); if(S.petActive>=S.pets.length) S.petActive=S.pets.length?0:null; save(); render(); }); }
@@ -1735,7 +1748,31 @@ function activeSkills(){
   return out;
 }
 function seriesCount(){ const cnt={}; if(!S) return cnt; [1,2,3,4].forEach(s=>{ const it=ITEMS[S.eq[s]]; if(it&&it.series) cnt[it.series]=(cnt[it.series]||0)+1; }); return cnt; }
-function skillFx(){ const fx={}; activeSkills().forEach(a=>{ const f=SKILLS[a.k].fx; for(const k in f) fx[k]=(fx[k]||0)+f[k]; }); return fx; }
+// 相棒の特性：魔物の種類ごとにちがう能力（強い魔物ほど効果が大きい：低1倍・中1.5倍・上2倍・最上級3倍）
+const PET_TRAIT_DEF={
+  regen:{n:'癒しの体',fx:{regen:0.01},d:v=>`戦闘中，自分の番ごとにHPが${Math.round(v.regen*100)}%回復`},
+  drop:{n:'宝さがし',fx:{drop:4},d:v=>`魔物の落とし物の確率+${Math.round(v.drop)}%`},
+  watch:{n:'番犬',fx:{watch:0.08},d:v=>`店番のとき，盗人・万引きを追い払う確率+${Math.round(v.watch*100)}%`},
+  mat:{n:'剥ぎ取り上手',fx:{mat:1},d:v=>`はぎ取り素材+${v.mat}`},
+  crit:{n:'鋭い眼',fx:{crit:0.04},d:v=>`会心の一撃が出やすくなる（+${Math.round(v.crit*100)}%）`},
+  life:{n:'頑丈',fx:{life:0.03},d:v=>`HP+${Math.round(v.life*100)}%`},
+  avoid:{n:'身軽',fx:{avoid:3},d:v=>`攻撃をよけやすくなる（+${Math.round(v.avoid)}）`},
+  atk:{n:'猛攻',fx:{atk:0.03},d:v=>`攻撃+${Math.round(v.atk*100)}%`},
+  keep:{n:'愛嬌',fx:{keep:0.05},d:v=>`お店の人気が下がりにくい（自然減−${Math.round(v.keep*100)}%）`},
+  sales:{n:'客寄せ',fx:{sales:0.02},d:v=>`お店の売れ行き+${Math.round(v.sales*1000)/10}%`},
+  guard:{n:'守護',fx:{guard:0.02},d:v=>`受けるダメージ−${Math.round(v.guard*100)}%`},
+  voyage:{n:'潮風',fx:{voyage:0.05},d:v=>`船が持ち帰る品+${Math.round(v.voyage*100)}%`},
+  exp:{n:'かしこい',fx:{exp:0.05},d:v=>`戦闘の経験値+${Math.round(v.exp*100)}%`},
+  tech:{n:'器用',fx:{tech:0.03},d:v=>`技量+${Math.round(v.tech*100)}%`},
+  prize:{n:'招福',fx:{prize:0.05},d:v=>`最上級の魔物の賞金+${Math.round(v.prize*100)}%`},
+};
+const PET_TRAIT_MONS=['regen','drop','watch','drop','crit','drop','life','avoid','atk','keep','crit','sales','guard','voyage','mat',
+  'sales','regen','atk','exp','watch','keep','tech','guard','atk','regen','life','avoid','guard','voyage','crit',
+  'voyage','keep','tech','voyage','regen','mat','atk','life','crit','watch','tech','prize','watch','drop','exp'];
+const PET_TRAIT_TOP=['voyage','watch','regen','atk','sales'];
+function petTraitOf(p){ if(!p) return null; const k=p.top?PET_TRAIT_TOP[p.ti]:PET_TRAIT_MONS[p.mi]; const D=PET_TRAIT_DEF[k]; if(!D) return null; const f=[0,1,1.5,2,3][p.tier]||1; const v={}; for(const x in D.fx) v[x]=x==='mat'?Math.max(1,Math.round(D.fx[x]*f)):D.fx[x]*f; return {k,n:D.n,fx:v,d:D.d(v)}; }
+function petTraitFx(){ const p=petOf(); if(!p||(S.petHurt&&Date.now()<S.petHurt)) return {}; const t=petTraitOf(p); return t?t.fx:{}; }
+function skillFx(){ const fx={}; activeSkills().forEach(a=>{ const f=SKILLS[a.k].fx; for(const k in f) fx[k]=(fx[k]||0)+f[k]; }); const pt=petTraitFx(); for(const k in pt) fx[k]=(fx[k]||0)+pt[k]; return fx; }
 function myStat(){
   const t=totalStat(S.st,S.eq), fx=skillFx(), pb=petStatBonus()+myGuildStatBonus();
   return {life:Math.round(t.life*(1+(fx.life||0)+pb)),attack:Math.round(t.attack*(1+(fx.atk||0)+pb)),defence:Math.round(t.defence*(1+(fx.def||0)+pb)),tech:Math.round(t.tech*(1+(fx.tech||0)+pb))};
@@ -1796,7 +1833,7 @@ function ptAdjNow(){ return (S&&S.ptAdj&&S.ptAdj.per===curPeriod())?(S.ptAdj.v||
 function myFill(){ return fillOf(S.today.shF||0,S.today.shT||0); }
 function myPoint(){ return Math.max(0,pointOf(S.pop,S.wins,myProfit3(),myTodayNet(),S.today.use||0,myFill())+ptAdjNow()); }
 function expSum(){ return Object.values(S.exp||{}).reduce((a,b)=>a+b,0); }
-function mySummaryRow(){ const st=myStat(); return {title:S.title||null,me:true,key:myKey(),name:S.owner,shop:S.shop,money:S.money-S.debt,cash:Math.max(0,S.money),dig:S.dig,kao:S.kao,job:S.job,pop:S.pop,wins:S.wins,guild:S.guild,soldiers:S.soldiers,t:Date.now(),
+function mySummaryRow(){ const st=myStat(); return {grd:guardInfo(),title:S.title||null,me:true,key:myKey(),name:S.owner,shop:S.shop,money:S.money-S.debt,cash:Math.max(0,S.money),dig:S.dig,kao:S.kao,job:S.job,pop:S.pop,wins:S.wins,guild:S.guild,soldiers:S.soldiers,t:Date.now(),
   point:myPoint(),sale:S.today.sales,exps:expSum(),comment:S.comment,found:S.createdAt,rkY:S.rankY||0,st,btype:S.btype,cases:S.cases.map(c=>c&&has(c.no)?{no:c.no,price:c.price,stock:S.stock[c.no]}:null)}; }
 function allShops(){
   return [mySummaryRow()]
@@ -1845,7 +1882,7 @@ function playerShops(){
     return {title:s.title||null,idle,idleH:h,me:false,key:s.uid,uid:s.uid,name:s.owner,shop:s.shop,money:s.money||0,cash:s.cash!=null?s.cash:0,dig:s.dig||0,kao:s.kao||1,job:s.job||'',pop:s.pop||0,wins:s.wins||0,soldiers:s.soldiers||0,guild:s.guild||null,t:s.t||0,comment:s.comment||'',
     // 休業中になったら，そこから3日かけてゆっくり点数が下がる（最低2割は残る）
     point: idle? Math.floor(base*Math.max(0.2,1-(h-IDLE_H)/72)) : base,
-    sale:idle?0:(s.sale||0),exps:s.exps||0,found:s.found||0,rkY:s.rkY||0,st:s.st||null,btype:s.btype||0,cases:s.cases||[],house:s.house||0}; });
+    sale:idle?0:(s.sale||0),exps:s.exps||0,found:s.found||0,rkY:s.rkY||0,grd:s.grd||null,st:s.st||null,btype:s.btype||0,cases:s.cases||[],house:s.house||0}; });
 }
 function ranking(){
   const by=(x,y)=>(y.point-x.point)||(y.money-x.money);
@@ -1908,7 +1945,7 @@ function newsList(){
 }
 function shopSummary(){
   const t=myStat(); const w=S.eq[1]&&ITEMS[S.eq[1]]?ITEMS[S.eq[1]].name:'';
-  return {title:S.title||null,manor:{...(S.manor||{})},uid:NET.uid,owner:S.owner,shop:S.shop,kao:S.kao,job:S.job,comment:S.comment,money:Math.round(S.money-S.debt),cash:Math.max(0,Math.round(S.money)),
+  return {grd:guardInfo(),title:S.title||null,manor:{...(S.manor||{})},uid:NET.uid,owner:S.owner,shop:S.shop,kao:S.kao,job:S.job,comment:S.comment,money:Math.round(S.money-S.debt),cash:Math.max(0,Math.round(S.money)),
     pop:Math.round(S.pop),dig:S.dig,wins:S.wins,soldiers:S.soldiers,guild:S.guild,house:S.house,
     st:{life:t.life,attack:t.attack,defence:t.defence,tech:t.tech},btype:S.btype,weapon:w,
     cases:S.cases.map(c=>c&&has(c.no)&&S.stock[c.no]-resv(c.no)>0?{no:c.no,price:c.price,stock:S.stock[c.no]-resv(c.no)}:null),day:day(),t:Date.now(),
@@ -2046,6 +2083,7 @@ function processMail(){
       else if(m.kind==='adpop'){ const a=m.amount||15; S.pop=clamp(S.pop+a,0,100); letter(who,face,`${who}さんが，あなたのお店の広告を出してくれました！ 人気が${a}上がりました。`); }
       else if(m.kind==='rumor'){ const a=m.amount||10; S.pop=clamp(S.pop-a,0,100); letter('街のうわさ好き','kaoguide',`あなたのお店について，よくない噂が広まっているようです…。人気が${a}下がりました。（だれかが禁断の書を使ったのかもしれません）`); }
       else if(m.kind==='npcrob'){ applyNpcRob(m); }
+      else if(m.kind==='guarded'){ guardWear(m.by,m.what||'盗人'); }
       else if(m.kind==='bounty'){ const a=m.amount||0; S.money+=a; addIncome(a); letter('警察署','kaoarmy',`${esc(m.thief||'ある店')}の店主があなたの店で悪さをしようとして捕まりました。罰金の3割，${yen(a)}を報奨金としてお渡しします。`); }
       else if(m.kind==='robbed'){ const a=Math.min(m.amount||0,Math.max(0,S.money)); S.money-=a;   /* 銀行の預金は絶対に取られない */ addPay(Math.round(a/50),'use');   /* 盗まれた額の1/50だけ点数が下がる */ letter('店員','kaoguide',`たいへんです！ お店の金庫から${yen(a)}が盗まれてしまいました…。だれかのしわざのようです。`); }
       else if(m.kind==='stolen'){ const k=Math.min(m.n||0,Math.max(0,(S.stock[m.no]||0)-resv(m.no))); if(k>0){ add(m.no,-k); addPay(Math.round((ITEMS[m.no]?ITEMS[m.no].price:0)*k/50),'use'); } letter('店員','kaoguide',`お店の棚から${ITEMS[m.no]?ITEMS[m.no].name:'品物'}×${k}が盗まれてしまいました…。だれかのしわざのようです。`); }
@@ -2187,7 +2225,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101913;
+const APP_VER=2026101915;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2540,7 +2578,7 @@ function simulate(dt){
   { const saf=townVal(T(),'safety',80); const p=dt/60*Math.max(0,70-saf)/70*0.08;
     const shelves=S.cases.filter(c=>c&&has(c.no)&&!ITEMS[c.no].noshow);
     if(shelves.length&&Math.random()<p){
-      if(Math.random()<petGuardRate()){ /* 相棒が追い払った */ }
+      if(Math.random()<petGuardRate()){ if(Math.random()<0.05){ S.petHurt=Date.now()+12*3600000; const pn=(petOf()||{}).name||'相棒'; letter('店員','kaoguide',`相棒の${esc(pn)}が万引き犯を追い払いましたが，**けがをしてしまいました**。12時間ほど休ませます。`); } }
       else if(has(64)){ if(Math.random()<0.05){ add(64,-1); letter('店番ロボット','kaoguide','ビビッ…万引き犯を追い払いましたが，もみ合いで店番ロボットが壊れてしまいました…。'); } }
       else { const c=shelves[Math.floor(Math.random()*shelves.length)]; const k=Math.min(S.stock[c.no]-resv(c.no),1+rnd(3)); if(k>0){ add(c.no,-k); S.today.theft=(S.today.theft||0)+k; if(AWAY){ S.awayTheft=(S.awayTheft||0)+k; } else { letter('店員','kaoguide',`万引きにあいました！ ${ITEMS[c.no].name}×${k}が盗まれてしまいました…。街の治安が悪いようです（店番ロボットがいれば防げます）。`); const nm=`【万引き】${S.shop}で${ITEMS[c.no].name}×${k}が盗まれた！ 街の治安の悪化が心配される`; S.news.unshift({at:Date.now(),d:day(),t:hms(S.clock%1440),m:nm}); newsNet(nm); } } }
     } }
@@ -2770,6 +2808,8 @@ const UPDATES=[
   ['🛠️','品物づくりの見直し：本で品物を作ると**ときどき本がボロボロになる**ようになりました（1回5%・造船術は10%。熟練度が上がるほどなりにくい）。そのかわり，本で作る**武器・防具・装飾品（剣・盾・鎧・杖・アクセサリ）は，できる数が1.5倍**です（成功の確率はそのまま）。','imp'],
   ['🌱','荘園と在庫：食べ物の値段が上がったぶん，**野菜畑・狩り場の収穫を半分，生け簀を3/4**にしました。¥1,000以下の安い原料（薬草・木の枝・丸太・獣の革・鉄塊・ミスリル塊・魔石など）は，**在庫の維持費が1/5**になりました。'],
   ['🏆','点数の見直し：**赤字は1割（最大¥100万ぶん）だけ**点数に響くようになり，大きな赤字のあとも稼げばすぐ点数が戻ります。**寄付（ギルド・領主）・家の購入・ギルド結成のお金も，点数には1割だけ**響きます（お金そのものは減ります）。ランキングの**順位の矢印（↑↓）は，前回の決算のときの順位**とくらべるように直しました。','imp'],
+  ['🤖','**店番ロボットと見張りの相棒（魔物）が，盗人（NPCのクロ・禁断の書での万引きや金庫破り）も追い払う**ようになりました。相棒は見張りの強さに応じて，ロボットは6割の確率で追い払います。そのかわり，追い払ったときに**ロボットは1割の確率で壊れ，相棒は1割の確率でけがをして12時間休みます**（万引きのときは5%）。','imp'],
+  ['🐾','**相棒の魔物に，種類ごとにちがう「特性」**がつきました（癒しの体・宝さがし・番犬・剥ぎ取り上手・鋭い眼・頑丈・身軽・猛攻・愛嬌・客寄せ・守護・潮風・かしこい・器用・招福）。連れている相棒の特性はいつも効き，強い魔物ほど効果が大きくなります（低1倍・中1.5倍・上2倍・最上級3倍）。けがで休んでいるあいだは効きません。','imp'],
   ['🧾','決算履歴（収支）に，経費の中の「在庫の維持費」，仕入れの中の「仕入れ以外の出費」，「寄付・家」の金額も出るようにしました。'],
  ]},
  {id:20261018,d:'2026年10月18日',items:[
@@ -3640,7 +3680,9 @@ function special(no,i,target,msgs){
       else if(n){ n.pop=clamp(n.pop-20,0,100); rumorNpc('npc:'+n.id,12*3600000); }
       msgs.push(`${esc(tname)}の悪い噂を流した…`); nw(`【事件】${tname}に関する悪い噂が広まっている`);
       if(Math.random()<0.3*(thf?0.5:1)*(pol?2:1)/snk/snk){ const fm=payFine(); S.pop=clamp(S.pop-10,0,100); msgs.push(`<span class="red">噂の出どころがバレてしまった！ ${fm}自店の人気も下がった</span>`); nw(`【事件】${tname}の悪い噂を流していたのは${S.shop}の店主だった！ 罰金${yen(FINE)}`); } }
-    if(i===1){
+    const blk=(isP&&(i===1||i===3))?shopGuardBlock(pshop.grd):null;
+    if(blk){ const bn=blk==='robot'?'店番ロボット':'見張りの相棒の魔物'; S.pop=clamp(S.pop-5,0,100); sendMail(uid,{kind:'guarded',by:blk,what:'盗みに入った'+(S.shop||'')+'の店主'}); msgs.push(`<span class="red">${esc(tname)}の${bn}に見つかって追い払われた！ 人気が下がった…</span>`); nw(`【事件】${S.shop}の店主が${tname}で盗みをはたらこうとしたが，${bn}に追い払われた！`); }
+    if(i===1&&!blk){
       const cs=isP?(pshop.cases||[]).filter(c=>c&&c.stock>0&&ITEMS[c.no]):(n?n.cases.filter(c=>c&&c.stock>0):[]);
       if(cs.length&&Math.random()<0.6*(thf?1.35:1)*(pol?0.5:1)*snk){ const c=pick(cs); const k=Math.min(c.stock,1+rnd(3)); if(!isP){ if(NET.online) npcShelfTake(n.id,n.cases.indexOf(c),c.no,k); c.stock-=k; npcLose('npc:'+n.id,(c.price||ITEMS[c.no].price)*k,(c.price||ITEMS[c.no].price)*k/50); } add(c.no,k);
         if(isP){ sendMail(uid,{kind:'stolen',no:c.no,n:k}); const v=(ITEMS[c.no]?ITEMS[c.no].price:0)*k;
@@ -3648,7 +3690,7 @@ function special(no,i,target,msgs){
           if(NET.shops[uid]){ const x=(NET.shops[uid].cases||[]).find(z=>z&&z.no===c.no&&z.stock>0); if(x) x.stock=Math.max(0,x.stock-k); } }
         msgs.push(`${esc(tname)}から${iname(c.no)}×${k}を盗んだ…`); nw(`【万引き】${tname}で${ITEMS[c.no].name}×${k}が盗まれた！ 犯人はまだ見つかっていない`); }
       else { const fm=payFine(); S.pop=clamp(S.pop-15,0,100); msgs.push(`<span class="red">見つかってしまった！ ${fm}人気も下がった</span>`); nw(`【事件】${S.shop}の店主が${tname}で万引きしようとして捕まった！ 罰金${yen(FINE)}`); } }
-    if(i===3){
+    if(i===3&&!blk){
       // 盗める額：相手の資金の3〜8%（最低¥1万・最高¥300万）。成功率5割
       const base=isP?Math.max(0,pshop.cash!=null?pshop.cash:0):(n?Math.max(0,NET.online?((npcOnline().find(r=>r.key==='npc:'+n.id)||{}).money||0):(n.money||300000)):0);
       if(base>0&&Math.random()<0.5*(thf?1.4:1)*(pol?0.5:1)*snk){ const g=Math.min(3000000,Math.max(10000,Math.round(base*rr(0.03,0.08)/1000)*1000));
