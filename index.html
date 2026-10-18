@@ -995,6 +995,8 @@ function migrate(s){
   delete s.speed; delete s.lord; delete s.safety; delete s.rebel;
   if(!s.clock || s.clock<0) s.clock=nowClock();
   fixClock(s);
+  // NPCの棚に同じ品が重なっていたら，読み込んだときにすぐ整理する（次の補充まで待たない）
+  if(s.npcs) s.npcs.forEach(n=>{ try{ if(!n.cases) return; const nos=n.cases.filter(c=>c&&c.stock>0).map(c=>c.no); if(new Set(nos).size!==nos.length) npcRestock(n,false); }catch(e){} });
   return s;
 }
 let saveBusy=false, saveDirty=false;
@@ -2002,7 +2004,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101815;
+const APP_VER=2026101816;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
