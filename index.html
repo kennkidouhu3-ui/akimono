@@ -1864,12 +1864,12 @@ function npcOnline(atDay){
     const loc=S&&S.npcs&&S.npcs[i];
     const ex=(((T().exposed||{})['npc:'+i]||0)>Date.now()?0.8:1)*(((T().nikuStolen||{})['npc:'+i]||0)>Date.now()?0.9:1)*(((T().rumor||{})['npc:'+i]||0)>Date.now()?0.8:1);
     const popE=clamp(pop*ex+npcPopToday('npc:'+i),0,100);
-    const tw=T(), nikuB=d.tyrant?{pt:tw.nikuScore||0,pop:tw.nikuPop||0,dig:tw.nikuDig||0}:{pt:0,pop:0,dig:0};
+    const tw=T(), rkM=d.warrior?1.3:1, nikuB=d.tyrant?{pt:tw.nikuScore||0,pop:tw.nikuPop||0,dig:tw.nikuDig||0}:{pt:0,pop:0,dig:0};
     // リキーヤの稼ぎ（求人・用心棒代・掃除代）は，ほかの店の利益と同じ計算で点数にする（稼ぐほど伸びにくい。掃除代は1/10だけ）
-    const rkNow=d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0)+(tw.rikiSweepToday||0)/10:0, rkPrev=d.warrior?(tw.rikiPrev||0)+(tw.rikiGuardPrev||0)+(tw.rikiSweepPrev||0)/10:0;
+    const rkNow=d.warrior?((tw.rikiToday||0)+(tw.rikiGuardToday||0))*2+(tw.rikiSweepToday||0)/5:0, rkPrev=d.warrior?((tw.rikiPrev||0)+(tw.rikiGuardPrev||0))*2+(tw.rikiSweepPrev||0)/5:0;   // 稼ぎは2倍・掃除代は1/5で点数に（きもち強め）
     return {me:false,npc:true,exposed:ex<1,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop:Math.min(99,Math.round(popE)+nikuB.pop),wins,
       dig:Math.max(0,(Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))))+nikuB.dig-((T().npcDigLoss||{})['npc:'+i]||0)),money:(Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3))+(d.warrior?(tw.rikiEarn||0):0)-((tw.npcMoneyLoss||{})['npc:'+i]||0),
-      point:Math.max(0,Math.round(calcPoint(popE,wins,profit3*ex+(d.warrior?rkPrev/3:0),today*ex+(d.warrior?rkNow:0)-npcLossToday('npc:'+i),NPC_DEN)*(d.mult||1))+nikuB.pt),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
+      point:Math.max(0,Math.round(calcPoint(popE,wins,profit3*ex+(d.warrior?rkPrev/3:0),today*ex+(d.warrior?rkNow:0)-npcLossToday('npc:'+i),NPC_DEN)*(d.mult||1)*rkM)+nikuB.pt),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
       st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
   });
 }
@@ -2225,7 +2225,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101915;
+const APP_VER=2026101916;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2810,6 +2810,7 @@ const UPDATES=[
   ['🏆','点数の見直し：**赤字は1割（最大¥100万ぶん）だけ**点数に響くようになり，大きな赤字のあとも稼げばすぐ点数が戻ります。**寄付（ギルド・領主）・家の購入・ギルド結成のお金も，点数には1割だけ**響きます（お金そのものは減ります）。ランキングの**順位の矢印（↑↓）は，前回の決算のときの順位**とくらべるように直しました。','imp'],
   ['🤖','**店番ロボットと見張りの相棒（魔物）が，盗人（NPCのクロ・禁断の書での万引きや金庫破り）も追い払う**ようになりました。相棒は見張りの強さに応じて，ロボットは6割の確率で追い払います。そのかわり，追い払ったときに**ロボットは1割の確率で壊れ，相棒は1割の確率でけがをして12時間休みます**（万引きのときは5%）。','imp'],
   ['🐾','**相棒の魔物に，種類ごとにちがう「特性」**がつきました（癒しの体・宝さがし・番犬・剥ぎ取り上手・鋭い眼・頑丈・身軽・猛攻・愛嬌・客寄せ・守護・潮風・かしこい・器用・招福）。連れている相棒の特性はいつも効き，強い魔物ほど効果が大きくなります（低1倍・中1.5倍・上2倍・最上級3倍）。けがで休んでいるあいだは効きません。','imp'],
+  ['🥋','豪将リキーヤの点数を**きもち強め**にしました（求人・用心棒の稼ぎが点数に2倍で入り，全体も1.3倍）。'],
   ['🧾','決算履歴（収支）に，経費の中の「在庫の維持費」，仕入れの中の「仕入れ以外の出費」，「寄付・家」の金額も出るようにしました。'],
  ]},
  {id:20261018,d:'2026年10月18日',items:[
