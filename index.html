@@ -737,6 +737,10 @@ Object.assign(IMG,{"item-no-331": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
 (function normalizeAdded(){
   // 食べ物は値段3倍（材料の小麦粉・そば粉と，食べ物の詰め合わせも3倍にして，作ったときのもうけの割合はそのまま）
   DATA.items.forEach(it=>{ if(it.food||[290,291,305,306].includes(it.no)){ it.price=Math.round(it.price*3); if(it.cost) it.cost=Math.round(it.cost*3); } });
+  // 鍛冶工房で作るバトル装備（獣牙・魔獣・幻獣・覇竜）は，作るお金＋素材の約1.3倍の値段に。装備一式も中身の1.3倍
+  { const BP=[[161,45000],[165,120000],[169,300000],[173,820000]], SP={300:230000,301:620000,302:1560000,303:4260000};
+    BP.forEach(([a,p])=>{ for(let k=0;k<4;k++){ const it=DATA.items.find(x=>x.no===a+k); if(it){ it.price=p; it.forgeGear=1; } } });
+    Object.keys(SP).forEach(no=>{ const it=DATA.items.find(x=>x.no===+no); if(it) it.price=SP[no]; }); }
   // 薬（ポーション・エーテル・エリ草など）は値段10倍。薬草から作るときの薬草は3倍の量に
   DATA.items.forEach(it=>{ if(it.med&&!it.food){ it.price=Math.round(it.price*10); if(it.cost) it.cost=Math.round(it.cost*10); } });
   { const B=DATA.items.find(x=>x.no===15); if(B) B.uses.forEach(u=>{ if((u.get||[]).some(g=>[30,32].includes(g[1]))) u.use=u.use.map(([n,x])=>x===1?[n*3,x]:[n,x]); }); }
@@ -768,6 +772,8 @@ Object.assign(IMG,{"item-no-331": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   // 港で手に入る品：遠洋の品は1.33倍・危険な海の品は2倍売れやすく，めったにとれない品はさらに1.25倍
   const SEA={213:.75,214:.75,310:.75,311:.75,215:.75,312:.75,196:.75,313:.6,199:.6,209:.5,210:.5,211:.5,212:.5,317:.5,216:.4};
   DATA.items.forEach(it=>{ if(SEA[it.no]&&it.pop>0) it.pop=Math.max(10,Math.round(it.pop*SEA[it.no])); });
+  // バトル装備は作るのが大変なので，値段のわりに売れやすく（ふつうの品の2倍）
+  DATA.items.forEach(it=>{ if(it.forgeGear&&it.pop>0) it.pop=Math.max(10,Math.round(it.pop/2)); });
   // 装備一式などのセット商品：棚1つで中身の品を1つ並べるより1.3倍かせげる売れ行きに（中身をばらして売るより楽に）
   DATA.items.forEach(it=>{
     if(it.type!=='道具'||it.scale!=='セット'||!(it.pop>0)) return;
@@ -2225,7 +2231,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101916;
+const APP_VER=2026101917;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2811,6 +2817,7 @@ const UPDATES=[
   ['🤖','**店番ロボットと見張りの相棒（魔物）が，盗人（NPCのクロ・禁断の書での万引きや金庫破り）も追い払う**ようになりました。相棒は見張りの強さに応じて，ロボットは6割の確率で追い払います。そのかわり，追い払ったときに**ロボットは1割の確率で壊れ，相棒は1割の確率でけがをして12時間休みます**（万引きのときは5%）。','imp'],
   ['🐾','**相棒の魔物に，種類ごとにちがう「特性」**がつきました（癒しの体・宝さがし・番犬・剥ぎ取り上手・鋭い眼・頑丈・身軽・猛攻・愛嬌・客寄せ・守護・潮風・かしこい・器用・招福）。連れている相棒の特性はいつも効き，強い魔物ほど効果が大きくなります（低1倍・中1.5倍・上2倍・最上級3倍）。けがで休んでいるあいだは効きません。','imp'],
   ['🥋','豪将リキーヤの点数を**きもち強め**にしました（求人・用心棒の稼ぎが点数に2倍で入り，全体も1.3倍）。'],
+  ['⚔️','**鍛冶工房で作るバトル装備（獣牙・魔獣・幻獣・覇竜）の値段を，作るお金と素材の約1.3倍に上げました**（獣牙¥45,000・魔獣¥120,000・幻獣¥300,000・覇竜¥820,000）。作るのが大変なぶん，**値段のわりに売れやすく（ふつうの品の2倍）**なっています。装備一式のセットも中身に合わせて値上げしました。','imp'],
   ['🧾','決算履歴（収支）に，経費の中の「在庫の維持費」，仕入れの中の「仕入れ以外の出費」，「寄付・家」の金額も出るようにしました。'],
  ]},
  {id:20261018,d:'2026年10月18日',items:[
