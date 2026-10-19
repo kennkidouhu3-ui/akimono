@@ -2231,7 +2231,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026101917;
+const APP_VER=2026102001;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2818,6 +2818,7 @@ const UPDATES=[
   ['🐾','**相棒の魔物に，種類ごとにちがう「特性」**がつきました（癒しの体・宝さがし・番犬・剥ぎ取り上手・鋭い眼・頑丈・身軽・猛攻・愛嬌・客寄せ・守護・潮風・かしこい・器用・招福）。連れている相棒の特性はいつも効き，強い魔物ほど効果が大きくなります（低1倍・中1.5倍・上2倍・最上級3倍）。けがで休んでいるあいだは効きません。','imp'],
   ['🥋','豪将リキーヤの点数を**きもち強め**にしました（求人・用心棒の稼ぎが点数に2倍で入り，全体も1.3倍）。'],
   ['⚔️','**鍛冶工房で作るバトル装備（獣牙・魔獣・幻獣・覇竜）の値段を，作るお金と素材の約1.3倍に上げました**（獣牙¥45,000・魔獣¥120,000・幻獣¥300,000・覇竜¥820,000）。作るのが大変なぶん，**値段のわりに売れやすく（ふつうの品の2倍）**なっています。装備一式のセットも中身に合わせて値上げしました。','imp'],
+  ['⏱️','品物の説明の「売れ行き」を，**現実の時間**（〇秒・〇分・〇時間に1個）で表示するようにしました。食べ物・薬のよく売れる効果も入れた目安です。'],
   ['🧾','決算履歴（収支）に，経費の中の「在庫の維持費」，仕入れの中の「仕入れ以外の出費」，「寄付・家」の金額も出るようにしました。'],
  ]},
  {id:20261018,d:'2026年10月18日',items:[
@@ -3281,7 +3282,7 @@ function itemInfo(no){
   }
   const makers=[]; ITEMLIST.forEach(x=>x.uses.forEach(u=>{ if(u.get.some(g=>g[1]===no)) makers.push(`${esc(x.name)}「${esc(u.name)}」`); }));
   const uses=it.uses.map(u=>`・${esc(u.name)}${u.get.length?'　→ '+u.get.map(([n,x])=>esc(ITEMS[x].name)+'×'+n).join('，'):''}`).join('<br>');
-  const sell=it.pop>0&&!it.noshow? (it.pop<60?`約${Math.round(it.pop)}分に1個`:`約${(it.pop/60).toFixed(it.pop<600?1:0)}時間に1個`)+'（標準価格・人気50%のとき）':'陳列して売ることはできません';
+  const sell=it.pop>0&&!it.noshow? (()=>{ const sec=it.pop/RATE/((it.food?2:1)*(it.med?3:1)); return (sec<60?`約${Math.max(1,Math.round(sec))}秒に1個`:sec<3600?`約${Math.round(sec/60)}分に1個`:`約${(sec/3600).toFixed(sec<36000?1:0)}時間に1個`)+'（現実の時間・棚1つ・標準価格・人気50%のとき）'; })():'陳列して売ることはできません';
   modal(`<div class="c">${im('item-no-'+no,'','width=48 height=48')}<br><big>${esc(it.name)}</big> ${im('item-typesign'+Math.max(1,typeIdx(it.type)),'i32')}</div>
   <p class="c"><small>${esc(it.info)}</small></p>
   <table class="t" style="width:100%">
