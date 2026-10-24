@@ -2383,7 +2383,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026102404;
+const APP_VER=2026102405;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2962,6 +2962,7 @@ const MENU=[
 /* ---------- アップデート情報（新しいものを上に追加していく） ---------- */
 const UPDATES=[
  {id:20261024,d:'2026年10月24日',items:[
+  ['🗂️','図書館のアイテム図鑑に**くわしい分類**（食べもの・薬・魔物の素材・島・町の品・バトル装備・セット・船・家電・乗り物・ペット・技術・イベント品・棚で売れる品）を追加しました。倉庫にも「家電」「乗り物」「ペット」「セット」「技術」の分類が増えました。'],
   ['📚','**本の作り方を見直しました。**家庭料理入門を分けて，**八百屋向けの『野菜料理の本』・魚屋向けの『魚料理の本』**を新しく作り，肉料理は肉屋向けの『精肉・加工の手引き』にまとめました（どれも8種類）。家庭料理入門は，だれでも作れる家庭の味（野菜スープ・焼き魚定食・ローストチキン・ミルクティー・肉じゃが・家庭のカレー・猪汁・ホットミルク）の本になりました。革細工入門・麺打ちの極意・剣・盾・鎧・杖の本も8種類ずつ作れるようになりました（革の手袋・革のベルト・肉うどん・焼きそば・天ざるそば・白銀の剣・珊瑚の盾・絹の法衣・星の杖）。肉屋・八百屋・魚屋に転職すると，その本がもらえます。','imp'],
   ['👨‍🍳','**新しい職業を7つ追加しました**（転職のススメから）。**天ぷら屋**（えび天・野菜天ぷら・天丼）・**ハンバーグ屋**（ハンバーグ・チーズハンバーグ・ハンバーグ弁当）・**ケーキ屋**（ショートケーキ・チーズケーキ・デコレーションケーキ）・**パン屋**（食パン・クロワッサン・サンドイッチ）・**家電屋**（魔石ランプ・魔導扇風機・魔導冷蔵庫。店番ロボットが壊れにくい）・**車屋**（荷車・馬車・魔導車。取り寄せが早く届く）・**ペットショップ**（ペットフード・子犬・子猫・小鳥。魔物が相棒になりやすい）。それぞれの本は市場で買え，修行キットで覚える技術もあります。どの職業の本も**8種類の品**が作れます（熟練度が上がると作れる品が増えます）。','imp'],
  ]},
@@ -3593,8 +3594,13 @@ const STOCK_CATS=[
   {k:'food',ic:'cat-food',n:'食べもの',f:it=>!!it.food},
   {k:'drug',ic:'item-type3',n:'薬',f:it=>it.type==='薬'&&!it.food},
   {k:'book',ic:'item-type2',n:'本',f:it=>it.type==='本'},
-  {k:'map',ic:'item-type9',n:'地図・道具',f:it=>['地図','道具'].includes(it.type)&&!SHIPS[it.no]},
+  {k:'map',ic:'item-type9',n:'地図・道具',f:it=>['地図','道具'].includes(it.type)&&!SHIPS[it.no]&&!KADEN_NOS.includes(it.no)&&!CAR_NOS.includes(it.no)&&!PET_NOS.includes(it.no)&&!isSet(it)},
   {k:'ship',ic:'cat-ship',n:'船',f:it=>!!SHIPS[it.no]},
+  {k:'kaden',ic:'item-no-361',n:'家電',f:it=>KADEN_NOS.includes(it.no)},
+  {k:'car',ic:'item-no-366',n:'乗り物',f:it=>CAR_NOS.includes(it.no)},
+  {k:'pet',ic:'item-no-372',n:'ペット',f:it=>PET_NOS.includes(it.no)||it.no===371},
+  {k:'set',ic:'item-no-300',n:'セット',f:it=>isSet(it)},
+  {k:'talent',ic:'item-no-264',n:'技術',f:it=>!!it.talent||[18,19,24,38].includes(it.no)},
   {k:'rare',ic:'item-no-81',n:'イベント品',f:it=>!!it.eventOnly},
   {k:'sell',ic:'cat-sell',n:'売れる品',f:it=>it.pop>0&&!it.noshow},
 ];
@@ -4846,15 +4852,35 @@ SCREENS.dignity=function(){
 };
 function GUILD_LVL(){ return digLevel(GUILD_DIG); }
 function dukeSay(){ if(digLevel(S.dig)<7) return; const msg=$('#dkMsg').value.trim(); townTx(t=>{ t.duke={key:NET.uid,name:S.owner,shop:S.shop,msg,t:Date.now()}; }).then(()=>{ setFlash('大公のお言葉を出しました'); render(); }); }
+// アイテムの細かい分類（図書館・倉庫）
+const KADEN_NOS=[361,362,363,402,403,404,405,406], CAR_NOS=[366,367,368,407,408,409,410,411], PET_NOS=[372,373,374,412,413,414,415];
+const isSet=it=>it.type==='道具'&&it.scale==='セット';
+const LIB_CATS=[
+  {k:'food',ic:'cat-food',n:'食べもの',f:it=>!!it.food},
+  {k:'drug',ic:'item-type3',n:'薬（食べもの以外）',f:it=>it.type==='薬'&&!it.food},
+  {k:'mon',ic:'cat-mon',n:'魔物の素材',f:it=>!!it.fromMon},
+  {k:'isle',ic:'cat-isle',n:'島・町の品',f:it=>!!it.island},
+  {k:'gear',ic:'item-no-173',n:'バトル装備',f:it=>!!it.forgeGear||(FORGE||[]).some(x=>x.no===it.no)},
+  {k:'set',ic:'item-no-300',n:'セット',f:isSet},
+  {k:'ship',ic:'cat-ship',n:'船',f:it=>!!SHIPS[it.no]},
+  {k:'kaden',ic:'item-no-361',n:'家電',f:it=>KADEN_NOS.includes(it.no)},
+  {k:'car',ic:'item-no-366',n:'乗り物',f:it=>CAR_NOS.includes(it.no)},
+  {k:'pet',ic:'item-no-372',n:'ペット',f:it=>PET_NOS.includes(it.no)||it.no===371},
+  {k:'talent',ic:'item-no-264',n:'技術',f:it=>!!it.talent||[18,19,24,38].includes(it.no)},
+  {k:'rare',ic:'item-no-81',n:'イベント品',f:it=>!!it.eventOnly},
+  {k:'sell',ic:'cat-sell',n:'棚で売れる品',f:it=>it.pop>0&&!it.noshow},
+];
 SCREENS.library=function(){
   const tab=sub.t||1;   // 遊び方は「遊び方ガイド」にまとめたので，図書館は図鑑から
   const tabs=`<div class="tabs">${['','アイテム図鑑','魔物図鑑','スキル一覧','スタッフロール'].map((t,i)=>t?`<span class="${tab===[0,1,2,4,3][i]?'on':''}" onclick="sub.t=${[0,1,2,4,3][i]};render()">${t}</span>`:'').join('')}<span onclick="GUIDE_OPEN=-1;go('guide')">📖 遊び方ガイド</span></div>`;
   if(tab===1){
-    const tf=sub.type||0;
+    const tf=sub.lcat?-1:(sub.type||0), LC=LIB_CATS.find(c=>c.k===sub.lcat)||null;
     return `<div class="c"><big>図書館</big></div>${tabs}
-    <div class="tabs">${TYPES.map((t,i)=>`<span class="${tf===i?'on':''}" onclick="sub.type=${i};render()">${t}</span>`).join('')}</div>
+    <div class="tabs">${TYPES.map((t,i)=>`<span class="${tf===i?'on':''}" onclick="sub.type=${i};sub.lcat='';render()">${t}</span>`).join('')}</div>
+    <div class="c note" style="margin-top:4px">くわしい分類</div>
+    <div class="tabs cattabs">${LIB_CATS.map(c=>`<span class="${sub.lcat===c.k?'on':''}" onclick="sub.lcat='${c.k}';render()">${c.ic&&IMG[c.ic]?im(c.ic,'','width=18 height=18 style="vertical-align:middle;margin-right:2px"'):''}${c.n}<small>（${ITEMLIST.filter(c.f).length}）</small></span>`).join('')}</div>
     <div class="tbl"><table class="t"><tr><th>アイテム</th><th>標準価格</th><th>説明・使い道</th></tr>
-    ${ITEMLIST.filter(it=>!tf||typeIdx(it.type)===tf).map(it=>`<tr><td class="nw">${ii(it.no)}${esc(it.name)}<br><small>${esc(it.type)}${it.soubi?'・'+SOUBI[it.soubi]:''}</small></td><td class="r nw">${yen(it.price)}</td><td><small>${esc(it.info)}${['life','attack','defence','tech'].filter(k=>it[k]).map(k=>` ${{life:'HP',attack:'攻',defence:'防',tech:'技'}[k]}${it[k]>0?'+':''}${it[k]}`).join('')}
+    ${ITEMLIST.filter(it=>LC?LC.f(it):(!tf||typeIdx(it.type)===tf)).map(it=>`<tr><td class="nw">${ii(it.no)}${esc(it.name)}<br><small>${esc(it.type)}${it.soubi?'・'+SOUBI[it.soubi]:''}</small></td><td class="r nw">${yen(it.price)}</td><td><small>${esc(it.info)}${['life','attack','defence','tech'].filter(k=>it[k]).map(k=>` ${{life:'HP',attack:'攻',defence:'防',tech:'技'}[k]}${it[k]>0?'+':''}${it[k]}`).join('')}
       ${it.uses.map(u=>`<br>・${esc(u.name)}${u.get.length?'→'+u.get.map(([n,x])=>esc(ITEMS[x].name)+'×'+n).join(','):''}`).join('')}</small></td></tr>`).join('')}
     </table></div>`;
   }
