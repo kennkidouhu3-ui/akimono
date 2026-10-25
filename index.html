@@ -265,6 +265,11 @@ hr{margin:12px auto;}
   .talk img.kao,img.kao{width:44px;height:44px;}
   hr{margin:8px auto;}
 }
+.ttl1{color:#b8860b;font-weight:bold}
+.ttl2{color:#d4a017;font-weight:bold;text-shadow:0 0 3px #ffe9a0}
+.ttl3{font-weight:bold;background:linear-gradient(90deg,#b8860b,#ffd700,#fff6c0,#ffd700,#b8860b);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:ttlshine 2.5s linear infinite}
+@keyframes ttlshine{0%{background-position:200% 0}100%{background-position:0 0}}
+.ped{display:inline-block;width:31%;min-width:100px;vertical-align:top;margin:2px;padding:4px 2px;border:1px solid #d8c9a0;border-radius:8px;background:linear-gradient(#fffdf5,#f3ead2);text-align:center;box-sizing:border-box}
 </style>
 </head>
 <body>
@@ -1816,10 +1821,9 @@ function titlesHtml(){
   const got=S.titles||[];
   return `<div class="c"><big>称号</big> <small>（${got.length}/${TITLES.length}）</small></div>
   <div class="c">いまの称号：<select onchange="S.title=this.value||null;save();publishShop(true);render()"><option value="">なし</option>${got.map(id=>`<option value="${id}" ${S.title===id?'selected':''}>${esc(titleName(id))}</option>`).join('')}</select></div>
-  <div class="tbl"><table class="t" style="width:100%">${TITLES.map(x=>`<tr><td class="nw">${got.includes(x.id)?`<b style="color:#b8860b">【${x.n}】</b>`:'<span class="note">？？？</span>'}</td><td><small>${x.d}</small></td></tr>`).join('')}</table></div>
-  <div class="c note">選んだ称号は，ランキングの名前の横に表示されます。</div>`;
+  <div class="tbl"><table class="t" style="width:100%">${TITLES.map(x=>`<tr><td class="nw">${got.includes(x.id)?`<b class="ttl${titleLv(x.id)}">【${x.n}】</b>`:'<span class="note">？？？</span>'}</td><td><small>${x.d}</small></td></tr>`).join('')}</table></div>
+  <div class="c note">選んだ称号は，ランキングの名前の横に表示されます。お金で買う称号は［街］→［広場］の称号屋で買えます。</div>`;
 }
-function titleBadge(id){ return id&&titleName(id)?` <small style="color:#b8860b;font-weight:bold">【${esc(titleName(id))}】</small>`:''; }
 
 function raidRewards(r){
   const ents=Object.entries(r.dmg||{}).filter(([k,v])=>!String(k).startsWith('npc:')); if(!ents.length) return;
@@ -2173,7 +2177,7 @@ function pxRate(d,c,idx){
   const it=ITEMS[c.no]; if(!it||!it.pop||it.noshow) return 0;
   const rv=rivalsOf(c.no).filter(r=>r.key!==d.uid);
   const mine=S&&S.cases.find(x=>x&&x.no===c.no&&has(x.no)); if(mine) rv.push({price:mine.price,pop:S.pop});
-  const aMe=popF(d.pop||0)*priceF(c.price/it.price);
+  const aMe=popF((d.pop||0)+statueBonus(d.uid))*priceF(c.price/it.price);
   const aOther=rv.reduce((a,r)=>a+popF(r.pop)*priceF(r.price/it.price),0);
   const share=aMe<=0?0:Math.min(1,aMe/(aMe+aOther)*(1+0.25*rv.length));
   return (1/it.pop)*demandOf(c.no)*aMe*share*(it.food?2:1)*(it.med?3:1)*(isTrend(c.no)?1.5:1)*CASE_BOOST(idx)*townMult()*jobSellX(c.no);
@@ -2433,7 +2437,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026102502;
+const APP_VER=2026102503;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2467,6 +2471,7 @@ async function initNet(){
     db.collection('shops').onSnapshot(s=>{ const o={}; s.docs.forEach(d=>o[d.id]=d.data()); NET.shops=o; softRender(); },netErr);
     watchVersion(db);
     db.doc(MKT_PATH).onSnapshot(s=>{ NET.market=s.exists?s.data():null; if(route==='market') softRender(); },netErr);
+    db.doc(PLAZA_PATH).onSnapshot(s=>{ NET.plaza=s.exists?JSON.parse(JSON.stringify(s.data())):null; checkPlaza(); if(route==='plaza'||route==='rank'||route==='town') softRender(); },netErr);
     db.doc(NPCSH_PATH).onSnapshot(s=>{ NET.npcShelf=s.exists?JSON.parse(JSON.stringify(s.data())):null; applyNpcShelf(); if(route==='street') softRender(); },netErr);
     db.doc('town/state').onSnapshot(s=>{ NET.town=s.exists?JSON.parse(JSON.stringify(s.data())):null; if(NET.town&&!NET.town.riot) NET.town.riot={}; softRender(); },netErr);
     db.collection('mail').where('to','==',uid).onSnapshot(queueMail,netErr);
@@ -2755,7 +2760,7 @@ function myRate(c,rivals){
   const it=ITEMS[c.no]; if(!it||!it.pop||it.noshow) return 0;
   rivals=rivals||rivalsOf(c.no);
   const ref=marketPrice(c.no,rivals);
-  const aMe=popF(S.pop)*priceF(c.price/it.price);   // 標準価格とくらべた高い・安い
+  const aMe=popF(S.pop+statueBonus(myKey()))*priceF(c.price/it.price);   // 標準価格とくらべた高い・安い
   const aOther=rivals.reduce((a,r)=>a+popF(r.pop)*priceF(r.price/it.price),0);
   const share=aMe<=0?0:Math.min(1,aMe/(aMe+aOther)*(1+0.25*rivals.length));
   return (1/it.pop)*demandOf(c.no)*aMe*share*(it.food?2:1)*(it.med?3:1)*(isTrend(c.no)?1.5:1);   // 食べ物は2倍・薬は3倍よく売れる
@@ -3012,6 +3017,9 @@ const MENU=[
 /* ---------- アップデート情報（新しいものを上に追加していく） ---------- */
 const UPDATES=[
  {id:20261025,d:'2026年10月25日',items:[
+  ['🗿','**街に「広場」ができました！** 大金を払って<b>銅像</b>を建てられます（銅3,000万円〜・銀1億円〜・金5億円〜）。台座は3つで，いちばん安い像より高い金額を出すと建て替えられます。銅像がある間はお店の人気+3。','imp'],
+  ['🏅','広場の<b>称号屋</b>で，お金で称号を買えるようになりました（小金持ち1,000万円〜伝説の商人50億円）。上の称号ほど光る金色の文字で表示されます。'],
+  ['👑','街で1人だけの称号<b>「街の支配者」</b>（100億円〜）。ほかの人がもっと高く買うと奪われ，払った額の半分が戻ります。'],
   ['🔍','全職業の「早く作れる作業」を点検し，担当の職業がついていなかった作り方に職業をつけました（装飾細工入門の指輪・首飾りなど→道具屋，龍涎香の香水→薬屋，革の胸当て→防具屋，木の杖→武器屋，ロボットの解体→家電屋，家庭料理入門のホットミルク・ミルクティー→酪農家，肉じゃが・猪汁→肉屋，家庭のカレー→八百屋）。'],
   ['🐄','**酪農家を強化しました。**乳しぼりでとれるミノ牛乳を**3倍**（ふつう10→30・ハード20〜40→40〜80）にし，酪農家ならさらに**1.5倍**とれます。新しい本**『酪農の手引き』**で，ミノバター・生クリーム・ミノヨーグルト・ミノチーズ・ミルクアイス・ミルクジャム・チーズフォンデュ・熟成ミノチーズの**8種類**が作れます（市場で買えます。酪農家に転職するともらえます）。','imp'],
  ]},
@@ -3204,7 +3212,7 @@ function rankTable(limit){
   return `${mine}${rk.map((r,i)=>{
     const cs=(r.cases||[]).filter(c=>c&&c.stock>0&&ITEMS[c.no]);
     const first=cs[0], rank=off+i+1;
-    const tags=`${titleBadge(r.title)}${r.npc?' <span class="npctag">NPC</span>':''}${r.strong?' <span class="npctag strong">強豪</span>':''}${r.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${r.tyrant?' <span class="npctag strong" style="background:#3a1010;border-color:#300;color:#fff">暴君</span>':''}${((T().exposed||{})[r.key]||0)>Date.now()?' <span class="npctag" style="background:#fdd;border-color:#c33;color:#c33">取締中</span>':''}${L&&L.key===r.key?' <small class="red">[領主]</small>':''}`;
+    const tags=`${titleBadge(r.title,r.key)}${r.npc?' <span class="npctag">NPC</span>':''}${r.strong?' <span class="npctag strong">強豪</span>':''}${r.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${r.tyrant?' <span class="npctag strong" style="background:#3a1010;border-color:#300;color:#fff">暴君</span>':''}${((T().exposed||{})[r.key]||0)>Date.now()?' <span class="npctag" style="background:#fdd;border-color:#c33;color:#c33">取締中</span>':''}${L&&L.key===r.key?' <small class="red">[領主]</small>':''}`;
     return `<div class="rk ${r.me?'me':''}">
       <div class="rkh"><span class="rkn">No.${rank} ${rank<=6?im('rank'+(7-rank),'i16'):''} ${r.npc?'':updown(r,off+i)}</span><span class="rkp">${(r.point||0).toLocaleString()}<small>点</small></span></div>
       <div class="rkm"><div class="rkf">${kao(r.kao)}<br>${im((JOBS[r.job]||JOBS['']).img,'','width=20 height=30')}</div>
@@ -3307,6 +3315,116 @@ function townCell(label,r,bld,sign,wide){
   return `<div class="tcell ${wide?'wide':''}" onclick="go('${r}')"><span class="lbl">${label}</span>${sign?im(sign,'sign'):''}${bld}</div>`;
 }
 function townTree(){ return `<div class="tcell" style="cursor:default">${im(pick(['tree1','tree2']),'bld')}</div>`; }
+// ----- 街の広場：銅像と，お金で買う称号（エンドコンテンツ） -----
+const BUY_TITLES=[
+  {id:'b1',n:'小金持ち',price:1e7,lv:1},
+  {id:'b2',n:'豪商',price:5e7,lv:1},
+  {id:'b3',n:'黄金の商人',price:2e8,lv:2},
+  {id:'b4',n:'億万長者',price:1e9,lv:2,req:'b2'},
+  {id:'b5',n:'伝説の商人',price:5e9,lv:3,req:'b4'},
+];
+const RULER_MIN=1e10;
+BUY_TITLES.forEach(b=>TITLES.push({id:b.id,n:b.n,d:`広場の称号屋で${yen(b.price)}で買う${b.req?'（「'+titleName(b.req)+'」が必要）':''}`,c:()=>false,buy:1}));
+TITLES.push({id:'ruler',n:'街の支配者',d:`広場で${yen(RULER_MIN)}以上を払う（街で1人だけ・「伝説の商人」が必要）`,c:()=>false,buy:1});
+function titleLv(id){ if(id==='ruler') return 3; const b=BUY_TITLES.find(x=>x.id===id); return b?b.lv:1; }
+const STATUE_TIER=[{n:'金',min:5e8,col:'#e8b923',dk:'#9a7300'},{n:'銀',min:1e8,col:'#c8ccd4',dk:'#7a808c'},{n:'銅',min:3e7,col:'#c27a3a',dk:'#7a4418'}];
+function statueTier(a){ return STATUE_TIER.find(t=>a>=t.min)||STATUE_TIER[2]; }
+function statueImg(a,w){ const t=statueTier(a);
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 90"><defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="${t.dk}"/><stop offset=".45" stop-color="${t.col}"/><stop offset="1" stop-color="${t.dk}"/></linearGradient></defs><rect x="8" y="72" width="44" height="14" rx="2" fill="#9b9384"/><rect x="12" y="66" width="36" height="8" fill="#b9b1a0"/><circle cx="30" cy="16" r="8" fill="url(#g)"/><path d="M18 64 L21 30 Q30 24 39 30 L42 64 Z" fill="url(#g)"/><path d="M21 33 L11 22 L14 19 L24 30 Z" fill="url(#g)"/><path d="M39 33 L46 46 L43 48 L36 36 Z" fill="url(#g)"/><rect x="9" y="12" width="3" height="12" fill="${t.dk}"/><circle cx="10.5" cy="10" r="3" fill="#ffd34d"/></svg>`;
+  return `<img src="data:image/svg+xml,${encodeURIComponent(svg)}" width="${w||54}" height="${Math.round((w||54)*1.5)}" alt="">`; }
+const PLAZA_PATH='town/plaza';
+function confirm2(m){ try{ return window.confirm(m); }catch(e){ return true; } }
+function agoT(t){ const s=(Date.now()-t)/1000; return s<3600?Math.max(1,Math.round(s/60))+'分前':s<86400?Math.round(s/3600)+'時間前':Math.round(s/86400)+'日前'; }
+function plaza(){ const p=NET.online?NET.plaza:(S&&S.plazaLocal); return p||{st:[null,null,null]}; }
+async function plazaTx(fn){
+  if(!NET.online){ const d=JSON.parse(JSON.stringify(S.plazaLocal||{st:[null,null,null]})); const r=fn(d)||{}; if(r.set) S.plazaLocal=r.set; return r; }
+  return dbTx(PLAZA_PATH,d=>fn(d||{st:[null,null,null]}));
+}
+function statueBonus(key){ return key&&(plaza().st||[]).some(x=>x&&x.key===key)?3:0; }
+function rulerKey(){ const r=plaza().ruler; return r?r.key:null; }
+function titleBadge(id,key){
+  if(!id||!titleName(id)) return '';
+  if(id==='ruler'&&key&&rulerKey()!==key) return '';
+  return ` <small class="ttl${titleLv(id)}">【${esc(titleName(id))}】</small>`;
+}
+let plazaBusy=false;
+async function checkPlaza(){
+  if(!S||plazaBusy) return; const k=myKey(), P=plaza();
+  S.titles=S.titles||[];
+  if(S.titles.includes('ruler')&&P.ruler&&P.ruler.key!==k){ S.titles=S.titles.filter(x=>x!=='ruler'); if(S.title==='ruler') S.title=null; save(); }
+  if(!((P.nt&&P.nt[k])||(P.rf&&P.rf[k]))) return;
+  plazaBusy=true; let nt=[], rf=0;
+  try{ await plazaTx(d=>{ nt=(d.nt&&d.nt[k])||[]; rf=(d.rf&&d.rf[k])||0; if(!nt.length&&!rf) return {}; if(d.nt) delete d.nt[k]; if(d.rf) delete d.rf[k]; return {set:d}; }); }catch(e){ netErr(e); nt=[]; rf=0; }
+  plazaBusy=false;
+  nt.forEach(m=>letter('広場の管理人','kaoguide',m));
+  if(rf>0){ S.money+=rf; letter('広場の管理人','kaoguide',`「街の支配者」の称号がほかの商人に買い取られたため，払ったお金の半分 ${yen(rf)} をお返しします。`); }
+  if(nt.length||rf) save();
+}
+async function buyTitle(id){
+  const b=BUY_TITLES.find(x=>x.id===id); if(!b) return; S.titles=S.titles||[];
+  if(S.titles.includes(id)){ setFlash('もう持っています',1); render(); return; }
+  if(b.req&&!S.titles.includes(b.req)){ setFlash(`先に「${titleName(b.req)}」が必要です`,1); render(); return; }
+  if(S.money<b.price){ setFlash('資金が足りません',1); render(); return; }
+  if(!confirm2(`称号「${b.n}」を${yen(b.price)}で買いますか？`)) return;
+  S.money-=b.price; addPay(b.price,'gift'); S.titles.push(id); S.title=id;
+  const m=`【称号】${S.owner}（${S.shop}）が${yen(b.price)}を払い，称号「${b.n}」を手に入れた！`; news(m);
+  setFlash(`称号「${b.n}」を手に入れました！`); save(); publishShop(true); render();
+}
+function rulerPrice(){ const r=plaza().ruler; return r?Math.max(RULER_MIN,Math.ceil(r.amt*1.1/1e8)*1e8):RULER_MIN; }
+async function buyRuler(){
+  const k=myKey(); S.titles=S.titles||[];
+  if(!S.titles.includes('b5')){ setFlash('先に「伝説の商人」が必要です',1); render(); return; }
+  if(rulerKey()===k){ setFlash('あなたが今の街の支配者です',1); render(); return; }
+  const price=rulerPrice(); if(S.money<price){ setFlash('資金が足りません',1); render(); return; }
+  if(!confirm2(`${yen(price)}を払って「街の支配者」になりますか？\n（ほかの人に買い取られると，払った額の半分が戻ります）`)) return;
+  let ok=false, prev=null;
+  try{ await plazaTx(d=>{ const cur=d.ruler; const need=cur?Math.max(RULER_MIN,Math.ceil(cur.amt*1.1/1e8)*1e8):RULER_MIN; if(need>price||(cur&&cur.key===k)) return {}; prev=cur||null;
+    if(cur){ d.rf=d.rf||{}; d.rf[cur.key]=(d.rf[cur.key]||0)+Math.round(cur.amt/2); }
+    d.ruler={key:k,name:S.owner,shop:S.shop,amt:price,t:Date.now()}; ok=true; return {set:d}; }); }catch(e){ netErr(e); }
+  if(!ok){ setFlash('ほかの人が先に買いました。もう一度確かめてください',1); render(); return; }
+  S.money-=price; addPay(price,'gift'); if(!S.titles.includes('ruler')) S.titles.push('ruler'); S.title='ruler';
+  const m=`【街の支配者】${S.owner}（${S.shop}）が${yen(price)}を払い，「街の支配者」になった！${prev?`（${prev.shop}から奪い取った）`:''}`; news(m);
+  setFlash('「街の支配者」になりました！'); save(); publishShop(true); render();
+}
+function statueMinBid(){ const st=plaza().st||[]; if(st.some(x=>!x)) return STATUE_TIER[2].min; return Math.max(STATUE_TIER[2].min,Math.min(...st.map(x=>x.amt))+1e6); }
+async function buildStatue(){
+  const amt=Math.floor((parseFloat($('#stAmt').value)||0)*1e4); const msg=String($('#stMsg').value||'').slice(0,20); const k=myKey();
+  const min=statueMinBid();
+  if(amt<min){ setFlash(`${yen(min)}以上が必要です`,1); render(); return; }
+  if(S.money<amt){ setFlash('資金が足りません',1); render(); return; }
+  if(!confirm2(`${yen(amt)}で${statueTier(amt).n}の銅像を建てますか？`)) return;
+  let ok=false, gone=null;
+  try{ await plazaTx(d=>{ d.st=Array.isArray(d.st)?d.st:[null,null,null]; while(d.st.length<3) d.st.push(null);
+    let i=d.st.findIndex(x=>!x);
+    if(i<0){ i=0; d.st.forEach((x,j)=>{ if(x.amt<d.st[i].amt) i=j; }); if(amt<=d.st[i].amt) return {}; gone=d.st[i];
+      d.nt=d.nt||{}; if(gone.key&&gone.key!==k){ d.nt[gone.key]=(d.nt[gone.key]||[]).concat([`広場に建てたあなたの${statueTier(gone.amt).n}の銅像（${yen(gone.amt)}）が，${S.owner}（${S.shop}）の銅像に建て替えられ，取り壊されてしまいました…。`]).slice(-5); } }
+    else gone=null;
+    d.st[i]={key:k,name:S.owner,shop:S.shop,kao:S.kao,msg,amt,t:Date.now()}; ok=true; return {set:d}; }); }catch(e){ netErr(e); }
+  if(!ok){ setFlash('ほかの人が先に建てました。もう一度確かめてください',1); render(); return; }
+  S.money-=amt; addPay(amt,'gift'); S.statueMax=Math.max(S.statueMax||0,amt);
+  const m=`【広場】${S.owner}（${S.shop}）が${yen(amt)}で${statueTier(amt).n}の銅像を建てた！${gone?`（${gone.shop}の銅像は取り壊された）`:''}`; news(m);
+  setFlash('銅像を建てました！ 銅像がある間，お店の人気が+3されます'); save(); render();
+}
+SCREENS.plaza=function(){
+  const P=plaza(), st=(P.st||[null,null,null]).slice(0,3), k=myKey(); while(st.length<3) st.push(null);
+  const ped=x=>x?`<div class="ped">${statueImg(x.amt)}<div><b class="ttl${x.amt>=5e8?3:x.amt>=1e8?2:1}">${statueTier(x.amt).n}の像</b></div><div>${kao(x.kao)}</div><div><b>${esc(x.shop)}</b><br><small>${esc(x.name)}</small></div>${x.msg?`<div><small>「${esc(x.msg)}」</small></div>`:''}<div><small>${yen(x.amt)}</small></div>${x.key===k?'<div class="red"><small>あなたの像</small></div>':''}</div>`
+    :`<div class="ped"><div style="height:81px;display:flex;align-items:flex-end;justify-content:center"><div style="width:44px;height:22px;background:#b9b1a0;border-radius:2px"></div></div><div class="note">空いている台座</div></div>`;
+  const R=P.ruler; const got=S.titles||[];
+  return `<div class="c"><big>街の広場</big></div>
+  <div class="c note">お金を払って，銅像を建てたり，特別な称号を買ったりできます。払ったお金は寄付と同じく，点数には1割だけ数えます。</div>
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>👑 街の支配者</th></tr><tr><td style="text-align:center">
+    ${R?`${titleBadge('ruler')}<br><b>${esc(R.shop)}</b>（${esc(R.name)}）<br><small>${yen(R.amt)}で就任・${agoT(R.t)}</small>`:'<span class="note">まだ誰もいません</span>'}
+    <div style="margin-top:6px">${R&&R.key===k?'<b class="red">あなたが街の支配者です</b>':`<button onclick="buyRuler()">${yen(rulerPrice())}で支配者になる</button><br><small class="note">「伝説の商人」が必要。買い取られると払った額の半分が戻ります。</small>`}</div>
+  </td></tr></table></div>
+  <div class="tbl"><table class="t" style="width:100%"><tr><th>🗿 銅像</th></tr><tr><td style="text-align:center">${st.map(ped).join('')}</td></tr>
+  <tr><td><small>銅像がある間，お店の人気が<b>+3</b>されます（売れ行きが上がります）。台座は3つ。空きがなければ，<b>いちばん安い銅像より高い金額</b>で建て替えられます（取り壊された像のお金は戻りません）。<br>銅：${yen(STATUE_TIER[2].min)}〜　銀：${yen(STATUE_TIER[1].min)}〜　金：${yen(STATUE_TIER[0].min)}〜</small></td></tr>
+  <tr><td style="text-align:center">金額 <input id="stAmt" type="number" inputmode="numeric" style="width:7em" value="${Math.ceil(statueMinBid()/1e4)}">万円<br>ひとこと <input id="stMsg" maxlength="20" style="width:12em" placeholder="20文字まで"><br><button onclick="buildStatue()">銅像を建てる</button><br><small class="note">いま必要な金額：${yen(statueMinBid())}以上</small></td></tr></table></div>
+  <div class="tbl"><table class="t" style="width:100%"><tr><th colspan="3">🏅 称号屋</th></tr>
+  ${BUY_TITLES.map(b=>`<tr><td class="nw"><span class="ttl${b.lv}">【${b.n}】</span></td><td><small>${yen(b.price)}${b.req?`<br>「${titleName(b.req)}」が必要`:''}</small></td><td>${got.includes(b.id)?'<small>持っています</small>':`<button onclick="buyTitle('${b.id}')">買う</button>`}</td></tr>`).join('')}
+  </table></div>
+  <div class="c note">買った称号は［ステータス］の称号で選べ，ランキングの名前の横に表示されます。</div>
+  <div class="c"><a onclick="go('town')">街へ戻る</a></div>`;
+};
 SCREENS.town=function(){
   const lordMsg = lordMsgHtml();
   return `
@@ -3333,6 +3451,7 @@ SCREENS.town=function(){
       ${townCell('鍛冶工房','forge',im('church','bld','style="max-height:92px"'))}
       ${townCell('港・宅配便','port',im('dwfsign1','','width=32 height=32')+im('house2b','bld','style="max-height:70px"'))}
       ${townCell('住宅地','hometown',im(HOUSES[S.house].img,'bld'))}
+      ${townCell('広場','plaza',statueImg(Math.max(3e7,...((plaza().st||[]).filter(Boolean).map(x=>x.amt))),40))}
     </div>
     <div class="street"></div>
     <div class="town-grid">
