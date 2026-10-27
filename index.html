@@ -907,19 +907,19 @@ Object.assign(IMG,{"item-no-444": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   const I=no=>DATA.items.find(x=>x.no===no);
   const big=new Set();
   [360,365].forEach(b=>(I(b).uses||[]).forEach(u=>{ if(u.job==='車屋'||u.job==='家電屋') (u.get||[]).forEach(([q,n])=>{ if(n!==64) big.add(n); }); }));
-  big.forEach(n=>{ const x=I(n); if(x&&!x.big){ x.big=1; x.price=Math.round(x.price*1.5/10)*10; } });
+  big.forEach(n=>{ const x=I(n); if(x&&!x.big){ x.big=1; x.price=Math.round(x.price*1.2/10)*10; } });
   const TL=(no,name,info,scale)=>({no,type:'道具',big:1,name,info,price:0,pop:0,autopop:1,plus:0,scale,soubi:0,cost:0,uses:[]});
   if(!I(444)) DATA.items.push(TL(444,'防犯ブザー','ひもを引くと大きな音で知らせる防犯ブザー','個'),TL(445,'防犯カメラ','お店を見張る魔導カメラ。お店に置いておくと万引きが半分になる','台'),TL(446,'鉄格子','窓に取り付ける頑丈な鉄格子','枚'));
   const P=I(330);
-  P.uses[0].info='街を見回って報奨金（¥40,000前後）をもらいます（警察だけ）。ときどき悪人を捕まえて特別な報奨金（＋¥60,000）も。街の治安も少しよくなります';
+  P.uses[0].info='街を見回って報奨金（¥22,000前後）をもらいます（警察だけ）。ときどき悪人を捕まえて特別な報奨金（＋¥30,000）も。街の治安も少しよくなります';
   P.uses.push({name:'検問をする',time:60,action:'検問する',info:'通りで検問をして報奨金をもらいます（警察だけ）。ときどき違反者から罰金を取ります',exp:1,job:'警察',use:[],get:[]},
               {name:'張り込みをする',time:480,action:'張り込む',info:'悪人のアジトに張り込みます（警察だけ）。うまくいけば大物を捕まえて大きな報奨金',exp:1,needexp:20,job:'警察',use:[],get:[]});
-  const R=(book,name,use,get,n,need,time,job)=>{ const g=I(get); const mats=use.reduce((s,[k,x])=>s+k*(I(x)?I(x).price:0),0); g.price=Math.max(10,Math.round((mats+(150+3*need)*1.5*time)/n/10)*10);
+  const R=(book,name,use,get,n,need,time,job)=>{ const g=I(get); const mats=use.reduce((s,[k,x])=>s+k*(I(x)?I(x).price:0),0); g.price=Math.max(10,Math.round((mats+(150+3*need)*1.2*time)/n/10)*10);
     I(book).uses.push({name,time,action:'作る',exp:1,needexp:need,job,use,get:[[n,get,100]]}); };
   R(330,'防犯ブザーを作る',[[2,5],[2,8]],444,3,0,60,'警察'); R(330,'鉄格子を作る',[[20,5]],446,1,10,90,'警察'); R(330,'防犯カメラを作る',[[5,5],[5,8],[1,6]],445,1,20,120,'警察');
-  I(360).uses.push({name:'店番ロボットを組み立てる',time:480,action:'組み立てる',info:'魔導テレビを頭にした店番ロボットを組み立てます（家電屋が得意）',exp:1,needexp:70,job:'家電屋',use:[[1,406],[20,8],[20,5],[5,6],[3,7]],get:[[1,64,100]]},
+  I(360).uses.push({name:'店番ロボットを組み立てる',time:480,action:'組み立てる',info:'魔導テレビ2台を使って店番ロボットを組み立てます（家電屋が得意）',exp:1,needexp:70,job:'家電屋',use:[[2,406],[20,8],[20,5],[5,6],[3,7]],get:[[1,64,100]]},
                    {name:'家電の修理を請け負う',time:120,action:'修理する',info:'街の家の魔道具を修理して，修理代をもらいます（家電屋だけ）',exp:1,job:'家電屋',work:'denki',use:[[2,8]],get:[]});
-  { const rb=I(64); delete rb.noshow; rb.big=1; rb.pop=Math.round(rb.price*1440/24000); rb.info='店内の監視をしてくれます。お店に並べて売ることもできます（大きな買い物でよく売れる）'; }
+  { const rb=I(64); delete rb.noshow; rb.big=1; rb.pop=Math.round(rb.price*1440/24000); rb.info='店内の監視をしてくれます。お店に並べて売ることもできます'; }
   I(365).uses.push({name:'荷車で配達の仕事をする',time:120,action:'配達する',info:'自分の荷車・馬車で荷物を運んで運び賃をもらいます（車屋だけ・荷車か馬車が必要）',exp:1,job:'車屋',work:'car',use:[],get:[]});
 })();
 // 後から足した品の売れ行き・陳列を，元の商人物語のデータに合わせる
@@ -983,7 +983,7 @@ Object.assign(IMG,{"item-no-444": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   // 本で作ると，ときどき本がボロボロになる（元の本と同じ考え方。熟練度が上がるほどなりにくい）。造船術は10%，ほかの本は5%
   DATA.items.forEach(it=>{ if(it.type!=='本'||[13,65,78].includes(it.no)) return; (it.uses||[]).forEach(u=>{ if(u.func||!(u.get&&u.get.length)) return; u.func='lostbook'; u.param=it.no===190?'10,10':'10,5'; }); });
   // 本で作る武器・防具・装飾品（剣・盾・鎧・杖・アクセサリ）は，できる数が1.5倍（成功の確率はそのまま）
-  DATA.items.forEach(it=>{ if(it.type!=='本') return; (it.uses||[]).forEach(u=>{ if(!(u.get&&u.get.length===1)) return; const g=DATA.items.find(x=>x.no===u.get[0][1]); if(g&&['剣','盾','鎧','杖','アクセサリ'].includes(g.type)&&!g.talent) u.get[0][0]=u.get[0][0]*1.5; }); });
+  DATA.items.forEach(it=>{ if(it.type!=='本') return; (it.uses||[]).forEach(u=>{ if(!(u.get&&u.get.length===1)) return; const g=DATA.items.find(x=>x.no===u.get[0][1]); if(g&&['剣','盾','鎧','杖','アクセサリ'].includes(g.type)&&!g.talent&&g.no!==64) u.get[0][0]=u.get[0][0]*1.5; }); });
   // 倉庫・図鑑・市場などで，本なら本，地図なら地図とまとまり，同じ種類の中は安い（やさしい）順に並ぶように
   // 並び順：原料（ふつう→魔物の素材→島・町の品）→本→食べもの（食材→料理）→薬→剣→鎧→盾→杖→アクセサリ→地図→道具→家電→乗り物→ペット→船→セット→技術
   const SHIPN=[191,192,206,207,208,320,321,322], KADENN=[361,362,363,402,403,404,405,406], CARN=[366,367,368,407,408,409,410,411], PETN=[371,372,373,374,412,413,414,415];
@@ -1074,16 +1074,16 @@ const JOB_EXTRA={'':'特別な効果はありません（いまの職業をや�
   ship:'船を造るのが得意です。<b>港から出航するときの準備費用が3割引き</b>', noodle:'うどん・そばを打つのが得意です', navi:'<b>航海から3割早く帰ってきて，難破する確率が半分になり，同時に15隻まで航海に出せます（ふつうは10隻）</b>',
   thief:'禁断の書が得意です。<b>万引き・金庫破りが成功しやすく，噂の出どころもバレにくい</b>。ただし警察の店はねらいにくい',
   tempura:'えび天・野菜天ぷら・天丼を揚げるのが得意です', hamburg:'ハンバーグ・チーズハンバーグ・ハンバーグ弁当を作るのが得意です', cake:'ショートケーキ・チーズケーキ・デコレーションケーキを作るのが得意です', bread:'食パン・クロワッサン・サンドイッチを焼くのが得意です',
-  denki:'魔石で動く家電（魔道具）の組み立てが得意です。<b>店番ロボットが壊れにくい（半分）</b>・<b>店番ロボットを組み立てられる</b>・<b>家電の修理を請け負って修理代</b>がもらえる。家電は大きな買い物で<b>よく売れ（2倍）</b>，自分の店ならさらに1.5倍', car:'荷車・馬車・魔導車を作るのが得意です。<b>取り寄せの品が早く届く（8時間→5時間）</b>・<b>自分の車で配達の仕事をして運び賃</b>がもらえる（大きな車ほど多い）。車は大きな買い物で<b>よく売れ（2倍）</b>，自分の店ならさらに1.5倍', pet:'ペットフードづくりや子犬・子猫・小鳥の世話が得意です。<b>魔物が相棒になりやすい（2倍）</b>',
-  police:'<b>警察手帳でパトロール・検問・張り込みをして報奨金</b>をもらえます。<b>防犯ブザー・鉄格子・防犯カメラ</b>も作れます（よく売れる・自分の店なら1.5倍。防犯カメラを持っていると万引きが半分）。<b>自分の店は盗まれにくく</b>，自分の店で悪さをした人が捕まると<b>罰金の3割が報奨金</b>として入ります'};
+  denki:'魔石で動く家電（魔道具）の組み立てが得意です。<b>店番ロボットが壊れにくい（半分）</b>・<b>店番ロボットを組み立てられる</b>・<b>家電の修理を請け負って修理代</b>がもらえる。家電は大きな買い物で<b>少しよく売れる（1.3倍）</b>', car:'荷車・馬車・魔導車を作るのが得意です。<b>取り寄せの品が早く届く（8時間→5時間）</b>・<b>自分の車で配達の仕事をして運び賃</b>がもらえる（大きな車ほど多い）。車は大きな買い物で<b>少しよく売れる（1.3倍）</b>', pet:'ペットフードづくりや子犬・子猫・小鳥の世話が得意です。<b>魔物が相棒になりやすい（2倍）</b>',
+  police:'<b>警察手帳でパトロール・検問・張り込みをして報奨金</b>をもらえます。<b>防犯ブザー・鉄格子・防犯カメラ</b>も作れます（少しよく売れる。防犯カメラを持っていると万引きが半分）。<b>自分の店は盗まれにくく</b>，自分の店で悪さをした人が捕まると<b>罰金の3割が報奨金</b>として入ります'};
 // 職業の得意な品（その職業で早く作れる品）は，自分の店で1.25倍売れる
 let JOBPROD=null;
 function jobProd(){ if(JOBPROD) return JOBPROD; JOBPROD={}; ITEMLIST.forEach(it=>(it.uses||[]).forEach(u=>{ if(!u.job) return; (u.get||[]).forEach(([n,x])=>{ (JOBPROD[u.job]=JOBPROD[u.job]||new Set()).add(x); }); })); return JOBPROD; }
-function jobSellX(no){ const J=JOBS[S&&S.job]; if(!J||!S.job) return 1; const P=jobProd()[J.name]; return P&&P.has(no)?(['car','denki','police'].includes(S.job)?1.5:1.25):1; }
+function jobSellX(no){ const J=JOBS[S&&S.job]; if(!J||!S.job) return 1; const P=jobProd()[J.name]; return P&&P.has(no)?1.25:1; }
 const JOB_KEEP=['noodle','tempura','hamburg','cake','bread','meat','veg','fish','cow'];   // 食べ物の店は常連さんがつく（人気が下がりにくい）
 function jobBooks(k){ const nm=(JOBS[k]||{}).name; if(!nm) return []; const out=[]; ITEMLIST.forEach(it=>{ if((it.uses||[]).some(u=>u.job===nm)) out.push(it.no); }); return out; }
 function jobDescHtml(k,gift){
-  const J=JOBS[k]||JOBS['']; const bk=k?jobBooks(k):[]; const perk=[k&&jobBooks(k).length?`<b>得意な品（下の本で作る品）は自分の店で${['car','denki','police'].includes(k)?1.5:1.25}倍売れる</b>`:'',JOB_KEEP.includes(k)?'<b>常連さんがつく（人気が下がりにくい・自然減−10%）</b>':''].filter(Boolean).join('<br>');
+  const J=JOBS[k]||JOBS['']; const bk=k?jobBooks(k):[]; const perk=[k&&jobBooks(k).length?`<b>得意な品（下の本で作る品）は自分の店で1.25倍売れる</b>`:'',JOB_KEEP.includes(k)?'<b>常連さんがつく（人気が下がりにくい・自然減−10%）</b>':''].filter(Boolean).join('<br>');
   return `<b>${esc(J.name)}になる</b>${S&&S.job===k?' <small class="blue">（いまの職業）</small>':''}<br><small>${JOB_EXTRA[k]||''}${perk?'<br>'+perk:''}${bk.length?`<br>早くなる作業（時間2/3）：${bk.map(n=>iname(n)).join(' ')}`:''}${gift?`<br>転職祝い：${iname(gift)}`:''}</small>`;
 }
 const JOBCHANGE = ['drug','tool','tool','tool','weapon','armor','armor','weapon','material','material','book','cow','peddle','soldier','','meat','veg','fish','ship','noodle','navi','thief','police','tempura','hamburg','cake','bread','denki','car','pet'];
@@ -2201,7 +2201,7 @@ function pxRate(d,c,idx){
   const aMe=popF((d.pop||0)+statueBonus(d.uid))*priceF(c.price/it.price);
   const aOther=rv.reduce((a,r)=>a+popF(r.pop)*priceF(r.price/it.price),0);
   const share=aMe<=0?0:Math.min(1,aMe/(aMe+aOther)*(1+0.25*rv.length));
-  return (1/it.pop)*demandOf(c.no)*aMe*share*(it.food?2:1)*(it.med?3:1)*(it.big?2:1)*(isTrend(c.no)?1.5:1)*CASE_BOOST(idx)*townMult()*jobSellX(c.no);
+  return (1/it.pop)*demandOf(c.no)*aMe*share*(it.food?2:1)*(it.med?3:1)*(it.big?1.3:1)*(isTrend(c.no)?1.5:1)*CASE_BOOST(idx)*townMult()*jobSellX(c.no);
 }
 function pxStep(d,now){
   if(!d||!d.uid||d.uid===NET.uid) return null;
@@ -2458,7 +2458,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026102702;
+const APP_VER=2026102703;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -2784,7 +2784,7 @@ function myRate(c,rivals){
   const aMe=popF(S.pop+statueBonus(myKey()))*priceF(c.price/it.price);   // 標準価格とくらべた高い・安い
   const aOther=rivals.reduce((a,r)=>a+popF(r.pop)*priceF(r.price/it.price),0);
   const share=aMe<=0?0:Math.min(1,aMe/(aMe+aOther)*(1+0.25*rivals.length));
-  return (1/it.pop)*demandOf(c.no)*aMe*share*(it.food?2:1)*(it.med?3:1)*(it.big?2:1)*(isTrend(c.no)?1.5:1);   // 食べ物は2倍・薬は3倍よく売れる
+  return (1/it.pop)*demandOf(c.no)*aMe*share*(it.food?2:1)*(it.med?3:1)*(it.big?1.3:1)*(isTrend(c.no)?1.5:1);   // 食べ物は2倍・薬は3倍よく売れる
 }
 // 売れたときの人気の変化：手に入りにくい品を安く売ると上がり，どこにでもある品を高く売ると下がる
 function popGain(price,no,rivals){
@@ -2840,7 +2840,7 @@ function simulate(dt){
   if(!NET.online) S.npcs.forEach(n=>{
     n.cases.forEach(nc=>{
       if(!nc||nc.stock<=0) return;
-      const k=Math.min(nc.stock,poisson(saleRate(ITEMS[nc.no],nc.price,n.pop,1)*dt*0.9*(n.mult||1)*dragonX*(ITEMS[nc.no].food?2:1)*(ITEMS[nc.no].med?3:1)*(ITEMS[nc.no].big?2:1)*(isTrend(nc.no)?1.5:1)*(((T().exposed||{})['npc:'+n.id]||0)>Date.now()?0.75:1)));
+      const k=Math.min(nc.stock,poisson(saleRate(ITEMS[nc.no],nc.price,n.pop,1)*dt*0.9*(n.mult||1)*dragonX*(ITEMS[nc.no].food?2:1)*(ITEMS[nc.no].med?3:1)*(ITEMS[nc.no].big?1.3:1)*(isTrend(nc.no)?1.5:1)*(((T().exposed||{})['npc:'+n.id]||0)>Date.now()?0.75:1)));
       if(k>0){ nc.stock-=k; const g=nc.price*k; const tax = NET.online?0:Math.round(g*taxRateFor('npc:'+n.id)/100); n.money+=g-tax; n.today+=g; if(tax) S.today.npctax=(S.today.npctax||0)+tax; }
     });
   });
@@ -3038,11 +3038,11 @@ const MENU=[
 /* ---------- アップデート情報（新しいものを上に追加していく） ---------- */
 const UPDATES=[
  {id:20261027,d:'2026年10月27日',items:[
-  ['🤖','**店番ロボットをお店に並べて売れる**ようになりました。家電と同じく大きな買い物でよく売れ（2倍），家電屋なら自分の店でさらに1.5倍。家電屋は『魔道具の組み立て』で組み立てられます。'],
-  ['🚗','**車屋・家電屋・警察を強化しました。** 家電・車・防犯グッズは「大きな買い物」として**よく売れる（2倍）**ようになり，値段も**1.5倍**に。この3つの職業は，得意な品が自分の店で**1.5倍**売れます（ほかの職業は1.25倍）。','imp'],
-  ['🚚','車屋：『車づくりの手引き』に**「荷車で配達の仕事をする」**を追加。自分の荷車・馬車で運び賃（¥30,000前後）がもらえ，馬車1.3倍・幌馬車1.5倍・魔導車1.8倍と大きな車ほど多くもらえます（車はなくなりません）。'],
-  ['🔌','家電屋：『魔道具の組み立て』に**「店番ロボットを組み立てる」**（熟練70%）と**「家電の修理を請け負う」**（修理代¥32,000前後）を追加しました。'],
-  ['🚓','警察：パトロールの報奨金を**¥40,000前後**（悪人を捕まえると＋¥60,000）に増やし，**「検問をする」「張り込みをする」**（成功で¥250,000前後）を追加。警察手帳で**防犯ブザー・鉄格子・防犯カメラ**も作れます。**防犯カメラ**を持っていると，お店の万引きが半分になります。'],
+  ['🚗','**車屋・家電屋・警察を強化しました。** 家電・車・防犯グッズ・店番ロボットは「大きな買い物」として**少しよく売れる（1.3倍）**ようになり，値段も**1.2倍**になりました。','imp'],
+  ['🚚','車屋：『車づくりの手引き』に**「荷車で配達の仕事をする」**を追加。自分の荷車・馬車で運び賃（¥18,000前後）がもらえ，馬車1.2倍・幌馬車1.3倍・魔導車1.5倍と大きな車ほど多くもらえます（車はなくなりません）。'],
+  ['🔌','家電屋：『魔道具の組み立て』に**「店番ロボットを組み立てる」**（熟練70%）と**「家電の修理を請け負う」**（修理代¥18,000前後）を追加。**店番ロボットはお店に並べて売れる**ようになりました（全部売ると店の守りがなくなるので注意）。'],
+  ['🚓','警察：パトロールの報奨金を**¥22,000前後**（悪人を捕まえると＋¥30,000）に増やし，**「検問をする」「張り込みをする」**（成功で¥120,000前後）を追加。警察手帳で**防犯ブザー・鉄格子・防犯カメラ**も作れます。**防犯カメラ**を持っていると，お店の万引きが半分になります。'],
+  ['📰','「〇〇を手に入れた！」（鍛冶工房で装備を作ったとき）と「最上級の魔物を討ち取った！」のニュースを出さないようにしました。'],
  ]},
  {id:20261025,d:'2026年10月25日',items:[
   ['🗿','**街に「広場」ができました！** 大金を払って**銅像**を建てられます（銅3,000万円〜・銀1億円〜・金5億円〜）。台座は3つで，いちばん安い像より高い金額を出すと建て替えられます。銅像がある間はお店の人気+3。','imp'],
@@ -3651,7 +3651,7 @@ function itemInfo(no){
   }
   const makers=[]; ITEMLIST.forEach(x=>x.uses.forEach(u=>{ if(u.get.some(g=>g[1]===no)) makers.push(`${esc(x.name)}「${esc(u.name)}」`); }));
   const uses=it.uses.map(u=>`・${esc(u.name)}${u.get.length?'　→ '+u.get.map(([n,x])=>esc(ITEMS[x].name)+'×'+qn(n)).join('，'):''}`).join('<br>');
-  const sell=it.pop>0&&!it.noshow? (()=>{ const sec=it.pop/RATE/((it.food?2:1)*(it.med?3:1)*(it.big?2:1)); return (sec<60?`約${Math.max(1,Math.round(sec))}秒に1個`:sec<3600?`約${Math.round(sec/60)}分に1個`:`約${(sec/3600).toFixed(sec<36000?1:0)}時間に1個`)+'（現実の時間・棚1つ・標準価格・人気50%のとき）'; })():'陳列して売ることはできません';
+  const sell=it.pop>0&&!it.noshow? (()=>{ const sec=it.pop/RATE/((it.food?2:1)*(it.med?3:1)*(it.big?1.3:1)); return (sec<60?`約${Math.max(1,Math.round(sec))}秒に1個`:sec<3600?`約${Math.round(sec/60)}分に1個`:`約${(sec/3600).toFixed(sec<36000?1:0)}時間に1個`)+'（現実の時間・棚1つ・標準価格・人気50%のとき）'; })():'陳列して売ることはできません';
   modal(`<div class="c">${im('item-no-'+no,'','width=48 height=48')}<br><big>${esc(it.name)}</big> ${im('item-typesign'+Math.max(1,typeIdx(it.type)),'i32')}</div>
   <p class="c"><small>${esc(it.info)}</small></p>
   <table class="t" style="width:100%">
@@ -3892,11 +3892,11 @@ function specialDesc(no,i){
   if(no===63) return '陳列棚が'+(i+1)+'つに';
   if(no===62) return ['自店の人気大幅アップ','指定した店の人気アップ','ギルド所属店の人気アップ'][i];
   if(no===65) return ['他店の人気ダウン','他店の商品を盗む','同業種の人気ダウン','他店のお金を盗む'][i];
-  if(no===330&&i===0) return '報奨金 ¥40,000前後（ときどき＋¥60,000）・街の治安アップ（警察だけ）';
-  if(no===330&&i===1) return '報奨金 ¥12,000前後（ときどき罰金＋¥20,000）（警察だけ）';
-  if(no===330&&i===2) return '成功で報奨金 ¥250,000前後・人気+2（失敗でも¥40,000）（警察だけ）';
-  if(u0(no,i).work==='car') return '運び賃 ¥30,000前後（荷車1倍・馬車1.3倍・幌馬車1.5倍・魔導車1.8倍）（車屋だけ）';
-  if(u0(no,i).work==='denki') return '修理代 ¥32,000前後（家電屋だけ）';
+  if(no===330&&i===0) return '報奨金 ¥22,000前後（ときどき＋¥30,000）・街の治安アップ（警察だけ）';
+  if(no===330&&i===1) return '報奨金 ¥7,000前後（ときどき罰金＋¥10,000）（警察だけ）';
+  if(no===330&&i===2) return '成功で報奨金 ¥120,000前後・人気+2（失敗でも¥20,000）（警察だけ）';
+  if(u0(no,i).work==='car') return '運び賃 ¥18,000前後（荷車1倍・馬車1.2倍・幌馬車1.3倍・魔導車1.5倍）（車屋だけ）';
+  if(u0(no,i).work==='denki') return '修理代 ¥18,000前後（家電屋だけ）';
   if(no===80) return ['他店主と決闘','魔物退治（低）','魔物退治（中）','魔物退治（上）','最上級の魔物（勝てば賞金・人気2消費）'][i];
   if(no===78) return jobDescHtml(JOBCHANGE[i],JOBGIFT[i]);
   if(no===25){ const m=S&&S.job==='cow'?1.5:1; return i===0?`ミノ牛乳×${Math.round(30*m)}`:i===1?`ミノ牛乳×${Math.round(40*m)}〜${Math.round(80*m)}（逃げることも）`:''; }
@@ -4042,7 +4042,7 @@ function execUse(no,i,target){
   save();
   if(has(no)) go('use',{no}); else go('stock');
 }
-const CAR_HAUL=[366,367,410,368], CAR_HAUL_X={366:1,367:1.3,410:1.5,368:1.8};
+const CAR_HAUL=[366,367,410,368], CAR_HAUL_X={366:1,367:1.2,410:1.3,368:1.5};
 function u0(no,i){ return (ITEMS[no]&&ITEMS[no].uses[i])||{}; }
 function special(no,i,target,msgs){
   if(no===13){ const g=Math.round((i===0?6000:15000)*rr(0.8,1.2)); S.money+=g; addIncome(g); msgs.push(`がんばって働き，${yen(g)}を稼いだ`); }
@@ -4054,19 +4054,19 @@ function special(no,i,target,msgs){
     else if(i===1){ const n=S.npcs[target]; n.pop=clamp(n.pop+20,0,100); npcPopChange('npc:'+n.id,20); n.friend+=5; msgs.push(`${esc(n.shop)}の広告を出してあげた`); letter(n.owner,'kao'+n.kao,'広告を出してくださったそうで，ありがとうございます！'); }
     if(i===2){ const gi=guildInfo(S.guild); if(gi&&gi.g){ Object.keys(gi.g.members||{}).forEach(u=>{ if(u===NET.uid) S.pop=clamp(S.pop+8,0,100); else sendMail(u,{kind:'gpop',amount:8,gname:gi.name}); }); msgs.push(`ギルド「${esc(gi.name)}」の広告を出した！ 加盟店みんなの人気が上がった`); } else if(gi){ S.pop=clamp(S.pop+8,0,100); S.npcs.filter(n=>n.guild===S.guild).forEach(n=>n.pop=clamp(n.pop+8,0,100)); msgs.push('ギルドの広告を出した！'); } else msgs.push('ギルドに所属していないので効果がなかった…'); }
   }
-  else if(no===330&&i===1){ if(S.job!=='police') return; let g=Math.round(12000*rr(0.8,1.2)*(has(336)?1.3:1)/100)*100; let ex='';
-    if(Math.random()<0.3){ const f=Math.round(20000*rr(0.8,1.2)/100)*100; g+=f; ex=`違反者から罰金${yen(f)}を取った。`; }
+  else if(no===330&&i===1){ if(S.job!=='police') return; let g=Math.round(7000*rr(0.8,1.2)*(has(336)?1.3:1)/100)*100; let ex='';
+    if(Math.random()<0.3){ const f=Math.round(10000*rr(0.8,1.2)/100)*100; g+=f; ex=`違反者から罰金${yen(f)}を取った。`; }
     S.money+=g; addIncome(g); if(NET.online) townTx(t=>{ t.safety=clamp(townVal(t,'safety',80)+0.2,0,100); }); msgs.push(`検問をして，報奨金${yen(g)}をもらった。${ex}`); }
-  else if(no===330&&i===2){ if(S.job!=='police') return; const ok=Math.random()<(has(336)?0.65:0.5); const g=Math.round((ok?250000:40000)*rr(0.8,1.2)*(has(336)?1.3:1)/100)*100;
+  else if(no===330&&i===2){ if(S.job!=='police') return; const ok=Math.random()<(has(336)?0.65:0.5); const g=Math.round((ok?120000:20000)*rr(0.8,1.2)*(has(336)?1.3:1)/100)*100;
     S.money+=g; addIncome(g); if(ok){ S.pop=clamp(S.pop+2,0,100); if(NET.online) townTx(t=>{ t.safety=clamp(townVal(t,'safety',80)+2,0,100); }); const m=`【大手柄】警察の${S.owner}（${S.shop}）が張り込みの末，盗賊団の親玉を捕まえた！`; news(m); msgs.push(`張り込みが成功！ 盗賊団の親玉を捕まえ，報奨金${yen(g)}をもらった（人気+2）`); } else msgs.push(`張り込んだが，親玉は現れなかった…。手当として${yen(g)}をもらった`); }
   else if(u0(no,i).work==='car'&&(S.job!=='car'||!CAR_HAUL.some(n=>has(n)))){ msgs.push('車屋で，荷車か馬車を持っていないと配達の仕事はできない…'); }
   else if(u0(no,i).work==='denki'&&S.job!=='denki'){ msgs.push('家電屋でないと修理の仕事はできない…'); }
-  else if(u0(no,i).work==='car'){ const best=CAR_HAUL.filter(n=>has(n)).map(n=>CAR_HAUL_X[n]).reduce((a,b)=>Math.max(a,b),1); const g=Math.round(30000*best*rr(0.8,1.2)/100)*100; S.money+=g; addIncome(g); msgs.push(`荷物を運んで，運び賃${yen(g)}をもらった${best>1?'（大きな車で多く運べた）':''}`); }
-  else if(u0(no,i).work==='denki'){ const g=Math.round(32000*rr(0.7,1.3)/100)*100; S.money+=g; addIncome(g); msgs.push(`魔道具を修理して，修理代${yen(g)}をもらった`); }
+  else if(u0(no,i).work==='car'){ const best=CAR_HAUL.filter(n=>has(n)).map(n=>CAR_HAUL_X[n]).reduce((a,b)=>Math.max(a,b),1); const g=Math.round(18000*best*rr(0.8,1.2)/100)*100; S.money+=g; addIncome(g); msgs.push(`荷物を運んで，運び賃${yen(g)}をもらった${best>1?'（大きな車で多く運べた）':''}`); }
+  else if(u0(no,i).work==='denki'){ const g=Math.round(18000*rr(0.7,1.3)/100)*100; S.money+=g; addIncome(g); msgs.push(`魔道具を修理して，修理代${yen(g)}をもらった`); }
   else if(no===330&&i>=3){ }
   else if(no===330){
     if(S.job!=='police'){ msgs.push('警察ではないので，パトロールしても報奨金はもらえなかった…'); }
-    else { let g=Math.round(40000*rr(0.8,1.2)*(has(336)?1.3:1)/100)*100; let catchMsg=''; if(Math.random()<(has(336)?0.3:0.2)){ g+=has(336)?78000:60000; S.pop=clamp(S.pop+1,0,100); catchMsg='悪人を捕まえた！ 特別な報奨金も出た（人気+1）。'; }
+    else { let g=Math.round(22000*rr(0.8,1.2)*(has(336)?1.3:1)/100)*100; let catchMsg=''; if(Math.random()<(has(336)?0.3:0.2)){ g+=has(336)?39000:30000; S.pop=clamp(S.pop+1,0,100); catchMsg='悪人を捕まえた！ 特別な報奨金も出た（人気+1）。'; }
       S.money+=g; addIncome(g); if(NET.online) townTx(t=>{ t.safety=clamp(townVal(t,'safety',80)+0.5,0,100); });
       msgs.push(`街をパトロールして，報奨金${yen(g)}をもらった。${catchMsg}`); if(catchMsg){ const m=`【お手柄】警察の${S.owner}（${S.shop}）が街で悪人を捕まえた！`; news(m); newsNet(m); } }
   }
@@ -4236,7 +4236,7 @@ function finishBattle(){
     if(b.mon){ const tm=petTame(b.mon,!!b.foe.top); if(tm) res.push(tm); }
     if(b.mon){ const mi=b.foe.top? 146+TOP_MONS.indexOf(b.mon) : 101+MONS.indexOf(b.mon); if(ITEMS[mi]){ const fx1=skillFx(); let k=(b.foe.top?1:1+rnd(2))+(fx1.mat||0); if(fx1.hunter) k*=2; if(evActive('meteor')) k*=2; add(mi,k); res.push(`はぎ取り！ ${iname(mi)}×${k}を手に入れた`); } }
     if(b.mon&&!b.foe.top&&b.mon.prize){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0)+(S.job==='soldier'?0.3:0))); S.money+=pz; addIncome(Math.round(pz*0.1)); res.push(`賞金 ${yen(pz)} を手に入れた`); }
-    if(b.foe.top){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0)+(S.job==='soldier'?0.3:0))); S.money+=pz; addIncome(Math.round(pz*0.1)); S.pop=clamp(S.pop+1,0,100); res.push(`<b class="red">最上級の魔物を討ち取った！ 賞金${yen(Math.round(b.mon.prize*(1+(skillFx().prize||0)+(S.job==='soldier'?0.3:0))))}を得た！ 人気が1戻った（挑戦で−2・差し引き−1）</b>`); news(`${S.owner}（${S.shop}）が最上級の魔物「${b.mon.name}」を討ち取った！`); }
+    if(b.foe.top){ const pz=Math.round(b.mon.prize*(1+(skillFx().prize||0)+(S.job==='soldier'?0.3:0))); S.money+=pz; addIncome(Math.round(pz*0.1)); S.pop=clamp(S.pop+1,0,100); res.push(`<b class="red">最上級の魔物を討ち取った！ 賞金${yen(Math.round(b.mon.prize*(1+(skillFx().prize||0)+(S.job==='soldier'?0.3:0))))}を得た！ 人気が1戻った（挑戦で−2・差し引き−1）</b>`); }
     if(b.npc){ const up=(b.npc.strong||b.npc.warrior||b.npc.tyrant)?2:1; S.pop=clamp(S.pop+up,0,100); b.npc.pop=clamp(b.npc.pop-1,b.npc.popBase?b.npc.popBase-15:0,100); npcPopChange('npc:'+b.npc.id,-1); res.push(`<span class="blue">勝利で人気+${up}</span>／${esc(b.npc.shop)}の人気-1`); if(b.npc.tyrant||b.npc.strong||b.npc.warrior){
       // 賞金は相手との力の差に比例（自分がずっと強ければ少なめ）。点数への反映はごく少なめ
       const pw=s=>s.life/5+s.attack+s.defence+s.tech, mine=pw(myStat()), foe=pw(b.npc.st||{life:0,attack:0,defence:0,tech:0});
@@ -5962,7 +5962,7 @@ function forgeMake(no){
   f.mats.forEach(([n,x])=>add(x,-n)); S.money-=f.gold; addPay(f.gold); add(no,1);
   const it=ITEMS[no];
   setFlash(`${it.curse?'禍々しい光とともに……':'カン！カン！……'}${iname(no)}ができあがった！（${statStr(it)}）${it.soubi?`<br><button onclick="equip(${no})">すぐ装備する</button>`:''}`);
-  news(`${S.owner}（${S.shop}）が${it.name}を手に入れた！`); save(); render();
+  save(); render();
 }
 SCREENS.army=function(){
   const st=myStat(), t=T(), me=isLordMe(), mine=(t.riot||{})[myKey()];
