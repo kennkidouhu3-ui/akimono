@@ -910,7 +910,7 @@ Object.assign(IMG,{"item-no-444": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgA
   big.forEach(n=>{ const x=I(n); if(x&&!x.big){ x.big=1; x.price=Math.round(x.price*1.2/10)*10; } });
   const TL=(no,name,info,scale)=>({no,type:'道具',big:1,name,info,price:0,pop:0,autopop:1,plus:0,scale,soubi:0,cost:0,uses:[]});
   if(!I(444)) DATA.items.push(TL(444,'防犯ブザー','ひもを引くと大きな音で知らせる防犯ブザー','個'),TL(445,'防犯カメラ','お店を見張る魔導カメラ。お店に置いておくと万引きが半分になる','台'),TL(446,'鉄格子','窓に取り付ける頑丈な鉄格子','枚'));
-  const P=I(330);
+  const P=I(330); P.plus=360; P.info='警察の身分を示す手帳。警察ならパトロール・検問・張り込みで報奨金をもらえ，防犯グッズも作れる（市場で買えます）';
   P.uses[0].info='街を見回って報奨金（¥22,000前後）をもらいます（警察だけ）。ときどき悪人を捕まえて特別な報奨金（＋¥30,000）も。街の治安も少しよくなります';
   P.uses.push({name:'検問をする',time:60,action:'検問する',info:'通りで検問をして報奨金をもらいます（警察だけ）。ときどき違反者から罰金を取ります',exp:1,job:'警察',use:[],get:[]},
               {name:'張り込みをする',time:480,action:'張り込む',info:'悪人のアジトに張り込みます（警察だけ）。うまくいけば大物を捕まえて大きな報奨金',exp:1,needexp:20,job:'警察',use:[],get:[]});
@@ -2103,7 +2103,7 @@ function npcOnline(atDay){
     return {me:false,npc:true,exposed:ex<1,strong:!!d.strong,warrior:!!d.warrior,tyrant:!!d.tyrant,key:'npc:'+i,id:i,name:d.owner,shop:d.shop,kao:d.kao,job:d.job,pop:Math.min(99,Math.round(popE)+nikuB.pop),wins,
       dig:Math.max(0,(Math.min(d.strong?100:60,(d.digBase||0)+Math.floor(dd/(10+i*3))))+nikuB.dig-((T().npcDigLoss||{})['npc:'+i]||0)),money:(Math.round((d.money||300000)+dd*1800*(1+i*0.15)*(d.mult||1)+120000*s3))+(d.warrior?(tw.rikiEarn||0):0)-((tw.npcMoneyLoss||{})['npc:'+i]||0),
       point:Math.max(0,Math.round(calcPoint(popE,wins,profit3*ex+(d.warrior?rkPrev/3:0),today*ex+(d.warrior?rkNow:0)-npcLossToday('npc:'+i),NPC_DEN)*(d.mult||1)*rkM)+nikuB.pt),sale:Math.round(today*(d.mult||1)*ex)+(d.warrior?(tw.rikiToday||0)+(tw.rikiGuardToday||0):0),exps:d.strong?600:0,soldiers:0,guild:npcGuildOf(i),t:0,comment:d.comment||'',rkY:0,
-      st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[]};
+      st:d.st||{life:300+i*40,attack:80+i*12,defence:70+i*10,tech:80+i*9},btype:d.btype!=null?d.btype:i%11,cases:loc?loc.cases:[],rkY:(loc&&loc.rankY)||0};
   });
 }
 const IDLE_H=168;
@@ -2458,7 +2458,7 @@ function onlineSettingsHtml(){
 }
 
 /* ---------- 新しい版が出たら，開きっぱなしの古い画面も自動で読み込み直す（全員が同じルールで動くように） ---------- */
-const APP_VER=2026102703;
+const APP_VER=2026103101;
 let VER_RELOADING=false;
 function watchVersion(db){
   db.doc('town/ver').onSnapshot(s=>{
@@ -3037,6 +3037,15 @@ const MENU=[
 
 /* ---------- アップデート情報（新しいものを上に追加していく） ---------- */
 const UPDATES=[
+ {id:20261031,d:'2026年10月31日',items:[
+  ['📊','ランキングの順位の上がり下がり（↑↓→）を，**NPCのお店にも表示**するようにしました（前回の決算の直前の順位とくらべます）。'],
+ ]},
+ {id:20261029,d:'2026年10月29日',items:[
+  ['🏚️','市場の**「質流れ品」は3日たつと消える**ようになりました（流れてから3日間だけ買えます）。質屋から市場へ流れるまでは今までどおり1日です。'],
+ ]},
+ {id:20261028,d:'2026年10月28日',items:[
+  ['🚓','**警察手帳が市場で買える**ようになりました（¥10,000）。警察に転職したあとに手帳をなくしても，市場で手に入ります。'],
+ ]},
  {id:20261027,d:'2026年10月27日',items:[
   ['🚗','**車屋・家電屋・警察を強化しました。** 家電・車・防犯グッズ・店番ロボットは「大きな買い物」として**少しよく売れる（1.3倍）**ようになり，値段も**1.2倍**になりました。','imp'],
   ['🚚','車屋：『車づくりの手引き』に**「荷車で配達の仕事をする」**を追加。自分の荷車・馬車で運び賃（¥18,000前後）がもらえ，馬車1.2倍・幌馬車1.3倍・魔導車1.5倍と大きな車ほど多くもらえます（車はなくなりません）。'],
@@ -3232,7 +3241,7 @@ function rankTable(limit){
   const myIdx=all.findIndex(r=>r.me);
   if(!rk.length) return '<div class="c note">まだ参加しているお店はありません。</div>';
   const L=T().lord;
-  const updown=(r,i)=>{ if(r.npc) return '<span class="npctag">NPC</span>'; if(!r.rkY) return '<small>(新)</small>'; const d=r.rkY-(i+1); return `<small>(${d===0?'→':d>0?'<span class=red>↑'+d+'</span>':'<span class=blue>↓'+(-d)+'</span>'})</small>`; };
+  const updown=(r,i)=>{ if(!r.rkY) return r.npc?'':'<small>(新)</small>'; const d=r.rkY-(i+1); return `<small>(${d===0?'→':d>0?'<span class=red>↑'+d+'</span>':'<span class=blue>↓'+(-d)+'</span>'})</small>`; };
   const winIcons=w=>w? `${trophyHtml(w)} <small>優勝${w}回</small>` : '';
   const expd=r=>r.st?`【${BTYPES[r.btype]||'普通'}】${Math.round((r.st.attack+r.st.defence+r.st.tech)/3)}exp　${im('ability-no-4','i16')}${r.st.life} ${im('ability-no-1','i16')}${r.st.attack} ${im('ability-no-2','i16')}${r.st.defence} ${im('ability-no-3','i16')}${r.st.tech}`:'';
   const pager=rankPager(all.length,PER);
@@ -3242,7 +3251,7 @@ function rankTable(limit){
     const first=cs[0], rank=off+i+1;
     const tags=`${titleBadge(r.title,r.key)}${r.npc?' <span class="npctag">NPC</span>':''}${r.strong?' <span class="npctag strong">強豪</span>':''}${r.warrior?' <span class="npctag strong" style="background:#fff3d6;border-color:#c80;color:#a60">武将</span>':''}${r.tyrant?' <span class="npctag strong" style="background:#3a1010;border-color:#300;color:#fff">暴君</span>':''}${((T().exposed||{})[r.key]||0)>Date.now()?' <span class="npctag" style="background:#fdd;border-color:#c33;color:#c33">取締中</span>':''}${L&&L.key===r.key?' <small class="red">[領主]</small>':''}`;
     return `<div class="rk ${r.me?'me':''}">
-      <div class="rkh"><span class="rkn">No.${rank} ${rank<=6?im('rank'+(7-rank),'i16'):''} ${r.npc?'':updown(r,off+i)}</span><span class="rkp">${(r.point||0).toLocaleString()}<small>点</small></span></div>
+      <div class="rkh"><span class="rkn">No.${rank} ${rank<=6?im('rank'+(7-rank),'i16'):''} ${updown(r,off+i)}</span><span class="rkp">${(r.point||0).toLocaleString()}<small>点</small></span></div>
       <div class="rkm"><div class="rkf">${kao(r.kao)}<br>${im((JOBS[r.job]||JOBS['']).img,'','width=20 height=30')}</div>
         <div class="rki"><div class="rks">${guildIcon(r.guild)}${r.me?esc(r.shop):(S?`<a onclick="openShop(${R(r.key)})">${esc(r.shop)}</a>`:esc(r.shop))}${tags}</div>
           ${r.wins?`<div class="rksub">${winIcons(r.wins)}</div>`:''}
@@ -4848,7 +4857,7 @@ SCREENS.pawn=function(){
   const mine=Object.keys(S.stock).map(Number).filter(n=>ITEMS[n]&&ITEMS[n].price>0);
   pawnNorm(); const pw=Object.keys(S.pawn).map(Number).filter(n=>S.pawn[n]>0);
   return `<div class="c"><big>質屋</big></div>
-  ${talk(21,'質屋の主人','いらなくなった品は標準価格の4割で買い取るよ（¥1,000以下の安い原料は1割だ）。うちで買うなら標準価格の3割増しだ。<br>売られた品は1日たつと「質流れ品」として市場に流すからね。')}
+  ${talk(21,'質屋の主人','いらなくなった品は標準価格の4割で買い取るよ（¥1,000以下の安い原料は1割だ）。うちで買うなら標準価格の3割増しだ。<br>売られた品は1日たつと「質流れ品」として市場に流すからね（市場には3日だけ並ぶよ）。')}
   <div class="c"><big>買い取り</big></div>
   <div class="c">${mine.length?`<select id="pwNo">${mine.map(n=>`<option value="${n}">${esc(ITEMS[n].name)}（${S.stock[n]}・1${ITEMS[n].scale}${yen(pawnPrice(n))}）</option>`).join('')}</select>
    ×<input type="number" id="pwN" value="1" min="1" style="width:60px"> <button onclick="pawnSell()">売る</button>`:'<small>売れる品がありません</small>'}</div>
@@ -4858,21 +4867,29 @@ SCREENS.pawn=function(){
   </table></div>`;
 };
 /* ---------- 質流れ：質屋に売った品は1日（現実24時間）たつと市場に流れ，だれでも買えるようになる ---------- */
-const PAWN_KEEP=24*3600000, PAWN_CAP=300;
+const PAWN_KEEP=24*3600000, PAWN_LIFE=3*24*3600000, PAWN_CAP=300;
 function pawnNorm(){   // 古いデータ（個数だけ）を，売った時刻つきの束に直す
   if(!S.pawnLots){ S.pawnLots=[]; Object.keys(S.pawn||{}).forEach(k=>{ const n=S.pawn[k]|0; if(n>0) S.pawnLots.push({no:+k,n,at:Date.now()-PAWN_KEEP+3600000}); }); }
   const o={}; S.pawnLots.forEach(l=>{ if(l.n>0) o[l.no]=(o[l.no]||0)+l.n; }); S.pawn=o;
 }
 function pawnLeft(no){ const ls=(S.pawnLots||[]).filter(l=>l.no===no&&l.n>0); if(!ls.length) return ''; const at=Math.min(...ls.map(l=>l.at)); const h=Math.max(0,(at+PAWN_KEEP-Date.now())/3600000); return h<1?'まもなく市場へ':`あと約${Math.ceil(h)}時間で市場へ`; }
+// 市場の質流れ品は束（流れた時刻つき）で持ち，3日たった束は消える。m.pawn は合計
+function pawnMk(m,now){ m.pawn=m.pawn||{}; if(!Array.isArray(m.pawnL)){ m.pawnL=Object.keys(m.pawn).map(k=>({no:+k,n:m.pawn[k]|0,at:now})).filter(l=>l.n>0); }
+  const before=m.pawnL.length; m.pawnL=m.pawnL.filter(l=>l.n>0&&now-l.at<PAWN_LIFE); const o={}; m.pawnL.forEach(l=>{ o[l.no]=(o[l.no]||0)+l.n; }); m.pawn=o; return before!==m.pawnL.length; }
+function pawnTake(m,no,q){ m.pawnL.filter(l=>l.no===no).sort((a,b)=>a.at-b.at).forEach(l=>{ const k=Math.min(l.n,q); l.n-=k; q-=k; }); pawnMk(m,Date.now()); }
+function pawnMkLeft(no){ const m=NET.online?(NET.market||{}):{pawnL:S.mktPawnL}; const ls=(m.pawnL||[]).filter(l=>l.no===no&&l.n>0); if(!ls.length) return ''; const h=Math.max(0,(Math.min(...ls.map(l=>l.at))+PAWN_LIFE-Date.now())/3600000); return h<1?'まもなく消える':h<24?`あと約${Math.ceil(h)}時間で消える`:`あと約${Math.ceil(h/24)}日で消える`; }
 let PAWNBUSY=false;
 async function pawnFlow(){
   if(!S||PAWNBUSY) return; pawnNorm();
-  const now=Date.now(), due=S.pawnLots.filter(l=>l.n>0&&now-l.at>=PAWN_KEEP); if(!due.length) return;
+  const now=Date.now(), due=S.pawnLots.filter(l=>l.n>0&&now-l.at>=PAWN_KEEP);
+  const M=NET.online?NET.market:{pawn:S.mktPawn,pawnL:S.mktPawnL}; const old=!!(M&&M.pawn&&Object.keys(M.pawn).length&&(!Array.isArray(M.pawnL)||M.pawnL.some(l=>now-l.at>=PAWN_LIFE)));
+  if(!due.length&&!old) return;
   const add2={}; due.forEach(l=>{ add2[l.no]=(add2[l.no]||0)+l.n; });
   PAWNBUSY=true;
   try{
-    if(NET.online){ const mk=mktScale(); await dbTx(MKT_PATH,d=>{ const m=d||mktInit(mk); m.pawn=m.pawn||{}; for(const k in add2) m.pawn[k]=Math.min(PAWN_CAP,(m.pawn[k]||0)+add2[k]); return {set:m}; }); }
-    else { S.mktPawn=S.mktPawn||{}; for(const k in add2) S.mktPawn[k]=Math.min(PAWN_CAP,(S.mktPawn[k]||0)+add2[k]); }
+    const put=m=>{ pawnMk(m,now); for(const k in add2){ const room=Math.max(0,PAWN_CAP-(m.pawn[k]||0)); const n=Math.min(room,add2[k]); if(n>0) m.pawnL.push({no:+k,n,at:now}); } pawnMk(m,now); };
+    if(NET.online){ const mk=mktScale(); await dbTx(MKT_PATH,d=>{ const m=d||mktInit(mk); put(m); return {set:m}; }); }
+    else { const m={pawn:S.mktPawn||{},pawnL:S.mktPawnL}; put(m); S.mktPawn=m.pawn; S.mktPawnL=m.pawnL; }
     S.pawnLots=S.pawnLots.filter(l=>!due.includes(l)); pawnNorm(); save();
   }catch(e){ netErr(e); }
   PAWNBUSY=false;
@@ -4886,11 +4903,11 @@ async function buyPawnMkt(no){
   if(S.time<t){ setFlash(`持ち時間が足りません（必要：${hm(t)}）`,1); render(); return; }
   if(NET.online){
     if(MKBUSY) return; MKBUSY=true; let r=null;
-    try{ r=await dbTx(MKT_PATH,d=>{ const m=d||mktInit(mktScale()); m.pawn=m.pawn||{}; const h=m.pawn[no]||0; if(h<q) return {ret:{ok:false,h}}; m.pawn[no]=h-q; if(m.pawn[no]<=0) delete m.pawn[no]; return {set:m,ret:{ok:true}}; }); }catch(e){ netErr(e); }
+    try{ r=await dbTx(MKT_PATH,d=>{ const m=d||mktInit(mktScale()); m.pawn=m.pawn||{}; pawnMk(m,Date.now()); const h=m.pawn[no]||0; if(h<q) return {ret:{ok:false,h}}; pawnTake(m,no,q); return {set:m,ret:{ok:true}}; }); }catch(e){ netErr(e); }
     MKBUSY=false;
     if(!r||!r.ret){ setFlash('通信に失敗しました。もう一度お試しください',1); render(); return; }
     if(!r.ret.ok){ setFlash(`ほかのお店に先に買われてしまいました（いまの在庫：${r.ret.h}${it.scale}）`,1); render(); return; }
-  } else { S.mktPawn[no]-=q; if(S.mktPawn[no]<=0) delete S.mktPawn[no]; }
+  } else { const m={pawn:S.mktPawn||{},pawnL:S.mktPawnL}; pawnMk(m,Date.now()); pawnTake(m,no,q); S.mktPawn=m.pawn; S.mktPawnL=m.pawnL; }
   if(!spendTime(t)) spendTime(Math.min(S.time,t));
   S.money-=c; addPay(c); add(no,q);
   setFlash(`質流れ品の${it.name}を${q}${it.scale}仕入れました（${yen(c)}・${hm(t)}）`); save(); render();
@@ -4898,9 +4915,9 @@ async function buyPawnMkt(no){
 function pawnMktHtml(){
   const P=mktPawnNow(), nos=Object.keys(P).map(Number).filter(n=>ITEMS[n]&&P[n]>0).sort((a,b)=>ITEMS[a].price-ITEMS[b].price);
   return `<div class="c"><big>質流れ品</big></div>
-  <div class="c note">質屋に売られて1日たった品が流れてきます（だれが売った品でも買えます）。値段は標準価格です。</div>
+  <div class="c note">質屋に売られて1日たった品が流れてきます（だれが売った品でも買えます）。値段は標準価格です。<b>質流れ品は3日たつと市場から消えます。</b></div>
   <div class="tbl"><table class="t"><tr><th>商品</th><th>価格</th><th>仕入</th></tr>
-  ${nos.map(n=>{ const it=ITEMS[n], st=P[n]; return `<tr><td class="nm">${iname(n)}<br><small>${esc(it.info||'')}</small></td><td class="r nw">${yen(it.price)}<br><small><span class="nb">在庫 ${st}</span><br><span class="nb">所持 ${S.stock[n]||0}</span></small></td>
+  ${nos.map(n=>{ const it=ITEMS[n], st=P[n]; return `<tr><td class="nm">${iname(n)}<br><small>${esc(it.info||'')}</small></td><td class="r nw">${yen(it.price)}<br><small><span class="nb">在庫 ${st}</span><br><span class="nb">所持 ${S.stock[n]||0}</span><br><span class="note">${pawnMkLeft(n)}</span></small></td>
     <td class="c nw"><input type="number" id="mpq${n}" value="1" min="1" max="${st}" style="width:52px"><button onclick="buyPawnMkt(${n})">買う</button></td></tr>`; }).join('')||'<tr><td colspan=3 class="c">いまは質流れ品はありません</td></tr>'}
   </table></div>`;
 }
